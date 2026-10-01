@@ -1,7 +1,9 @@
-// Whiteboard tab: a row of boards on top (switch / add / rename / delete),
-// and the open board below, filling the rest of the page.
+// Whiteboard tab: a row of boards on top, and the open board below, filling the rest of the page.
+//   • The first board is the "To do list" (shows your upcoming calendar events). It can't be
+//     renamed or deleted.
+//   • Other boards: click the open board's name to rename it; × deletes it.
 import { useEffect, useState } from 'react';
-import { db, getSetting, setSetting, type WhiteboardRecord } from '../db';
+import { TODO_BOARD_NAME, db, getSetting, setSetting, type WhiteboardRecord } from '../db';
 import BoardCanvas from '../whiteboard/BoardCanvas';
 
 const ACTIVE_BOARD_KEY = 'activeBoardId';
@@ -16,12 +18,13 @@ async function createBoard(name: string): Promise<WhiteboardRecord> {
 export default function WhiteboardTab() {
   const [boards, setBoards] = useState<WhiteboardRecord[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
 
-  // Load the list of boards (make one if there are none yet) and reopen the last one used.
+  // Load the list of boards (make the To do list if there are none yet) and reopen the last one.
   useEffect(() => {
     (async () => {
       let list = await db.whiteboard.orderBy('createdAt').toArray();
-      if (list.length === 0) list = [await createBoard('Board 1')];
+      if (list.length === 0) list = [await createBoard(TODO_BOARD_NAME)];
       const lastId = await getSetting<string>(ACTIVE_BOARD_KEY);
       setBoards(list);
       setActiveId(list.some((b) => b.id === lastId) ? lastId! : list[0].id);
@@ -39,51 +42,64 @@ export default function WhiteboardTab() {
     openBoard(board.id);
   };
 
-  const renameBoard = async (board: WhiteboardRecord) => {
-    const name = window.prompt('Rename board:', board.name)?.trim();
-    if (!name) return;
+  const finishRename = async (board: WhiteboardRecord, name: string) => {
+    setRenamingId(null);
+    name = name.trim();
+    if (!name || name === board.name) return;
     await db.whiteboard.update(board.id, { name });
-    setBoards(boards.map((b) => (b.id === board.id ? { ...b, name } : b)));
+    setBoards((list) => list.map((b) => (b.id === board.id ? { ...b, name } : b)));
   };
 
   const deleteBoard = async (board: WhiteboardRecord) => {
-    if (!window.confirm(`Delete "${board.name}"? This can't be undone.`)) return;
     await db.whiteboard.delete(board.id);
-    let rest = boards.filter((b) => b.id !== board.id);
-    if (rest.length === 0) rest = [await createBoard('Board 1')]; // always keep one board
+    const rest = boards.filter((b) => b.id !== board.id);
     setBoards(rest);
-    openBoard(rest[0].id);
+    if (board.id === activeId) openBoard(rest[0].id);
   };
 
   if (!activeId) return <div className="placeholder">Loading…</div>;
-  const active = boards.find((b) => b.id === activeId)!;
 
   return (
     <div className="whiteboard">
       <div className="board-bar">
-        <div className="board-list">
-          {boards.map((board) => (
-            <button
-              key={board.id}
-              className={board.id === activeId ? 'board-chip active' : 'board-chip'}
-              onClick={() => openBoard(board.id)}
-              onDoubleClick={() => renameBoard(board)}
-            >
-              {board.name}
-            </button>
-          ))}
-          <button className="board-chip add" onClick={addBoard} title="New board">
-            + New
-          </button>
-        </div>
-        <div className="board-actions">
-          <button onClick={() => renameBoard(active)} title="Rename this board">
-            Rename
-          </button>
-          <button onClick={() => deleteBoard(active)} title="Delete this board">
-            Delete
-          </button>
-        </div>
+        {boards.map((board, index) => {
+          const isTodo = index === 0;
+          const isActive = board.id === activeId;
+          return (
+            <div key={board.id} className={isActive ? 'board-chip active' : 'board-chip'}>
+              {renamingId === board.id ? (
+                <input
+                  className="board-rename"
+                  defaultValue={board.name}
+                  autoFocus
+                  onFocus={(e) => e.currentTarget.select()}
+                  onBlur={(e) => finishRename(board, e.currentTarget.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') e.currentTarget.blur();
+                    if (e.key === 'Escape') setRenamingId(null);
+                  }}
+                />
+              ) : (
+                <button
+                  className="board-name"
+                  title={isActive && !isTodo ? 'Click to rename' : undefined}
+                  // Clicking the open board's name renames it (not the To do list).
+                  onClick={() => (isActive ? !isTodo && setRenamingId(board.id) : openBoard(board.id))}
+                >
+                  {board.name}
+                </button>
+              )}
+              {!isTodo && (
+                <button className="board-x" title="Delete this board" onClick={() => deleteBoard(board)}>
+                  ×
+                </button>
+              )}
+            </div>
+          );
+        })}
+        <button className="board-chip add" onClick={addBoard} title="New board">
+          + New
+        </button>
       </div>
       <div className="board-canvas">
         {/* "key" makes React build a fresh canvas whenever you switch boards. */}
