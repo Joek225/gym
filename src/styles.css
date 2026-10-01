@@ -79,7 +79,85 @@ button {
   color: var(--muted);
 }
 
-/* ---- Whiteboard tab: Excalidraw fills all the space below the tab bar ---- */
+/* ---- Whiteboard tab ---- */
 .whiteboard {
   height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Row of board buttons above the canvas */
+.board-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.board-list {
+  display: flex;
+  gap: 6px;
+  flex: 1;
+  overflow-x: auto; /* lots of boards scroll sideways */
+}
+
+.board-chip,
+.board-actions button {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-raised);
+  color: var(--text);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.board-chip.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.board-chip.add {
+  background: none;
+  border-style: dashed;
+  color: var(--muted);
+}
+
+.board-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.board-actions button {
+  background: none;
+  color: var(--muted);
+}
+
+/* Excalidraw fills the rest of the space */
+.board-canvas {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Hide Excalidraw buttons we don't use: diamond tool, lock button, help (?) button */
+.excalidraw label:has([data-testid='toolbar-diamond']),
+.excalidraw label:has([data-testid='toolbar-lock']),
+.excalidraw .ToolIcon__lock + .App-toolbar__divider,
+.excalidraw .help-icon {
+  display: none !important;
+}
+
+/* Use Avenir for whiteboard text. Excalidraw has no setting for custom fonts, so we
+   borrow its built-in "Helvetica" font slot and point it at Avenir instead.
+   Avenir comes installed on Apple devices; anywhere else this falls back to Nunito. */
+@font-face {
+  font-family: 'Helvetica';
+  src:
+    local('Avenir Next'),
+    local('AvenirNext-Regular'),
+    local('Avenir'),
+    local('Avenir-Book'),
+    url('/fonts/Nunito/Nunito-Regular-XRXI3I6Li01BKofiOc5wtlZ2di8HDIkhdTQ3j6zbXWjgeg.woff2')
+      format('woff2');
 }

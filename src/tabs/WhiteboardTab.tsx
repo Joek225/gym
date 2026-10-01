@@ -1,79 +1,94 @@
-// Whiteboard tab: an Excalidraw drawing board that saves itself automatically.
-import { useEffect, useRef, useState } from 'react';
-import { Excalidraw, serializeAsJSON } from '@excalidraw/excalidraw';
-import '@excalidraw/excalidraw/index.css';
-import { db } from '../db';
+// Whiteboard tab: a row of boards on top (switch / add / rename / delete),
+// and the open board below, filling the rest of the page.
+import { useEffect, useState } from 'react';
+import { db, getSetting, setSetting, type WhiteboardRecord } from '../db';
+import BoardCanvas from '../whiteboard/BoardCanvas';
 
-// Excalidraw's own type for "what to show when it first opens".
-type InitialData = Parameters<typeof Excalidraw>[0]['initialData'];
+const ACTIVE_BOARD_KEY = 'activeBoardId';
 
-const WHITEBOARD_ID = 'main';
-const SAVE_DELAY_MS = 500; // wait until you pause drawing for half a second, then save
-
-// Background for a brand-new board. Excalidraw's dark mode flips canvas colors,
-// so this light color shows up on screen as the site's dark grey (#282a37).
-const NEW_BOARD: InitialData = { appState: { viewBackgroundColor: '#dfe2f1' } };
+async function createBoard(name: string): Promise<WhiteboardRecord> {
+  const now = Date.now();
+  const board = { id: crypto.randomUUID(), name, data: null, createdAt: now, updatedAt: now };
+  await db.whiteboard.add(board);
+  return board;
+}
 
 export default function WhiteboardTab() {
-  // undefined = still loading from the database; null = nothing saved yet.
-  const [initialData, setInitialData] = useState<InitialData | null | undefined>(undefined);
-  const saveTimer = useRef<number | undefined>(undefined);
-  const pendingSave = useRef<(() => void) | null>(null);
-  const lastSaved = useRef<string>('');
+  const [boards, setBoards] = useState<WhiteboardRecord[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
 
-  // 1) When the tab opens, load the saved drawing (if any).
+  // Load the list of boards (make one if there are none yet) and reopen the last one used.
   useEffect(() => {
-    db.whiteboard.get(WHITEBOARD_ID).then((record) => {
-      if (record) lastSaved.current = JSON.stringify(record.data);
-      setInitialData(record ? (record.data as InitialData) : null);
-    });
+    (async () => {
+      let list = await db.whiteboard.orderBy('createdAt').toArray();
+      if (list.length === 0) list = [await createBoard('Board 1')];
+      const lastId = await getSetting<string>(ACTIVE_BOARD_KEY);
+      setBoards(list);
+      setActiveId(list.some((b) => b.id === lastId) ? lastId! : list[0].id);
+    })();
   }, []);
 
-  // 2) Make sure a pending save still happens if you switch tabs or close the page.
-  useEffect(() => {
-    const flush = () => {
-      window.clearTimeout(saveTimer.current);
-      pendingSave.current?.();
-      pendingSave.current = null;
-    };
-    window.addEventListener('pagehide', flush);
-    document.addEventListener('visibilitychange', flush);
-    return () => {
-      flush(); // leaving the Whiteboard tab
-      window.removeEventListener('pagehide', flush);
-      document.removeEventListener('visibilitychange', flush);
-    };
-  }, []);
-
-  // 3) Excalidraw calls this on every change (each stroke, typed letter, even mouse moves).
-  //    We wait for a short pause, then save to the database.
-  const handleChange: NonNullable<Parameters<typeof Excalidraw>[0]['onChange']> = (
-    elements,
-    appState,
-    files,
-  ) => {
-    pendingSave.current = () => {
-      const json = serializeAsJSON(elements, appState, files, 'local');
-      if (json === lastSaved.current) return; // nothing really changed, skip
-      lastSaved.current = json;
-      db.whiteboard.put({ id: WHITEBOARD_ID, data: JSON.parse(json), updatedAt: Date.now() });
-    };
-    window.clearTimeout(saveTimer.current);
-    saveTimer.current = window.setTimeout(() => {
-      pendingSave.current?.();
-      pendingSave.current = null;
-    }, SAVE_DELAY_MS);
+  const openBoard = (id: string) => {
+    setActiveId(id);
+    setSetting(ACTIVE_BOARD_KEY, id);
   };
 
-  if (initialData === undefined) return <div className="placeholder">Loading…</div>;
+  const addBoard = async () => {
+    const board = await createBoard(`Board ${boards.length + 1}`);
+    setBoards([...boards, board]);
+    openBoard(board.id);
+  };
+
+  const renameBoard = async (board: WhiteboardRecord) => {
+    const name = window.prompt('Rename board:', board.name)?.trim();
+    if (!name) return;
+    await db.whiteboard.update(board.id, { name });
+    setBoards(boards.map((b) => (b.id === board.id ? { ...b, name } : b)));
+  };
+
+  const deleteBoard = async (board: WhiteboardRecord) => {
+    if (!window.confirm(`Delete "${board.name}"? This can't be undone.`)) return;
+    await db.whiteboard.delete(board.id);
+    let rest = boards.filter((b) => b.id !== board.id);
+    if (rest.length === 0) rest = [await createBoard('Board 1')]; // always keep one board
+    setBoards(rest);
+    openBoard(rest[0].id);
+  };
+
+  if (!activeId) return <div className="placeholder">Loading…</div>;
+  const active = boards.find((b) => b.id === activeId)!;
 
   return (
     <div className="whiteboard">
-      <Excalidraw
-        initialData={initialData ?? NEW_BOARD}
-        onChange={handleChange}
-        theme="dark"
-      />
+      <div className="board-bar">
+        <div className="board-list">
+          {boards.map((board) => (
+            <button
+              key={board.id}
+              className={board.id === activeId ? 'board-chip active' : 'board-chip'}
+              onClick={() => openBoard(board.id)}
+              onDoubleClick={() => renameBoard(board)}
+            >
+              {board.name}
+            </button>
+          ))}
+          <button className="board-chip add" onClick={addBoard} title="New board">
+            + New
+          </button>
+        </div>
+        <div className="board-actions">
+          <button onClick={() => renameBoard(active)} title="Rename this board">
+            Rename
+          </button>
+          <button onClick={() => deleteBoard(active)} title="Delete this board">
+            Delete
+          </button>
+        </div>
+      </div>
+      <div className="board-canvas">
+        {/* "key" makes React build a fresh canvas whenever you switch boards. */}
+        <BoardCanvas key={activeId} boardId={activeId} />
+      </div>
     </div>
   );
 }
