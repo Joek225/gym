@@ -13,11 +13,12 @@ export interface UpcomingEventsHandle {
 
 interface Props {
   events: EventRecord[];
+  onRevert: () => void; // bring back every crossed-out event
   position: { left: number; top: number }; // where the column starts on the board
 }
 
 const UpcomingEvents = forwardRef<UpcomingEventsHandle, Props>(function UpcomingEvents(
-  { events, position },
+  { events, onRevert, position },
   ref,
 ) {
   const rows = useRef(new Map<string, HTMLElement>());
@@ -32,7 +33,12 @@ const UpcomingEvents = forwardRef<UpcomingEventsHandle, Props>(function Upcoming
 
   return (
     <aside className="todo-column" style={{ left: position.left, top: position.top }}>
-      <div className="todo-title">To do</div>
+      <div className="todo-title">
+        To do
+        <button className="todo-revert" onClick={onRevert} title="Bring back everything you crossed out">
+          ↺ Revert
+        </button>
+      </div>
       {events.length === 0 && <div className="todo-empty">Nothing coming up</div>}
       {events.map((e) => (
         <div
