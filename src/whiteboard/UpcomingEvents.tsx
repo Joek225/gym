@@ -1,10 +1,10 @@
-// The to-do column on the right side of the To do list board, in three parts:
+// The to-do column on the right side of the To do list board, in two parts:
 //   Reminders — every reminder you haven't crossed out
-//   Upcoming  — events in the next 3 days (today, tomorrow, the day after)
-//   Events    — events after that, up to a month ahead (so weekly ones don't fill the list)
+//   Upcoming  — events in the next 7 days (today and the 6 days after)
+// It scrolls with the mouse wheel / trackpad when the list is long (see BoardCanvas).
 // It's drawn on top of the board (clicks pass through), so a pencil line through a row
 // crosses that event out (see BoardCanvas).
-import { forwardRef, useImperativeHandle, useRef } from 'react';
+import { forwardRef, useImperativeHandle, useRef, type Ref } from 'react';
 import type { EventRecord } from '../db';
 import { EVENT_COLOR, REMINDER_COLOR } from '../gym/workouts';
 import { addDays, formatShortDate, formatTime, todayKey } from '../calendar/dates';
@@ -15,6 +15,7 @@ export interface UpcomingEventsHandle {
 }
 
 interface Props {
+  scrollRef?: Ref<HTMLElement>; // the scrolling part, so the board can scroll it
   events: EventRecord[];
   struckIds: string[]; // just crossed out: shown struck through while they fade away
   onRevert: () => void; // bring back every crossed-out event
@@ -22,19 +23,17 @@ interface Props {
 }
 
 const UpcomingEvents = forwardRef<UpcomingEventsHandle, Props>(function UpcomingEvents(
-  { events, struckIds, onRevert, position },
+  { events, struckIds, onRevert, position, scrollRef },
   ref,
 ) {
   const rows = useRef(new Map<string, HTMLElement>());
 
-  const soonEnd = addDays(todayKey(), 2); // "Upcoming" = today through the day after tomorrow
-  const monthEnd = addDays(todayKey(), 30);
+  const weekEnd = addDays(todayKey(), 6); // "Upcoming" = today through 6 days from now
   const reminders = events.filter((e) => e.kind === 'reminder');
   const others = events.filter((e) => e.kind !== 'reminder');
   const sections = [
     { title: 'Reminders', items: reminders },
-    { title: 'Upcoming', items: others.filter((e) => e.date <= soonEnd) },
-    { title: 'Events', items: others.filter((e) => e.date > soonEnd && e.date <= monthEnd) },
+    { title: 'Upcoming', items: others.filter((e) => e.date <= weekEnd) },
   ];
 
   useImperativeHandle(ref, () => ({
@@ -46,14 +45,14 @@ const UpcomingEvents = forwardRef<UpcomingEventsHandle, Props>(function Upcoming
   }));
 
   return (
-    <aside className="todo-column" style={{ left: position.left, top: position.top }}>
+    <aside className="todo-column" ref={scrollRef} style={{ left: position.left, top: position.top }}>
       <div className="todo-title">
         To do
         <button className="todo-revert" onClick={onRevert} title="Bring back everything you crossed out">
           ↺ Revert
         </button>
       </div>
-      {events.length === 0 && <div className="todo-empty">Nothing coming up</div>}
+      {sections.every((s) => s.items.length === 0) && <div className="todo-empty">Nothing coming up</div>}
       {sections.map(
         ({ title, items }) =>
           items.length > 0 && (

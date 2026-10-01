@@ -10,7 +10,6 @@ import type {
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types';
 import { db, type EventRecord } from '../db';
 import { byDateAndTime, todayKey } from '../calendar/dates';
-import { recurringReady } from '../calendar/recurring';
 import { eraseAlong } from './strokeEraser';
 import { STROKE_ERASER, StrokeEraserButton, useToolHotkeys } from './toolbar';
 import UpcomingEvents, { type UpcomingEventsHandle } from './UpcomingEvents';
@@ -100,6 +99,7 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
   const [events, setEvents] = useState<EventRecord[]>([]);
   const [column, setColumn] = useState<{ left: number; top: number } | null>(null);
   const upcomingRef = useRef<UpcomingEventsHandle>(null);
+  const todoScrollRef = useRef<HTMLElement>(null);
   const [struckIds, setStruckIds] = useState<string[]>([]); // just crossed out (fading away)
   // The line you're drawing inside the to-do column. The column covers the board, so
   // Excalidraw's own line would be hidden there; we draw a copy on top so you can see it.
@@ -110,7 +110,6 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
   // What's on the list: every reminder you haven't crossed out (even past ones), plus
   // events from today on. Past events drop off by themselves.
   const loadEvents = useCallback(async () => {
-    await recurringReady;
     const today = todayKey();
     const list = await db.events.toArray();
     setEvents(
@@ -157,6 +156,23 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
       window.clearTimeout(later);
     };
   }, [isFirstBoard, container, initialData]);
+
+  // Scrolling the to-do list: the column lets clicks through to the board (so you can cross
+  // things out), so we catch the mouse wheel / trackpad here and scroll the list ourselves.
+  useEffect(() => {
+    if (!isFirstBoard || !container) return;
+    const onWheel = (e: WheelEvent) => {
+      const list = todoScrollRef.current;
+      if (!list || e.ctrlKey) return; // ctrl+wheel = zoom, leave that to the board
+      const r = list.getBoundingClientRect();
+      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return;
+      e.preventDefault();
+      e.stopPropagation(); // don't also scroll the board
+      list.scrollTop += e.deltaY;
+    };
+    container.addEventListener('wheel', onWheel, { capture: true, passive: false });
+    return () => container.removeEventListener('wheel', onWheel, { capture: true });
+  }, [isFirstBoard, container]);
 
   // When a drawing is finished, check whether it landed in the to-do column.
   // If it crosses out an event, hide that event. Either way, remove the drawing.
@@ -387,6 +403,7 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
           struckIds={struckIds}
           onRevert={revertTodo}
           position={column}
+          scrollRef={todoScrollRef}
         />
       )}
 

@@ -8,7 +8,6 @@ import SpanEditor from '../calendar/SpanEditor';
 import MiniMonth from '../calendar/MiniMonth';
 import WorkoutEditor from '../calendar/WorkoutEditor';
 import { MONTH_NAMES, addMonths, byDateAndTime, thisMonth } from '../calendar/dates';
-import { recurringReady } from '../calendar/recurring';
 import { db, type Cardio, type EventRecord, type SpanRecord, type WorkoutRecord } from '../db';
 import { hasLifts, newWorkout, saveWorkout } from '../gym/workouts';
 
@@ -32,7 +31,6 @@ export default function CalendarTab() {
 
   // Load all events and workouts from the database, grouped by date.
   const reload = useCallback(async () => {
-    await recurringReady; // weekly EcoMiles events are made first
     const [events, workouts, allSpans] = await Promise.all([
       db.events.toArray(),
       db.workouts.toArray(),
