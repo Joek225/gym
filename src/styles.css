@@ -79,7 +79,264 @@ button {
   color: var(--muted);
 }
 
-/* ---- Whiteboard tab: Excalidraw fills all the space below the tab bar ---- */
+/* ---- Whiteboard tab ---- */
 .whiteboard {
   height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Row of board buttons above the canvas */
+.board-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.board-list {
+  display: flex;
+  gap: 6px;
+  flex: 1;
+  overflow-x: auto; /* lots of boards scroll sideways */
+}
+
+.board-chip,
+.board-actions button {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-raised);
+  color: var(--text);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.board-chip.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.board-chip.add {
+  background: none;
+  border-style: dashed;
+  color: var(--muted);
+}
+
+.board-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.board-actions button {
+  background: none;
+  color: var(--muted);
+}
+
+/* Excalidraw fills the rest of the space */
+.board-canvas {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Hide Excalidraw buttons we don't use: diamond tool, lock button, help (?) button */
+.excalidraw label:has([data-testid='toolbar-diamond']),
+.excalidraw label:has([data-testid='toolbar-lock']),
+.excalidraw .ToolIcon__lock + .App-toolbar__divider,
+.excalidraw .help-icon {
+  display: none !important;
+}
+
+/* Use Avenir for whiteboard text. Excalidraw has no setting for custom fonts, so we
+   borrow its built-in "Helvetica" font slot and point it at Avenir instead.
+   Avenir comes installed on Apple devices; anywhere else this falls back to Nunito. */
+@font-face {
+  font-family: 'Helvetica';
+  src:
+    local('Avenir Next'),
+    local('AvenirNext-Regular'),
+    local('Avenir'),
+    local('Avenir-Book'),
+    url('/fonts/Nunito/Nunito-Regular-XRXI3I6Li01BKofiOc5wtlZ2di8HDIkhdTQ3j6zbXWjgeg.woff2')
+      format('woff2');
+}
+
+/* ---- Calendar tab ---- */
+.calendar {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 12px 16px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Row of 3 small months */
+.mini-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.mini-month {
+  display: flex; /* keeps the content at the top, so all 3 cards line up */
+  flex-direction: column;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  text-align: center;
+}
+
+.mini-month:hover {
+  border-color: var(--accent);
+}
+
+.mini-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.mini-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  font-size: 10px;
+  line-height: 1.7;
+}
+
+.mini-weekday {
+  color: var(--muted);
+}
+
+.mini-day.other-month {
+  visibility: hidden; /* keep the layout but don't show other months' days */
+}
+
+.mini-day.today {
+  background: var(--accent);
+  color: var(--bg);
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+/* Month name with arrows and Today button */
+.month-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.month-title {
+  margin: 0;
+  font-size: 22px;
+  min-width: 190px;
+  text-align: center;
+}
+
+.nav-btn,
+.today-btn {
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text);
+  border-radius: 8px;
+}
+
+.nav-btn {
+  width: 36px;
+  height: 36px;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.today-btn {
+  margin-left: auto;
+  padding: 8px 14px;
+}
+
+/* The big month: 7 columns, Monday → Sunday */
+.big-month {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  border-top: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+}
+
+.big-weekday {
+  padding: 6px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.day-cell {
+  position: relative;
+  min-height: 96px;
+  padding: 4px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.day-number {
+  display: inline-block;
+  min-width: 26px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 14px;
+  text-align: center;
+}
+
+.day-cell.other-month .day-number {
+  color: var(--muted);
+  opacity: 0.5;
+}
+
+/* Today: filled circle on the date + outlined cell */
+.day-cell.today {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.day-cell.today .day-number {
+  background: var(--accent);
+  color: var(--bg);
+  font-weight: 700;
+}
+
+/* Phones: smaller cells and text so all 7 days fit */
+@media (max-width: 600px) {
+  .calendar {
+    padding: 10px 8px 20px;
+  }
+  .mini-row {
+    gap: 6px;
+  }
+  .mini-month {
+    padding: 6px 4px;
+  }
+  .mini-grid {
+    font-size: 9px;
+  }
+  .month-title {
+    font-size: 18px;
+    min-width: 0;
+  }
+  .day-cell {
+    min-height: 84px;
+    padding: 2px;
+  }
+  .day-number {
+    font-size: 12px;
+    min-width: 22px;
+    padding: 1px 4px;
+  }
+  .big-weekday {
+    font-size: 11px;
+    padding: 4px 0;
+  }
 }
