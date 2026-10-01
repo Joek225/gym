@@ -1,4 +1,4 @@
-# Gym & School
+# My Stuff
 
 My personal website for organizing school work and gym life.
 

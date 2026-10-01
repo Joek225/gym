@@ -12,6 +12,7 @@ import {
   CARDIO_TEXT,
   EVENT_COLOR,
   EVENT_COLOR_DARK,
+  REMINDER_COLOR,
   hasCardio,
   hasLifts,
   workoutColor,
@@ -20,6 +21,8 @@ import {
 import { WEEKDAYS, dateKey, formatTime, monthGrid, todayKey, type YearMonth } from './dates';
 
 const MAX_EVENTS_SHOWN = 3;
+// Reminder dots: the dark reminder blue, with a light ring so it shows on the dark calendar.
+const REMINDER_DOT = REMINDER_COLOR;
 
 // Today's column gets wider ONLY when its entries don't fit on one line; it grows just
 // enough to fit them (up to 40% of the calendar, after which the text wraps instead).
@@ -206,7 +209,10 @@ export default function BigMonth(props: Props) {
             <div className="cell-events">
               {(key === today ? events : events.slice(0, MAX_EVENTS_SHOWN)).map((ev) => (
                 <div key={ev.id} className="cell-event">
-                  <span className="event-dot" style={{ background: EVENT_COLOR }} />
+                  <span
+                    className="event-dot"
+                    style={{ background: ev.kind === 'reminder' ? REMINDER_DOT : EVENT_COLOR }}
+                  />
                   <span className="cell-event-title">{ev.title}</span>
                   {ev.time && <span className="cell-event-time">{formatTime(ev.time)}</span>}
                 </div>

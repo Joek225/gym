@@ -14,6 +14,7 @@ export const CUSTOM_GYM_COLOR = '#6B2A3A'; // darker red for Custom-day banners 
 export const CARDIO_COLOR = '#47333B'; // dark plum for cardio
 export const CARDIO_TEXT = '#FFFFFF'; // white text on it
 export const EVENT_COLOR = '#90D5FF'; // the blue (events) color
+export const REMINDER_COLOR = '#163B7A'; // dark blue for reminders
 // Slightly darker versions for the big zoomed-in day, so white text reads well on both.
 export const GYM_COLOR_DARK = '#8F4656';
 export const EVENT_COLOR_DARK = '#3E8DBF';

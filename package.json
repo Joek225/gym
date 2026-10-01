@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "copy-fonts": "node -e \"require('fs').cpSync('node_modules/@excalidraw/excalidraw/dist/prod/fonts','public/fonts',{recursive:true})\"",
+    "copy-fonts": "node -e \"const fs=require('fs');fs.cpSync('node_modules/@excalidraw/excalidraw/dist/prod/fonts','public/fonts',{recursive:true});fs.rmSync('public/fonts/Liberation',{recursive:true,force:true})\"",
     "predev": "npm run copy-fonts",
     "dev": "vite",
     "prebuild": "npm run copy-fonts",

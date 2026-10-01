@@ -7,15 +7,16 @@ import EventEditor from '../calendar/EventEditor';
 import SpanEditor from '../calendar/SpanEditor';
 import MiniMonth from '../calendar/MiniMonth';
 import WorkoutEditor from '../calendar/WorkoutEditor';
-import { MONTH_NAMES, addMonths, thisMonth, timeSortKey } from '../calendar/dates';
+import { MONTH_NAMES, addMonths, byDateAndTime, thisMonth } from '../calendar/dates';
+import { recurringReady } from '../calendar/recurring';
 import { db, type Cardio, type EventRecord, type SpanRecord, type WorkoutRecord } from '../db';
-import { newWorkout, saveWorkout } from '../gym/workouts';
+import { hasLifts, newWorkout, saveWorkout } from '../gym/workouts';
 
 // What's open on top of the calendar right now.
 type Popup =
   | { kind: 'none' }
   | { kind: 'zoom' }
-  | { kind: 'event'; event?: EventRecord }
+  | { kind: 'event'; eventKind: 'event' | 'reminder'; event?: EventRecord }
   | { kind: 'workout'; workout: WorkoutRecord }
   | { kind: 'span'; start: string; end: string; span?: SpanRecord };
 
@@ -31,6 +32,7 @@ export default function CalendarTab() {
 
   // Load all events and workouts from the database, grouped by date.
   const reload = useCallback(async () => {
+    await recurringReady; // weekly EcoMiles events are made first
     const [events, workouts, allSpans] = await Promise.all([
       db.events.toArray(),
       db.workouts.toArray(),
@@ -39,7 +41,7 @@ export default function CalendarTab() {
     setSpans(allSpans);
     const byDate = new Map<string, EventRecord[]>();
     events
-      .sort((a, b) => timeSortKey(a.time).localeCompare(timeSortKey(b.time))) // in time/block order
+      .sort(byDateAndTime) // in time order (blocks at their real times)
       .forEach((e) => byDate.set(e.date, [...(byDate.get(e.date) ?? []), e]));
     setEventsByDate(byDate);
     setWorkoutsByDate(new Map(workouts.map((w) => [w.date, w])));
@@ -61,7 +63,7 @@ export default function CalendarTab() {
     reload();
   };
   // Cardio typed in the zoomed day: save it into that day's workout (making one if needed).
-  const saveCardio = async (cardio: Cardio) => {
+  const saveCardio = async (cardio: Cardio | undefined) => {
     const date = day!.date;
     const w = (await db.workouts.get(date)) ?? (await newWorkout(date));
     await saveWorkout({ ...w, cardio });
@@ -82,7 +84,8 @@ export default function CalendarTab() {
 
   // The 3 months before the big one, oldest first (left → right).
   const previous = [3, 2, 1].map((n) => addMonths(shown, -n));
-  const workoutDates = new Set(workoutsByDate.keys());
+  // Small calendars: red only for days with lifts (cardio alone doesn't count).
+  const workoutDates = new Set([...workoutsByDate.values()].filter(hasLifts).map((w) => w.date));
 
   return (
     <div className="calendar">
@@ -137,8 +140,8 @@ export default function CalendarTab() {
           workout={workoutsByDate.get(day.date)}
           spans={spans.filter((sp) => sp.start <= day.date && day.date <= sp.end)}
           onCardioChange={saveCardio}
-          onAddEvent={() => setPopup({ kind: 'event' })}
-          onEditEvent={(event) => setPopup({ kind: 'event', event })}
+          onAddEvent={(eventKind) => setPopup({ kind: 'event', eventKind })}
+          onEditEvent={(event) => setPopup({ kind: 'event', eventKind: event.kind ?? 'event', event })}
           onWorkout={openWorkout}
           onClose={closeAll}
         />
@@ -147,6 +150,7 @@ export default function CalendarTab() {
       {day && popup.kind === 'event' && (
         <EventEditor
           date={day.date}
+          kind={popup.eventKind}
           event={popup.event}
           onSaved={backToZoom}
           onClose={backToZoom}
