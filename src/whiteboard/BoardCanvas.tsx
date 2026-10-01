@@ -14,6 +14,7 @@ import { eraseAlong } from './strokeEraser';
 import { STROKE_ERASER, StrokeEraserButton, useToolHotkeys } from './toolbar';
 import UpcomingEvents, { type UpcomingEventsHandle } from './UpcomingEvents';
 import CanvasButtons from './CanvasButtons';
+import FontSizeButtons, { DEFAULT_FONT_SIZE } from './FontSizeButtons';
 
 // Excalidraw's own types for its callbacks.
 type Props = Parameters<typeof Excalidraw>[0];
@@ -28,6 +29,7 @@ const START_SETTINGS = {
   // New text uses Avenir (see the "Helvetica" font rule in styles.css for how).
   currentItemFontFamily: FONT_FAMILY.Helvetica,
   currentItemStrokeWidth: 1, // thin pen by default
+  currentItemFontSize: DEFAULT_FONT_SIZE, // new text starts at "L"
 };
 
 // New text boxes are double-spaced (Excalidraw's own default is about 1.15).
@@ -202,6 +204,7 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
 
   // ---------- Stroke eraser ----------
   const [strokeEraserOn, setStrokeEraserOn] = useState(false);
+  const [fontSizeNow, setFontSizeNow] = useState<number | null>(DEFAULT_FONT_SIZE);
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
   const lastErasePoint = useRef<[number, number] | null>(null);
 
@@ -269,6 +272,13 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
       });
     }
 
+    // Which text size our S/M/L/XL buttons should show as picked.
+    const selectedText = elements.find(
+      (el) => el.type === 'text' && (appState.selectedElementIds[el.id] || el.id === editing?.id),
+    ) as any;
+    const sizeNow = selectedText ? selectedText.fontSize : appState.currentItemFontSize;
+    if (sizeNow !== fontSizeNow) setFontSizeNow(sizeNow);
+
     const tool = appState.activeTool;
     const eraserNow = tool.type === 'custom' && tool.customType === STROKE_ERASER;
     if (eraserNow !== strokeEraserOn) setStrokeEraserOn(eraserNow);
@@ -321,8 +331,10 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
         }}
       />
 
-      {/* Clear-board and background buttons (instead of Excalidraw's ☰ menu) */}
+      {/* Clear-board button (instead of Excalidraw's ☰ menu) */}
       <CanvasButtons api={api} />
+
+      <FontSizeButtons container={container} api={api} current={fontSizeNow} />
 
       <StrokeEraserButton container={container} active={strokeEraserOn} onSelect={selectStrokeEraser} />
 

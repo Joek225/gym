@@ -11,8 +11,8 @@ import {
 
 export const GYM_COLOR = '#A85868'; // the red (gym) color
 export const CUSTOM_GYM_COLOR = '#6B2A3A'; // darker red for Custom-day banners (Wed/Sat/Sun)
-export const CARDIO_COLOR = '#E9C9C9'; // pale pink for cardio
-export const CARDIO_TEXT = '#5A2833'; // dark text that reads well on the pale pink
+export const CARDIO_COLOR = '#47333B'; // dark plum for cardio
+export const CARDIO_TEXT = '#FFFFFF'; // white text on it
 export const EVENT_COLOR = '#90D5FF'; // the blue (events) color
 // Slightly darker versions for the big zoomed-in day, so white text reads well on both.
 export const GYM_COLOR_DARK = '#8F4656';

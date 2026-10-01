@@ -559,7 +559,7 @@ button {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 22px;
+  font-size: 28px;
   font-weight: 600;
   margin-bottom: 14px;
 }
@@ -588,8 +588,8 @@ button {
   align-items: baseline;
   gap: 10px;
   padding: 8px 0;
-  margin-bottom: 14px; /* gap between events, so each can be crossed out on its own */
-  font-size: 18px;
+  margin-bottom: 16px; /* gap between events, so each can be crossed out on its own */
+  font-size: 24px;
   line-height: 1.3;
 }
 
@@ -624,7 +624,7 @@ button {
 
 .todo-date {
   color: var(--muted);
-  font-size: 14px;
+  font-size: 17px;
 }
 
 .todo-date b {
@@ -638,6 +638,37 @@ button {
 .excalidraw .dropdown-menu-item[data-testid='toolbar-embeddable'] ~ .dropdown-menu-item[data-testid='toolbar-embeddable'],
 .excalidraw .dropdown-menu-item[data-testid='toolbar-laser'] + div {
   display: none !important;
+}
+
+/* ---- Toolbar order: hand, select 1, pen 2, text 3, line 4, image 5, square 6, circle 7,
+   eraser 8, stroke eraser 9. (Excalidraw's buttons keep their place in the page; "order"
+   just changes where each one is drawn.) The arrow tool is hidden. ---- */
+.excalidraw .App-toolbar .Stack_horizontal > * {
+  order: 50; /* anything not listed (dividers, extra-tools menu) goes at the end */
+}
+/* (each line below starts with the same words so it wins over the line above) */
+.excalidraw .App-toolbar .Stack_horizontal > label:has([data-testid='toolbar-hand']) { order: 0; }
+.excalidraw .App-toolbar .Stack_horizontal > label:has([data-testid='toolbar-selection']) { order: 1; }
+.excalidraw .App-toolbar .Stack_horizontal > label:has([data-testid='toolbar-freedraw']) { order: 2; }
+.excalidraw .App-toolbar .Stack_horizontal > label:has([data-testid='toolbar-text']) { order: 3; }
+.excalidraw .App-toolbar .Stack_horizontal > label:has([data-testid='toolbar-line']) { order: 4; }
+.excalidraw .App-toolbar .Stack_horizontal > label:has([data-testid='toolbar-image']) { order: 5; }
+.excalidraw .App-toolbar .Stack_horizontal > label:has([data-testid='toolbar-rectangle']) { order: 6; }
+.excalidraw .App-toolbar .Stack_horizontal > label:has([data-testid='toolbar-ellipse']) { order: 7; }
+.excalidraw .App-toolbar .Stack_horizontal > label:has([data-testid='toolbar-eraser']) { order: 8; }
+.excalidraw .App-toolbar .Stack_horizontal .stroke-eraser-slot > label { order: 9; }
+.excalidraw label:has([data-testid='toolbar-arrow']) {
+  display: none !important;
+}
+
+/* Text size: Excalidraw's own S/M/L/XL buttons are hidden; ours (bigger sizes) show instead */
+.excalidraw .buttonList:has([data-testid='fontSize-small']) {
+  display: none !important;
+}
+.font-size-label {
+  font-size: 13px;
+  min-width: 20px;
+  text-align: center;
 }
 
 /* Excalidraw's style panel (stroke, background, stroke width…) sits at the bottom-left,
@@ -677,53 +708,12 @@ button {
   background: #31303b;
 }
 
-.bg-picker {
-  position: absolute;
-  top: 42px;
-  left: 0;
-  display: grid;
-  grid-template-columns: repeat(3, 28px);
-  gap: 6px;
-  padding: 8px;
-  background: #232329;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-}
-
-.bg-swatch {
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--border);
-}
-
-.bg-custom {
-  position: relative;
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px dashed var(--border);
-  color: var(--muted);
-  cursor: pointer;
-}
-
-.bg-custom input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-
 @media (max-width: 600px) {
   /* on phones the tool bar is on top, so these go to the bottom-left corner */
   .canvas-buttons {
     top: auto;
     bottom: 22px;
     left: 22px;
-  }
-  .bg-picker {
-    top: auto;
-    bottom: 42px;
   }
 }
 
@@ -740,16 +730,16 @@ button {
     padding: 10px 10px;
   }
   .todo-title {
-    font-size: 16px;
+    font-size: 19px;
     margin-bottom: 8px;
   }
   .todo-row {
-    font-size: 14px;
+    font-size: 17px;
     margin-bottom: 8px;
     gap: 6px;
   }
   .todo-date {
-    font-size: 11px;
+    font-size: 13px;
   }
 }
 
@@ -1125,17 +1115,12 @@ button {
 
 .workout-type,
 .workout-name-input {
-  font-size: 24px !important;
-  font-weight: 800 !important;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: 22px !important;
   color: #fff !important;
 }
 
 .workout-name-input::placeholder {
   color: rgba(255, 255, 255, 0.6);
-  text-transform: none;
-  letter-spacing: 0;
 }
 
 .workout-date {

@@ -1,5 +1,5 @@
 // Toolbar changes for Excalidraw:
-//  1) Number hotkeys 1–9 and 0 with no gaps (the diamond tool was removed).
+//  1) Our own number hotkeys 1–9 (see the order below; the toolbar is shown in this order too).
 //  2) A "Stroke eraser" button added to Excalidraw's toolbar, right after the normal eraser.
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -7,20 +7,21 @@ import { createPortal } from 'react-dom';
 export const STROKE_ERASER = 'strokeEraser';
 
 // Key → the tool it picks. Excalidraw's tool buttons have ids like "toolbar-ellipse".
+// The toolbar order is: hand, then these in order (see "Toolbar order" in styles.css).
 const HOTKEYS: Record<string, string> = {
   '1': 'selection',
-  '2': 'rectangle',
-  '3': 'ellipse',
-  '4': 'arrow',
-  '5': 'line',
-  '6': 'freedraw',
-  '7': 'text',
-  '8': 'image',
-  '9': 'eraser',
-  '0': STROKE_ERASER,
+  '2': 'freedraw', // pen
+  '3': 'text',
+  '4': 'line',
+  '5': 'image',
+  '6': 'rectangle', // square
+  '7': 'ellipse', // circle
+  '8': 'eraser', // erases whole drawings
+  '9': STROKE_ERASER, // erases part of a pen line
 };
-// Excalidraw shortcuts we turn off: diamond (D) and the hidden lock button (Q).
-const BLOCKED_KEYS = ['d', 'q'];
+// Excalidraw shortcuts we turn off: diamond (D), the hidden lock (Q), the removed arrow
+// tool (A), and 0 (which used to pick the eraser).
+const BLOCKED_KEYS = ['d', 'q', 'a', '0'];
 
 function isTyping(target: EventTarget | null) {
   const el = target as HTMLElement | null;
@@ -95,7 +96,7 @@ export function StrokeEraserButton({
 
   if (!slot) return null;
   return createPortal(
-    <label className="ToolIcon Shape" title="Stroke eraser — rubs out part of a line — 0">
+    <label className="ToolIcon Shape" title="Stroke eraser — rubs out part of a line — 9">
       <input
         type="radio"
         className="ToolIcon_type_radio ToolIcon_size_medium"
@@ -113,7 +114,7 @@ export function StrokeEraserButton({
           <path d="M7.6 7.9l4.5 4.5" />
         </svg>
       </div>
-      <span className="ToolIcon__keybinding">0</span>
+      <span className="ToolIcon__keybinding">9</span>
     </label>,
     slot,
   );
