@@ -48,3 +48,25 @@ export function monthGrid({ year, month }: YearMonth): Date[] {
     (_, i) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + i),
   );
 }
+
+// "2026-10-01" → a Date at midnight that day.
+export function parseKey(key: string): Date {
+  const [y, m, d] = key.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+// "2026-10-01" → "Oct 1"
+export function formatShortDate(key: string): string {
+  return parseKey(key).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+// "2026-10-01" → "Thursday, October 1"
+export function formatLongDate(key: string): string {
+  return parseKey(key).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+}
+
+// "14:30" → "2:30pm" (or "14:30" style, depending on your device's settings)
+export function formatTime(time: string): string {
+  const [h, m] = time.split(':').map(Number);
+  return new Date(2000, 0, 1, h, m).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}

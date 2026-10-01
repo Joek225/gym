@@ -87,7 +87,7 @@ export default function WhiteboardTab() {
       </div>
       <div className="board-canvas">
         {/* "key" makes React build a fresh canvas whenever you switch boards. */}
-        <BoardCanvas key={activeId} boardId={activeId} />
+        <BoardCanvas key={activeId} boardId={activeId} isFirstBoard={boards[0]?.id === activeId} />
       </div>
     </div>
   );

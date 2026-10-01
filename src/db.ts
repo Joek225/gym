@@ -12,6 +12,35 @@ export interface WhiteboardRecord {
   updatedAt: number; // when it was last saved (milliseconds since 1970)
 }
 
+// A calendar event (the blue side of a day).
+export interface EventRecord {
+  id: string;
+  date: string; // "2026-10-01"
+  title: string;
+  time: string; // "09:30", or "" if no time
+  notes: string;
+  struck: boolean; // crossed out on Board 1 (hidden from the board, kept in the calendar)
+  createdAt: number;
+}
+
+// One line of a workout: exercise - reps - weight (kg). Empty text = not filled in yet.
+export interface WorkoutRow {
+  name: string;
+  reps: string;
+  weight: string;
+}
+
+export type WorkoutType = 'upper' | 'lower' | 'custom';
+
+// A day's workout (the red side of a day). One per date.
+export interface WorkoutRecord {
+  date: string; // "2026-10-01"
+  type: WorkoutType;
+  customName: string; // only used for custom days, e.g. "Push" or "Cardio"
+  rows: WorkoutRow[];
+  updatedAt: number;
+}
+
 // Small app-wide settings, e.g. which board was open last.
 export interface SettingRecord {
   key: string;
@@ -21,6 +50,8 @@ export interface SettingRecord {
 class AppDatabase extends Dexie {
   whiteboard!: Table<WhiteboardRecord, string>;
   settings!: Table<SettingRecord, string>;
+  events!: Table<EventRecord, string>;
+  workouts!: Table<WorkoutRecord, string>;
 
   constructor() {
     super('gym-app');
@@ -48,6 +79,11 @@ class AppDatabase extends Dexie {
             }
           }),
       );
+    // Version 3: calendar events and workouts.
+    this.version(3).stores({
+      events: 'id, date',
+      workouts: 'date',
+    });
   }
 }
 

@@ -164,7 +164,9 @@ button {
 
 /* ---- Calendar tab ---- */
 .calendar {
-  max-width: 1100px;
+  /* Height of one day cell: the big month fills most of the screen, but never gets tiny. */
+  --cell-h: max(110px, calc((100vh - 330px) / 6));
+  max-width: 1500px;
   margin: 0 auto;
   padding: 12px 16px 24px;
   display: flex;
@@ -276,13 +278,18 @@ button {
 
 .day-cell {
   position: relative;
-  min-height: 96px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: var(--cell-h);
   padding: 4px;
+  cursor: pointer;
   border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
 }
 
 .day-number {
+  align-self: flex-start; /* don't stretch across the cell */
   display: inline-block;
   min-width: 26px;
   padding: 2px 6px;
@@ -308,6 +315,81 @@ button {
   font-weight: 700;
 }
 
+/* Hover: a light highlight so you can see which day you're about to click */
+.day-cell:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Red gym banner across the top fifth of a day */
+.gym-banner {
+  flex: none;
+  height: calc(var(--cell-h) / 5);
+  margin: -4px -4px 2px; /* reach the cell's edges */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* With a banner, the date number sits on top of it, in white */
+.day-cell.has-workout .day-number {
+  position: absolute;
+  top: 0;
+  left: 2px;
+  height: calc(var(--cell-h) / 5);
+  display: flex;
+  align-items: center;
+  background: none;
+  color: #fff;
+  font-size: 12px;
+}
+
+.day-cell.today.has-workout .day-number {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* Events inside a day: blue dot, title, bold time */
+.cell-events {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  margin-top: 2px;
+}
+
+.cell-event {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 12px;
+  min-width: 0;
+}
+
+.cell-event-title {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.cell-event-time {
+  flex: none;
+  font-size: 11px;
+}
+
+.cell-more {
+  font-size: 11px;
+  color: var(--muted);
+}
+
 /* Phones: smaller cells and text so all 7 days fit */
 @media (max-width: 600px) {
   .calendar {
@@ -326,8 +408,10 @@ button {
     font-size: 18px;
     min-width: 0;
   }
+  .calendar {
+    --cell-h: 92px;
+  }
   .day-cell {
-    min-height: 84px;
     padding: 2px;
   }
   .day-number {
@@ -339,4 +423,522 @@ button {
     font-size: 11px;
     padding: 4px 0;
   }
+}
+
+/* Wraps one board: Excalidraw + our extras drawn on top of it */
+.board-surface {
+  position: relative;
+  height: 100%;
+}
+
+/* Stroke eraser: hide the normal cursor and show a circle instead */
+.board-surface.stroke-erasing canvas {
+  cursor: none !important;
+}
+
+.eraser-cursor {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  border: 1.5px solid var(--text);
+  border-radius: 50%;
+  pointer-events: none; /* clicks go through to the board */
+  z-index: 5;
+}
+
+.stroke-eraser-slot {
+  display: contents; /* our toolbar button sits in line with Excalidraw's buttons */
+}
+
+/* Upcoming events on the right side of Board 1 */
+.upcoming {
+  position: absolute;
+  top: 80px;
+  right: 16px;
+  width: 240px;
+  max-width: 45%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(33, 35, 46, 0.6);
+  pointer-events: none; /* you can draw right over it to cross things out */
+  z-index: 2;
+}
+
+.upcoming-title {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.upcoming-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 14px;
+}
+
+.upcoming-date {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.event-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transform: translateY(-1px);
+}
+
+@media (max-width: 600px) {
+  .upcoming {
+    top: 70px;
+    right: 8px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 600px) {
+  .gym-banner {
+    font-size: 8px;
+    letter-spacing: 0;
+    margin: -2px -2px 2px;
+  }
+  .day-cell.has-workout .day-number {
+    font-size: 9px;
+    left: 0;
+  }
+  .cell-event {
+    font-size: 9px;
+    gap: 2px;
+  }
+  .cell-event-time {
+    display: none; /* not enough room on a phone; shown in the zoomed day */
+  }
+  .cell-event .event-dot {
+    width: 5px;
+    height: 5px;
+  }
+  .templates-btn {
+    display: none; /* moved below the calendar on phones */
+  }
+}
+
+/* ---- Popups (shared) ---- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(10, 11, 16, 0.6);
+}
+
+.modal {
+  width: min(480px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  border-radius: 14px;
+  background: var(--surface-raised);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.editor-stripe {
+  height: 8px;
+}
+
+.editor-body {
+  padding: 16px 20px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modal input,
+.modal textarea {
+  font: inherit;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  outline: none;
+}
+
+.event-title-input {
+  font-size: 22px !important;
+  padding: 6px 0;
+  border-bottom: 2px solid var(--border) !important;
+}
+
+.event-title-input:focus {
+  border-bottom-color: #90d5ff !important;
+}
+
+.editor-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.editor-row textarea {
+  flex: 1;
+  resize: vertical;
+  background: var(--bg) !important;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.editor-row input[type='time'] {
+  background: var(--bg);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
+.editor-icon {
+  width: 20px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.editor-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 12px 20px 16px;
+}
+
+.link-btn {
+  border: none;
+  background: none;
+  color: var(--muted);
+  padding: 6px 4px;
+}
+
+.link-btn:hover {
+  color: var(--text);
+}
+
+.danger-btn {
+  margin-right: auto; /* pushed to the left */
+  border: none;
+  background: none;
+  color: #ff8a8a;
+  padding: 6px 4px;
+}
+
+.check-btn {
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.check-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.close-btn {
+  border: none;
+  background: none;
+  color: inherit;
+  font-size: 26px;
+  line-height: 1;
+}
+
+/* ---- Zoomed-in day ---- */
+.day-zoom {
+  width: min(760px, 100%);
+  height: min(560px, calc(100vh - 32px));
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--surface-raised);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  transform-origin: center;
+}
+
+.zoom-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.zoom-halves {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 0;
+}
+
+.zoom-half {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 16px;
+  overflow: auto;
+  cursor: pointer;
+}
+
+.zoom-half:hover {
+  filter: brightness(1.06);
+}
+
+.zoom-events {
+  color: #10202b; /* dark text on the light blue */
+}
+
+.zoom-gym {
+  color: #fff;
+  align-items: center;
+  justify-content: center;
+}
+
+.zoom-event {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.45);
+  color: inherit;
+  text-align: left;
+  font-size: 15px;
+}
+
+.zoom-event-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dark-dot {
+  background: #1a5f86;
+}
+
+.zoom-hint {
+  opacity: 0.75;
+  font-size: 14px;
+}
+
+.zoom-workout-label {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+  word-break: break-word;
+}
+
+.both-btn {
+  margin: 12px auto;
+  padding: 10px 40px;
+  border: none;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #90d5ff 50%, #a85868 50%);
+  color: #fff;
+  font-weight: 700;
+  font-size: 16px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* ---- Workout sheet ---- */
+.workout-editor {
+  width: min(500px, 100%);
+}
+
+.workout-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 16px 20px;
+  color: #fff;
+}
+
+.workout-type,
+.workout-name-input {
+  font-size: 24px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #fff !important;
+}
+
+.workout-name-input::placeholder {
+  color: rgba(255, 255, 255, 0.6);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.workout-date {
+  font-size: 13px;
+  opacity: 0.85;
+}
+
+.workout-lines {
+  padding: 12px 20px 4px;
+}
+
+.workout-legend {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+/* One line: name - reps - weight. Looks like text, not a table. */
+.workout-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  font-size: 16px;
+}
+
+.workout-line input {
+  padding: 4px 2px;
+  border-bottom: 1px solid transparent !important;
+}
+
+.workout-line input:focus {
+  border-bottom-color: var(--accent) !important;
+}
+
+.workout-line input::placeholder {
+  color: var(--muted);
+  opacity: 0.6;
+}
+
+.wl-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.wl-num {
+  width: 4ch;
+  text-align: center;
+}
+
+.wl-weight {
+  width: 6ch;
+}
+
+.wl-dash {
+  color: var(--muted);
+}
+
+.wl-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0.35;
+}
+
+.workout-line:hover .wl-actions,
+.workout-line:focus-within .wl-actions {
+  opacity: 1;
+}
+
+.wl-actions button {
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  font-size: 16px;
+}
+
+.wl-actions button:hover {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.add-line {
+  margin-top: 6px;
+}
+
+/* ---- Templates editor ---- */
+.templates-editor {
+  width: min(620px, 100%);
+  padding: 16px 20px 0;
+}
+
+.templates-editor h3 {
+  margin: 0 0 4px;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 0 0 12px;
+}
+
+.templates-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.templates-columns label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #e7a3b0;
+}
+
+.templates-columns textarea {
+  background: var(--bg) !important;
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 14px;
+  resize: vertical;
+}
+
+@media (max-width: 600px) {
+  .day-zoom {
+    height: min(520px, calc(100vh - 32px));
+  }
+  .templates-columns {
+    grid-template-columns: 1fr;
+  }
+  .wl-actions {
+    opacity: 1;
+  }
+}
+
+/* Phone-only "Workout templates" button under the calendar */
+.templates-btn-bottom {
+  display: none;
+  align-self: center;
+}
+@media (max-width: 600px) {
+  .templates-btn-bottom {
+    display: block;
+  }
+}
+
+.month-header .templates-btn {
+  margin-left: 0;
+}
+.templates-btn-bottom {
+  margin: 0 auto !important;
 }
