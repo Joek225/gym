@@ -1,13 +1,7 @@
 // One Excalidraw board. Loads its drawing from the database and auto-saves changes.
 // Also adds the stroke eraser, our number hotkeys, and (on Board 1) the upcoming-events list.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  CaptureUpdateAction,
-  Excalidraw,
-  FONT_FAMILY,
-  MainMenu,
-  serializeAsJSON,
-} from '@excalidraw/excalidraw';
+import { CaptureUpdateAction, Excalidraw, FONT_FAMILY, serializeAsJSON } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
 import type {
   ExcalidrawImperativeAPI,
@@ -19,6 +13,7 @@ import { todayKey } from '../calendar/dates';
 import { eraseAlong } from './strokeEraser';
 import { STROKE_ERASER, StrokeEraserButton, useToolHotkeys } from './toolbar';
 import UpcomingEvents, { type UpcomingEventsHandle } from './UpcomingEvents';
+import CanvasButtons from './CanvasButtons';
 
 // Excalidraw's own types for its callbacks.
 type Props = Parameters<typeof Excalidraw>[0];
@@ -272,6 +267,7 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
         onChange={handleChange}
         onPointerUpdate={handlePointerUpdate}
         theme="dark"
+        aiEnabled={false}
         UIOptions={{
           // Hide file buttons: everything already saves automatically.
           canvasActions: {
@@ -282,13 +278,10 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
             toggleTheme: null,
           },
         }}
-      >
-        {/* The ☰ menu: only the items that are useful here. */}
-        <MainMenu>
-          <MainMenu.DefaultItems.ClearCanvas />
-          <MainMenu.DefaultItems.ChangeCanvasBackground />
-        </MainMenu>
-      </Excalidraw>
+      />
+
+      {/* Clear-board and background buttons (instead of Excalidraw's ☰ menu) */}
+      <CanvasButtons api={api} />
 
       <StrokeEraserButton container={container} active={strokeEraserOn} onSelect={selectStrokeEraser} />
 

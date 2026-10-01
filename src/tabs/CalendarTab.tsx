@@ -5,7 +5,6 @@ import BigMonth from '../calendar/BigMonth';
 import DayZoom from '../calendar/DayZoom';
 import EventEditor from '../calendar/EventEditor';
 import MiniMonth from '../calendar/MiniMonth';
-import TemplatesEditor from '../calendar/TemplatesEditor';
 import WorkoutEditor from '../calendar/WorkoutEditor';
 import { MONTH_NAMES, addMonths, thisMonth } from '../calendar/dates';
 import { db, type EventRecord, type WorkoutRecord } from '../db';
@@ -16,8 +15,7 @@ type Popup =
   | { kind: 'none' }
   | { kind: 'zoom' }
   | { kind: 'event'; event?: EventRecord }
-  | { kind: 'workout'; workout: WorkoutRecord }
-  | { kind: 'templates' };
+  | { kind: 'workout'; workout: WorkoutRecord };
 
 
 export default function CalendarTab() {
@@ -87,11 +85,8 @@ export default function CalendarTab() {
         <button className="nav-btn" onClick={() => setShown(addMonths(shown, 1))} title="Next month">
           ›
         </button>
-        <button className="today-btn" onClick={() => setShown(thisMonth())}>
-          Today
-        </button>
-        <button className="today-btn templates-btn" onClick={() => setPopup({ kind: 'templates' })}>
-          Workout templates
+        <button className="today-btn" onClick={() => setShown(thisMonth())} title="Jump to this month">
+          Jump
         </button>
       </div>
 
@@ -104,10 +99,6 @@ export default function CalendarTab() {
           setPopup({ kind: 'zoom' });
         }}
       />
-
-      <button className="today-btn templates-btn-bottom" onClick={() => setPopup({ kind: 'templates' })}>
-        Workout templates
-      </button>
 
       {day && popup.kind === 'zoom' && (
         <DayZoom
@@ -135,7 +126,6 @@ export default function CalendarTab() {
         <WorkoutEditor workout={popup.workout} onClose={backToZoom} />
       )}
 
-      {popup.kind === 'templates' && <TemplatesEditor onClose={() => setPopup({ kind: 'none' })} />}
     </div>
   );
 }
