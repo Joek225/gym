@@ -84,8 +84,12 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
     };
   }, []);
 
-  // ---------- Upcoming events (Board 1 only) ----------
+  // ---------- To do list (first board only) ----------
+  // Upcoming calendar events fill the whole right side of the board, from the end of the
+  // tool bar to the edge of the screen. You can't draw there: a line drawn there only
+  // crosses out an event (and then disappears). Past events drop off by themselves.
   const [events, setEvents] = useState<EventRecord[]>([]);
+  const [column, setColumn] = useState<{ left: number; top: number } | null>(null);
   const upcomingRef = useRef<UpcomingEventsHandle>(null);
   const seenIds = useRef(new Set<string>()); // drawings that existed before (not new lines)
 
@@ -104,44 +108,83 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
       );
   }, [isFirstBoard]);
 
-  // When you finish drawing a line, check if it crosses out one of the upcoming events.
-  // If so: hide that event from the board and remove the line you drew.
-  const checkForCrossOut = (elements: readonly ExcalidrawElement[], appState: any) => {
-    const newLines = elements.filter((el) => !seenIds.current.has(el.id));
-    newLines.forEach((el) => seenIds.current.add(el.id));
-    if (!isFirstBoard || !api || events.length === 0) return;
+  // Work out where the to-do column starts, and redo it when the window size changes.
+  useEffect(() => {
+    if (!isFirstBoard || !container) return;
+    const measure = () => {
+      const toolbar = container.querySelector('.App-toolbar');
+      if (!toolbar) return;
+      const box = container.getBoundingClientRect();
+      const bar = toolbar.getBoundingClientRect();
+      const roomOnRight = box.right - bar.right;
+      setColumn(
+        roomOnRight >= 220
+          ? { left: bar.right - box.left + 16, top: 0 } // laptop: right of the tool bar
+          : { left: box.width * 0.5, top: bar.bottom - box.top + 12 }, // phone: below it, right half
+      );
+    };
+    measure();
+    const resize = new ResizeObserver(measure);
+    resize.observe(container);
+    const later = window.setTimeout(measure, 300); // Excalidraw's toolbar may appear a moment later
+    return () => {
+      resize.disconnect();
+      window.clearTimeout(later);
+    };
+  }, [isFirstBoard, container, initialData]);
 
-    for (const el of newLines as any[]) {
-      if (el.isDeleted || !['freedraw', 'line', 'arrow'].includes(el.type)) continue;
-      // The line's corners on screen.
-      const zoom = appState.zoom.value;
-      const xs = el.points.map((p: number[]) => (el.x + p[0] + appState.scrollX) * zoom + appState.offsetLeft);
-      const ys = el.points.map((p: number[]) => (el.y + p[1] + appState.scrollY) * zoom + appState.offsetTop);
+  // When a drawing is finished, check whether it landed in the to-do column.
+  // If it crosses out an event, hide that event. Either way, remove the drawing.
+  const checkTodoColumn = (elements: readonly ExcalidrawElement[], appState: any) => {
+    const newOnes = elements.filter((el) => !seenIds.current.has(el.id));
+    newOnes.forEach((el) => seenIds.current.add(el.id));
+    if (!isFirstBoard || !api || !column || !container) return;
+
+    const box = container.getBoundingClientRect();
+    const zoom = appState.zoom.value;
+    const toScreenX = (x: number) => (x + appState.scrollX) * zoom;
+    const toScreenY = (y: number) => (y + appState.scrollY) * zoom;
+    const toRemove = new Set<string>();
+
+    for (const el of newOnes as any[]) {
+      if (el.isDeleted) continue;
+      // The drawing's outline on screen (relative to the board).
+      const pts: number[][] = el.points ?? [[0, 0], [el.width, el.height]];
+      const xs = pts.map((p) => toScreenX(el.x + p[0]));
+      const ys = pts.map((p) => toScreenY(el.y + p[1]));
       const left = Math.min(...xs);
       const right = Math.max(...xs);
-      const middleY = (Math.min(...ys) + Math.max(...ys)) / 2;
-      const height = Math.max(...ys) - Math.min(...ys);
+      const top = Math.min(...ys);
+      const bottom = Math.max(...ys);
+      if (right < column.left || bottom < column.top) continue; // not in the column: keep it
 
-      const hit = upcomingRef.current?.rowRects().find(({ rect }) => {
-        const overlap = Math.min(right, rect.right) - Math.max(left, rect.left);
+      toRemove.add(el.id);
+      if (!['freedraw', 'line', 'arrow'].includes(el.type)) continue;
+      const middleY = (top + bottom) / 2;
+      const hit = upcomingRef.current?.rowRects().find(({ id, rect }) => {
+        const r = { left: rect.left - box.left, right: rect.right - box.left, top: rect.top - box.top, bottom: rect.bottom - box.top };
+        const overlap = Math.min(right, r.right) - Math.max(left, r.left);
         return (
-          overlap > rect.width * 0.4 && // covers a good part of the row's width
-          middleY > rect.top - 4 &&
-          middleY < rect.bottom + 4 && // goes through the row
-          height < rect.height * 2.5 // mostly sideways, not a big scribble
+          !!id &&
+          overlap > (r.right - r.left) * 0.3 && // covers a good part of the row's width
+          middleY > r.top - 6 &&
+          middleY < r.bottom + 6 && // goes through this row
+          bottom - top < (r.bottom - r.top) * 2.5 // mostly sideways, not a big scribble
         );
       });
-      if (!hit) continue;
-
-      db.events.update(hit.id, { struck: true });
-      setEvents((list) => list.filter((e) => e.id !== hit.id));
-      api.updateScene({
-        elements: api
-          .getSceneElementsIncludingDeleted()
-          .map((x) => (x.id === el.id ? { ...x, isDeleted: true, version: x.version + 1 } : x)),
-        captureUpdate: CaptureUpdateAction.NEVER,
-      });
+      if (hit) {
+        db.events.update(hit.id, { struck: true });
+        setEvents((list) => list.filter((e) => e.id !== hit.id));
+      }
     }
+
+    if (toRemove.size === 0) return;
+    api.updateScene({
+      elements: api
+        .getSceneElementsIncludingDeleted()
+        .map((x) => (toRemove.has(x.id) ? { ...x, isDeleted: true, version: x.version + 1 } : x)),
+      captureUpdate: CaptureUpdateAction.NEVER,
+    });
   };
 
   // ---------- Stroke eraser ----------
@@ -190,8 +233,10 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
     const eraserNow = tool.type === 'custom' && tool.customType === STROKE_ERASER;
     if (eraserNow !== strokeEraserOn) setStrokeEraserOn(eraserNow);
 
-    // Only look for cross-outs once a line is finished (not while it's being drawn).
-    if (!appState.newElement && !appState.multiElement) checkForCrossOut(elements, appState);
+    // Only check the to-do column once a drawing is finished (not while it's being drawn).
+    if (!appState.newElement && !appState.multiElement && !appState.editingTextElement) {
+      checkTodoColumn(elements, appState);
+    }
 
     // Wait for a short pause, then save to the database.
     pendingSave.current = () => {
@@ -211,7 +256,9 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
 
   return (
     <div
-      className={strokeEraserOn ? 'board-surface stroke-erasing' : 'board-surface'}
+      className={['board-surface', strokeEraserOn && 'stroke-erasing', isFirstBoard && 'todo-board']
+        .filter(Boolean)
+        .join(' ')}
       ref={setContainer}
       onPointerLeave={() => setCursor(null)}
     >
@@ -249,7 +296,7 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
         />
       )}
 
-      {isFirstBoard && <UpcomingEvents ref={upcomingRef} events={events} />}
+      {isFirstBoard && column && <UpcomingEvents ref={upcomingRef} events={events} position={column} />}
     </div>
   );
 }

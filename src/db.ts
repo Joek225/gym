@@ -23,10 +23,12 @@ export interface EventRecord {
   createdAt: number;
 }
 
-// One line of a workout: exercise - reps - weight (kg). Empty text = not filled in yet.
+// One line of a workout: exercise - reps - partial reps - weight. Empty text = not filled in.
+// Weight is text, so it can be a number in kg or a word like "stack".
 export interface WorkoutRow {
   name: string;
   reps: string;
+  partial?: string; // optional partial reps (older workouts don't have this)
   weight: string;
 }
 
@@ -40,6 +42,8 @@ export interface WorkoutRecord {
   rows: WorkoutRow[];
   updatedAt: number;
 }
+
+export const TODO_BOARD_NAME = 'To do list';
 
 // Small app-wide settings, e.g. which board was open last.
 export interface SettingRecord {
@@ -84,6 +88,15 @@ class AppDatabase extends Dexie {
       events: 'id, date',
       workouts: 'date',
     });
+    // Version 4: the first board becomes the "To do list".
+    this.version(4)
+      .stores({})
+      .upgrade(async (tx) => {
+        const first = await tx.table('whiteboard').orderBy('createdAt').first();
+        if (first && first.name === 'Board 1') {
+          await tx.table('whiteboard').update(first.id, { name: TODO_BOARD_NAME });
+        }
+      });
   }
 }
 

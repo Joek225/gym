@@ -1,21 +1,21 @@
 // The zoomed-in day: zooms out of the day you clicked.
-//   Left (blue)  = events: click an event to edit it, or empty space to add one.
-//   Right (red)  = workout: click to open the workout sheet.
-//   "Both"       = add an event first, then open the workout sheet.
+//   Left (blue)  = events, with each event's notes underneath. Click an event to edit it,
+//                  or empty space to add one.
+//   Right (red)  = the workout: its type and every logged line. Click to open the sheet.
+// After saving either one, you come back here.
 import { useLayoutEffect, useRef } from 'react';
 import type { EventRecord, WorkoutRecord } from '../db';
-import { EVENT_COLOR, GYM_COLOR, workoutLabel } from '../gym/workouts';
+import { EVENT_COLOR_DARK, GYM_COLOR_DARK, formatLine, isLogged, workoutLabel } from '../gym/workouts';
 import { formatLongDate, formatTime } from './dates';
 
 interface Props {
   date: string;
-  from: DOMRect; // where the clicked day cell was, so we can zoom out of it
+  from: DOMRect | null; // where the clicked day cell was, so we can zoom out of it
   events: EventRecord[];
   workout?: WorkoutRecord;
   onAddEvent: () => void;
   onEditEvent: (e: EventRecord) => void;
   onWorkout: () => void;
-  onBoth: () => void;
   onClose: () => void;
 }
 
@@ -24,7 +24,9 @@ export default function DayZoom(props: Props) {
   const panel = useRef<HTMLDivElement>(null);
 
   // Zoom animation: start the panel exactly over the clicked cell, then grow to full size.
+  // (Only the first time; coming back from an editor just shows it.)
   useLayoutEffect(() => {
+    if (!from) return;
     const el = panel.current!;
     const to = el.getBoundingClientRect();
     const dx = from.left + from.width / 2 - (to.left + to.width / 2);
@@ -36,7 +38,7 @@ export default function DayZoom(props: Props) {
     el.style.transform = 'none';
   }, [from]);
 
-  const loggedSets = workout?.rows.filter((r) => r.reps || r.weight).length ?? 0;
+  const lines = workout?.rows.filter(isLogged) ?? [];
 
   return (
     <div className="modal-backdrop zoom-backdrop" onMouseDown={(e) => e.target === e.currentTarget && props.onClose()}>
@@ -50,42 +52,38 @@ export default function DayZoom(props: Props) {
 
         <div className="zoom-halves">
           {/* Blue half: events */}
-          <div className="zoom-half zoom-events" style={{ background: EVENT_COLOR }} onClick={props.onAddEvent}>
+          <div className="zoom-half" style={{ background: EVENT_COLOR_DARK }} onClick={props.onAddEvent}>
+            <div className="zoom-half-title">Events</div>
             {events.map((ev) => (
               <button
                 key={ev.id}
-                className="zoom-event"
+                className="zoom-item"
                 onClick={(e) => {
                   e.stopPropagation(); // don't also trigger "add event"
                   props.onEditEvent(ev);
                 }}
               >
-                <span className="event-dot dark-dot" />
-                <span className="zoom-event-title">{ev.title}</span>
-                {ev.time && <b>{formatTime(ev.time)}</b>}
+                <span className="zoom-item-head">
+                  <span className="zoom-item-title">{ev.title}</span>
+                  {ev.time && <b>{formatTime(ev.time)}</b>}
+                </span>
+                {ev.notes && <span className="zoom-item-notes">{ev.notes}</span>}
               </button>
             ))}
             <span className="zoom-hint">+ Add event</span>
           </div>
 
           {/* Red half: workout */}
-          <div className="zoom-half zoom-gym" style={{ background: GYM_COLOR }} onClick={props.onWorkout}>
-            {workout ? (
-              <>
-                <span className="zoom-workout-label">{workoutLabel(workout)}</span>
-                <span className="zoom-hint">
-                  {loggedSets} {loggedSets === 1 ? 'line' : 'lines'} logged · tap to open
-                </span>
-              </>
-            ) : (
-              <span className="zoom-hint">+ Log workout</span>
-            )}
+          <div className="zoom-half" style={{ background: GYM_COLOR_DARK }} onClick={props.onWorkout}>
+            <div className="zoom-half-title">{workout ? workoutLabel(workout) : 'Workout'}</div>
+            {lines.map((r, i) => (
+              <div key={i} className="zoom-lift">
+                {formatLine(r)}
+              </div>
+            ))}
+            <span className="zoom-hint">{workout ? 'Edit workout' : '+ Log workout'}</span>
           </div>
         </div>
-
-        <button className="both-btn" onClick={props.onBoth}>
-          Both
-        </button>
       </div>
     </div>
   );

@@ -3,6 +3,9 @@ import { db, getSetting, setSetting, type WorkoutRecord, type WorkoutRow, type W
 
 export const GYM_COLOR = '#A85868'; // the red (gym) color
 export const EVENT_COLOR = '#90D5FF'; // the blue (events) color
+// Slightly darker versions for the big zoomed-in day, so white text reads well on both.
+export const GYM_COLOR_DARK = '#8F4656';
+export const EVENT_COLOR_DARK = '#3E8DBF';
 
 // Weekday → workout type. getDay(): Sunday = 0, Monday = 1, ... Saturday = 6.
 const TYPE_BY_WEEKDAY: WorkoutType[] = [
@@ -66,23 +69,33 @@ export async function newWorkout(date: string): Promise<WorkoutRecord> {
     date,
     type,
     customName: '',
-    rows: names.map((name) => ({ name, reps: '', weight: '' })),
+    rows: names.map((name) => ({ name, reps: '', partial: '', weight: '' })),
     updatedAt: Date.now(),
   };
+}
+
+// True if a line has any numbers/weight filled in.
+export function isLogged(r: WorkoutRow): boolean {
+  return !!(r.reps.trim() || r.partial?.trim() || r.weight.trim());
 }
 
 // True if anything was actually logged (otherwise we don't keep the workout).
 export function hasContent(w: WorkoutRecord): boolean {
   if (w.customName.trim()) return true;
-  return w.rows.some((r) =>
-    w.type === 'custom' ? r.name.trim() || r.reps.trim() || r.weight.trim() : r.reps.trim() || r.weight.trim(),
-  );
+  return w.rows.some((r) => isLogged(r) || (w.type === 'custom' && r.name.trim()));
 }
 
-// Save a workout, or delete it if it's empty.
+// Save a workout, or delete it if it's empty. Lines with no exercise name are dropped.
 export function saveWorkout(w: WorkoutRecord) {
-  if (!hasContent(w)) return db.workouts.delete(w.date);
-  return db.workouts.put({ ...w, updatedAt: Date.now() });
+  const clean = { ...w, rows: w.rows.filter((r) => r.name.trim()) };
+  if (!hasContent(clean)) return db.workouts.delete(w.date);
+  return db.workouts.put({ ...clean, updatedAt: Date.now() });
+}
+
+// One line as text: "Lat Pulldown - 10 - 2 - 60kg" (partial reps left out if empty).
+export function formatLine(r: WorkoutRow): string {
+  const weight = /^[0-9.]+$/.test(r.weight) ? `${r.weight}kg` : r.weight;
+  return [r.name, r.reps, r.partial, weight].filter((x) => x && x.trim()).join(' - ');
 }
 
 // Same exercise written slightly differently ("lat pulldown " vs "Lat Pulldown")

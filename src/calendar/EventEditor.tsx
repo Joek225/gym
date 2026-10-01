@@ -32,7 +32,7 @@ export default function EventEditor({ date, event, onSaved, onClose }: Props) {
   };
 
   const remove = async () => {
-    if (!event || !window.confirm(`Delete "${event.title}"?`)) return;
+    if (!event) return;
     await db.events.delete(event.id);
     onClose();
   };

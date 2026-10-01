@@ -90,21 +90,16 @@ button {
 .board-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);
-}
-
-.board-list {
-  display: flex;
-  gap: 6px;
-  flex: 1;
   overflow-x: auto; /* lots of boards scroll sideways */
 }
 
-.board-chip,
-.board-actions button {
-  padding: 6px 12px;
+.board-chip {
+  flex: none;
+  display: flex;
+  align-items: center;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--surface-raised);
@@ -115,22 +110,53 @@ button {
 
 .board-chip.active {
   border-color: var(--accent);
+}
+
+.board-name,
+.board-chip.add {
+  padding: 6px 12px;
+  border: none;
+  background: none;
+  color: inherit;
+  font-size: 14px;
+}
+
+.board-chip.active .board-name {
   color: var(--accent);
 }
 
-.board-chip.add {
+.board-chip:has(.board-x) .board-name {
+  padding-right: 4px;
+}
+
+.board-x {
+  padding: 4px 10px 4px 2px;
+  border: none;
   background: none;
-  border-style: dashed;
   color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
 }
 
-.board-actions {
-  display: flex;
-  gap: 6px;
+.board-x:hover {
+  color: var(--text);
 }
 
-.board-actions button {
+.board-rename {
+  width: 12ch;
+  margin: 0 4px 0 8px;
+  padding: 5px 4px;
+  border: none;
+  border-bottom: 1px solid var(--accent);
   background: none;
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+
+.board-chip.add {
+  border: 1px dashed var(--border);
+  border-radius: 999px;
   color: var(--muted);
 }
 
@@ -205,6 +231,7 @@ button {
 .mini-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
   font-size: 10px;
   line-height: 1.7;
 }
@@ -217,10 +244,14 @@ button {
   visibility: hidden; /* keep the layout but don't show other months' days */
 }
 
+.mini-day {
+  border-radius: 2px;
+}
+
 .mini-day.today {
-  background: var(--accent);
-  color: var(--bg);
-  border-radius: 999px;
+  outline: 1.5px solid var(--accent);
+  outline-offset: -1.5px;
+  color: var(--accent);
   font-weight: 700;
 }
 
@@ -449,39 +480,58 @@ button {
   display: contents; /* our toolbar button sits in line with Excalidraw's buttons */
 }
 
-/* Upcoming events on the right side of Board 1 */
-.upcoming {
+/* To do list board: the to-do column on the right, part of the board itself */
+.todo-column {
   position: absolute;
-  top: 80px;
-  right: 16px;
-  width: 240px;
-  max-width: 45%;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: rgba(33, 35, 46, 0.6);
-  pointer-events: none; /* you can draw right over it to cross things out */
+  right: 0;
+  bottom: 0;
+  padding: 16px 20px;
+  border-left: 1px dashed var(--border);
+  background: var(--bg); /* same as the board, and covers any drawing underneath */
+  font-family: 'Helvetica', sans-serif; /* same Avenir as whiteboard text */
+  overflow: hidden;
+  pointer-events: none; /* drawing goes "through" it, so you can cross things out */
   z-index: 2;
 }
 
-.upcoming-title {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--muted);
-  margin-bottom: 6px;
+.todo-title {
+  font-size: 22px;
+  font-weight: 600;
+  margin-bottom: 14px;
 }
 
-.upcoming-row {
+.todo-empty {
+  color: var(--muted);
+  font-size: 16px;
+}
+
+.todo-row {
   display: flex;
   align-items: baseline;
-  gap: 8px;
-  padding: 4px 0;
+  gap: 10px;
+  padding: 8px 0;
+  margin-bottom: 14px; /* gap between events, so each can be crossed out on its own */
+  font-size: 18px;
+  line-height: 1.3;
+}
+
+.todo-row .event-dot {
+  width: 10px;
+  height: 10px;
+}
+
+.todo-date {
+  color: var(--muted);
   font-size: 14px;
 }
 
-.upcoming-date {
-  color: var(--muted);
-  font-size: 12px;
+.todo-date b {
+  color: var(--text);
+}
+
+/* The Library button would sit inside the to-do column, so it's hidden on that board */
+.todo-board .default-sidebar-trigger {
+  display: none !important;
 }
 
 .event-dot {
@@ -493,12 +543,23 @@ button {
 }
 
 @media (max-width: 600px) {
-  .upcoming {
-    top: 70px;
-    right: 8px;
-    font-size: 12px;
+  .todo-column {
+    padding: 10px 10px;
+  }
+  .todo-title {
+    font-size: 16px;
+    margin-bottom: 8px;
+  }
+  .todo-row {
+    font-size: 14px;
+    margin-bottom: 8px;
+    gap: 6px;
+  }
+  .todo-date {
+    font-size: 11px;
   }
 }
+
 
 @media (max-width: 600px) {
   .gym-banner {
@@ -698,31 +759,45 @@ button {
   filter: brightness(1.06);
 }
 
-.zoom-events {
-  color: #10202b; /* dark text on the light blue */
+.zoom-half {
+  color: #fff; /* same white text on both halves */
 }
 
-.zoom-gym {
-  color: #fff;
-  align-items: center;
-  justify-content: center;
+.zoom-half-title {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.9;
+  margin-bottom: 4px;
 }
 
-.zoom-event {
+/* One event in the zoomed day: title + bold time, notes underneath */
+.zoom-item {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  flex-direction: column;
+  gap: 2px;
   width: 100%;
-  padding: 6px 8px;
+  padding: 8px 10px;
   border: none;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.14);
   color: inherit;
   text-align: left;
   font-size: 15px;
 }
 
-.zoom-event-title {
+.zoom-item:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.zoom-item-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.zoom-item-title {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -730,35 +805,18 @@ button {
   white-space: nowrap;
 }
 
-.dark-dot {
-  background: #1a5f86;
+.zoom-item-notes {
+  font-size: 13px;
+  opacity: 0.85;
+  white-space: pre-wrap;
 }
 
-.zoom-hint {
-  opacity: 0.75;
-  font-size: 14px;
+/* One logged lift in the zoomed day */
+.zoom-lift {
+  font-size: 15px;
+  line-height: 1.35;
 }
 
-.zoom-workout-label {
-  font-size: 30px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  text-align: center;
-  word-break: break-word;
-}
-
-.both-btn {
-  margin: 12px auto;
-  padding: 10px 40px;
-  border: none;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #90d5ff 50%, #a85868 50%);
-  color: #fff;
-  font-weight: 700;
-  font-size: 16px;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-}
 
 /* ---- Workout sheet ---- */
 .workout-editor {
@@ -836,8 +894,12 @@ button {
   text-align: center;
 }
 
-.wl-weight {
+.wl-partial {
   width: 6ch;
+}
+
+.wl-weight {
+  width: 7ch;
 }
 
 .wl-dash {

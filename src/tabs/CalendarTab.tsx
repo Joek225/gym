@@ -7,7 +7,7 @@ import EventEditor from '../calendar/EventEditor';
 import MiniMonth from '../calendar/MiniMonth';
 import TemplatesEditor from '../calendar/TemplatesEditor';
 import WorkoutEditor from '../calendar/WorkoutEditor';
-import { MONTH_NAMES, addMonths, thisMonth } from '../calendar/dates';
+import { MONTH_NAMES, addMonths, dateKey, monthGrid, thisMonth } from '../calendar/dates';
 import { db, type EventRecord, type WorkoutRecord } from '../db';
 import { newWorkout } from '../gym/workouts';
 
@@ -15,16 +15,26 @@ import { newWorkout } from '../gym/workouts';
 type Popup =
   | { kind: 'none' }
   | { kind: 'zoom' }
-  | { kind: 'event'; event?: EventRecord; thenWorkout: boolean }
+  | { kind: 'event'; event?: EventRecord }
   | { kind: 'workout'; workout: WorkoutRecord }
   | { kind: 'templates' };
+
+// TEMPORARY PREVIEW (asked for as a test): paint Mon/Tue/Thu/Fri of July 2026 red in the
+// mini calendars, without saving anything. Set to false (or delete) once you've seen it.
+const DEMO_JULY_RED = true;
+function demoDates(): string[] {
+  if (!DEMO_JULY_RED) return [];
+  return monthGrid({ year: 2026, month: 6 })
+    .filter((d) => d.getMonth() === 6 && [1, 2, 4, 5].includes(d.getDay()))
+    .map(dateKey);
+}
 
 export default function CalendarTab() {
   // The month shown large. Starts at the current month.
   const [shown, setShown] = useState(thisMonth);
   const [eventsByDate, setEventsByDate] = useState(new Map<string, EventRecord[]>());
   const [workoutsByDate, setWorkoutsByDate] = useState(new Map<string, WorkoutRecord>());
-  const [day, setDay] = useState<{ date: string; rect: DOMRect } | null>(null);
+  const [day, setDay] = useState<{ date: string; rect: DOMRect | null } | null>(null);
   const [popup, setPopup] = useState<Popup>({ kind: 'none' });
 
   // Load all events and workouts from the database, grouped by date.
@@ -47,7 +57,9 @@ export default function CalendarTab() {
     setDay(null);
     reload();
   };
+  // After saving/closing an event or workout, go back to the zoomed day (without re-zooming).
   const backToZoom = () => {
+    setDay((d) => d && { ...d, rect: null });
     setPopup({ kind: 'zoom' });
     reload();
   };
@@ -59,12 +71,18 @@ export default function CalendarTab() {
 
   // The 3 months before the big one, oldest first (left → right).
   const previous = [3, 2, 1].map((n) => addMonths(shown, -n));
+  const workoutDates = new Set([...workoutsByDate.keys(), ...demoDates()]);
 
   return (
     <div className="calendar">
       <div className="mini-row">
         {previous.map((ym) => (
-          <MiniMonth key={`${ym.year}-${ym.month}`} ym={ym} onOpen={() => setShown(ym)} />
+          <MiniMonth
+            key={`${ym.year}-${ym.month}`}
+            ym={ym}
+            workoutDates={workoutDates}
+            onOpen={() => setShown(ym)}
+          />
         ))}
       </div>
 
@@ -106,10 +124,9 @@ export default function CalendarTab() {
           from={day.rect}
           events={eventsByDate.get(day.date) ?? []}
           workout={workoutsByDate.get(day.date)}
-          onAddEvent={() => setPopup({ kind: 'event', thenWorkout: false })}
-          onEditEvent={(event) => setPopup({ kind: 'event', event, thenWorkout: false })}
+          onAddEvent={() => setPopup({ kind: 'event' })}
+          onEditEvent={(event) => setPopup({ kind: 'event', event })}
           onWorkout={openWorkout}
-          onBoth={() => setPopup({ kind: 'event', thenWorkout: true })}
           onClose={closeAll}
         />
       )}
@@ -118,13 +135,13 @@ export default function CalendarTab() {
         <EventEditor
           date={day.date}
           event={popup.event}
-          onSaved={popup.thenWorkout ? openWorkout : closeAll}
-          onClose={popup.event ? closeAll : backToZoom}
+          onSaved={backToZoom}
+          onClose={backToZoom}
         />
       )}
 
       {day && popup.kind === 'workout' && (
-        <WorkoutEditor workout={popup.workout} onDone={closeAll} onClose={closeAll} />
+        <WorkoutEditor workout={popup.workout} onClose={backToZoom} />
       )}
 
       {popup.kind === 'templates' && <TemplatesEditor onClose={() => setPopup({ kind: 'none' })} />}

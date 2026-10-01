@@ -1,13 +1,17 @@
 // The workout sheet (what opens from the red side of a day).
-// Each line reads:  exercise name - reps - weight
+// Each line reads:  exercise - reps - partial reps - weight
 //   • Upper/Lower days start with the template's exercise names already filled in.
 //   • Custom days (Wed/Sat/Sun) start empty and get a name of your choice.
-// Typing shortcuts:
-//   name:   Enter, or " -"        → jump to reps
-//   reps:   Space, Enter, or "-"  → jump to weight
-//   weight: Enter                 → next line (a new line is added at the end)
-//   Backspace in an empty box     → go back one box
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+//   • Weight can be a number (kg) or a word like "stack". Partial reps are optional.
+// Typing shortcuts (you never need to type the dashes):
+//   exercise: Enter, or " -"      → reps
+//   reps:     Space               → partial reps
+//   partial:  Space               → weight   (so Space Space after reps skips partials)
+//   weight:   Space               → next line
+//             Enter               → another set of the same exercise, on a new line below
+//   Backspace in an empty box     → back one box
+// A line whose exercise name is left empty disappears when you leave it.
+import { useEffect, useRef, useState, type FocusEvent, type KeyboardEvent } from 'react';
 import type { WorkoutRecord, WorkoutRow } from '../db';
 import { GYM_COLOR, saveWorkout, workoutLabel } from '../gym/workouts';
 import { formatLongDate } from './dates';
@@ -15,14 +19,14 @@ import Modal from './Modal';
 
 interface Props {
   workout: WorkoutRecord; // existing, or a fresh one from newWorkout()
-  onDone: () => void; // ✓ pressed
-  onClose: () => void; // × / Escape / deleted
+  onClose: () => void; // ✓, ×, Escape, or deleted
 }
 
-type Field = 'name' | 'reps' | 'weight';
-const FIELDS: Field[] = ['name', 'reps', 'weight'];
+type Field = 'name' | 'reps' | 'partial' | 'weight';
+const FIELDS: Field[] = ['name', 'reps', 'partial', 'weight'];
+const isSeparator = (key: string) => key === ' ' || key === '-';
 
-export default function WorkoutEditor({ workout, onDone, onClose }: Props) {
+export default function WorkoutEditor({ workout, onClose }: Props) {
   const [w, setW] = useState(workout);
   const inputs = useRef(new Map<string, HTMLInputElement>()); // "row:field" → input box
   const [focusNext, setFocusNext] = useState<string | null>(null);
@@ -45,56 +49,74 @@ export default function WorkoutEditor({ workout, onDone, onClose }: Props) {
   const go = (row: number, field: Field) => setFocusNext(`${row}:${field}`);
 
   const updateRow = (i: number, patch: Partial<WorkoutRow>) =>
-    setW({ ...w, rows: w.rows.map((r, j) => (j === i ? { ...r, ...patch } : r)) });
+    setW((cur) => ({ ...cur, rows: cur.rows.map((r, j) => (j === i ? { ...r, ...patch } : r)) }));
 
+  // Insert a new line at position `at` and put the cursor in it.
   const addRow = (at: number, name = '') => {
-    const rows = [...w.rows];
-    rows.splice(at, 0, { name, reps: '', weight: '' });
-    setW({ ...w, rows });
+    setW((cur) => {
+      const rows = [...cur.rows];
+      rows.splice(at, 0, { name, reps: '', partial: '', weight: '' });
+      return { ...cur, rows };
+    });
     go(at, name ? 'reps' : 'name');
   };
 
-  const removeRow = (i: number) => setW({ ...w, rows: w.rows.filter((_, j) => j !== i) });
+  // Leaving a line with no exercise name removes it.
+  const onRowBlur = (e: FocusEvent<HTMLDivElement>, i: number) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return; // still inside this line
+    if (!w.rows[i]?.name.trim()) setW((cur) => ({ ...cur, rows: cur.rows.filter((_, j) => j !== i) }));
+  };
+
+  const nextLine = (i: number) => {
+    if (i + 1 < w.rows.length) go(i + 1, w.rows[i + 1].name ? 'reps' : 'name');
+    else addRow(w.rows.length);
+  };
 
   const onKey = (e: KeyboardEvent<HTMLInputElement>, i: number, field: Field) => {
     const value = e.currentTarget.value;
-    const back = () => {
-      const f = FIELDS.indexOf(field);
-      if (f > 0) go(i, FIELDS[f - 1]);
-      else if (i > 0) go(i - 1, 'weight');
+    const move = (f: Field) => {
+      e.preventDefault();
+      go(i, f);
     };
     if (e.key === 'Backspace' && value === '') {
       e.preventDefault();
-      back();
+      const f = FIELDS.indexOf(field);
+      if (f > 0) go(i, FIELDS[f - 1]);
+      else if (i > 0) go(i - 1, 'weight');
     } else if (field === 'name') {
       if (e.key === 'Enter' || (e.key === '-' && value.endsWith(' '))) {
-        e.preventDefault();
         updateRow(i, { name: value.trim() });
-        go(i, 'reps');
+        move('reps');
       }
     } else if (field === 'reps') {
-      if (e.key === ' ' || e.key === 'Enter' || e.key === '-') {
-        e.preventDefault();
-        if (value !== '') go(i, 'weight'); // leading space/dash just gets ignored
+      if (isSeparator(e.key) || e.key === 'Enter') {
+        if (value) move('partial');
+        else e.preventDefault(); // nothing typed yet: ignore
       }
+    } else if (field === 'partial') {
+      if (isSeparator(e.key) || e.key === 'Enter') move('weight'); // empty = skip partials
     } else if (field === 'weight') {
-      if (e.key === 'Enter') {
+      if (isSeparator(e.key)) {
         e.preventDefault();
-        if (i + 1 < w.rows.length) go(i + 1, isCustom ? 'name' : 'reps');
-        else addRow(w.rows.length);
-      } else if (e.key === ' ' || e.key === '-') {
-        e.preventDefault(); // no spaces/dashes inside a weight
+        if (value) nextLine(i);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        addRow(i + 1, w.rows[i].name); // another set of the same exercise
       }
     }
   };
 
-  const numbersOnly = (text: string, decimals: boolean) =>
-    text.replace(decimals ? /[^0-9.]/g : /[^0-9]/g, '');
+  const digitsOnly = (text: string) => text.replace(/[^0-9]/g, '');
 
   const remove = async () => {
-    if (!window.confirm('Delete this workout?')) return;
     await saveWorkout({ ...w, customName: '', rows: [] }); // empty = deleted
     onClose();
+  };
+
+  // Each box remembers itself so the cursor can be moved to it.
+  const boxRef = (i: number, f: Field) => (el: HTMLInputElement | null) => {
+    if (el) inputs.current.set(`${i}:${f}`, el);
+    else inputs.current.delete(`${i}:${f}`);
   };
 
   return (
@@ -107,7 +129,7 @@ export default function WorkoutEditor({ workout, onDone, onClose }: Props) {
             value={w.customName}
             autoFocus={!w.customName}
             onChange={(e) => setW({ ...w, customName: e.target.value })}
-            onKeyDown={(e) => e.key === 'Enter' && go(0, 'name')}
+            onKeyDown={(e) => e.key === 'Enter' && (w.rows.length ? go(0, 'name') : addRow(0))}
           />
         ) : (
           <span className="workout-type">{workoutLabel(w)}</span>
@@ -116,14 +138,14 @@ export default function WorkoutEditor({ workout, onDone, onClose }: Props) {
       </div>
 
       <div className="workout-lines">
-        <div className="workout-legend">exercise - reps - weight (kg)</div>
+        <div className="workout-legend">exercise - reps - partial reps - weight</div>
         {w.rows.map((row, i) => (
-          <div className="workout-line" key={i}>
+          <div className="workout-line" key={i} onBlur={(e) => onRowBlur(e, i)}>
             <input
               className="wl-name"
               placeholder="exercise"
               value={row.name}
-              ref={(el) => void (el ? inputs.current.set(`${i}:name`, el) : inputs.current.delete(`${i}:name`))}
+              ref={boxRef(i, 'name')}
               onChange={(e) => updateRow(i, { name: e.target.value })}
               onKeyDown={(e) => onKey(e, i, 'name')}
             />
@@ -134,28 +156,29 @@ export default function WorkoutEditor({ workout, onDone, onClose }: Props) {
               inputMode="numeric"
               value={row.reps}
               autoFocus={!isCustom && i === 0 && !row.reps}
-              ref={(el) => void (el ? inputs.current.set(`${i}:reps`, el) : inputs.current.delete(`${i}:reps`))}
-              onChange={(e) => updateRow(i, { reps: numbersOnly(e.target.value, false) })}
+              ref={boxRef(i, 'reps')}
+              onChange={(e) => updateRow(i, { reps: digitsOnly(e.target.value) })}
               onKeyDown={(e) => onKey(e, i, 'reps')}
+            />
+            <span className="wl-dash">-</span>
+            <input
+              className="wl-num wl-partial"
+              placeholder="partial"
+              inputMode="numeric"
+              value={row.partial ?? ''}
+              ref={boxRef(i, 'partial')}
+              onChange={(e) => updateRow(i, { partial: digitsOnly(e.target.value) })}
+              onKeyDown={(e) => onKey(e, i, 'partial')}
             />
             <span className="wl-dash">-</span>
             <input
               className="wl-num wl-weight"
               placeholder="kg"
-              inputMode="decimal"
               value={row.weight}
-              ref={(el) => void (el ? inputs.current.set(`${i}:weight`, el) : inputs.current.delete(`${i}:weight`))}
-              onChange={(e) => updateRow(i, { weight: numbersOnly(e.target.value, true) })}
+              ref={boxRef(i, 'weight')}
+              onChange={(e) => updateRow(i, { weight: e.target.value.replace(/[\s-]/g, '') })}
               onKeyDown={(e) => onKey(e, i, 'weight')}
             />
-            <span className="wl-actions">
-              <button title="Add another set of this exercise below" onClick={() => addRow(i + 1, row.name)}>
-                +
-              </button>
-              <button title="Remove this line" onClick={() => removeRow(i)}>
-                ×
-              </button>
-            </span>
           </div>
         ))}
         <button className="link-btn add-line" onClick={() => addRow(w.rows.length)}>
@@ -167,7 +190,7 @@ export default function WorkoutEditor({ workout, onDone, onClose }: Props) {
         <button className="danger-btn" onClick={remove}>
           Delete workout
         </button>
-        <button className="check-btn" onClick={onDone} title="Done">
+        <button className="check-btn" onClick={onClose} title="Done">
           ✓
         </button>
       </div>
