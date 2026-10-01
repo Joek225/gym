@@ -4,11 +4,16 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "copy-fonts": "node -e \"require('fs').cpSync('node_modules/@excalidraw/excalidraw/dist/prod/fonts','public/fonts',{recursive:true})\"",
+    "predev": "npm run copy-fonts",
     "dev": "vite",
+    "prebuild": "npm run copy-fonts",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@excalidraw/excalidraw": "^0.18.1",
+    "dexie": "^4.4.6",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },
