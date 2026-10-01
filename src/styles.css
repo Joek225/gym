@@ -203,8 +203,8 @@ button {
 
 /* ---- Calendar tab ---- */
 .calendar {
-  /* Height of one day cell: the big month fills most of the screen, but never gets tiny. */
-  --cell-h: max(110px, calc((100vh - 330px) / 6));
+  --cell-min-h: 90px; /* day cells stretch to fill the screen, but never get shorter than this */
+  min-height: 100%; /* reach the bottom of the screen */
   max-width: 1500px;
   margin: 0 auto;
   padding: 12px 16px 24px;
@@ -304,6 +304,7 @@ button {
 
 /* The big month: 7 columns, Monday → Sunday */
 .big-month {
+  flex: 1; /* take all the height that's left */
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   border-top: 1px solid var(--border);
@@ -325,7 +326,7 @@ button {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  min-height: var(--cell-h);
+  min-height: 0;
   padding: 4px;
   cursor: pointer;
   border-right: 1px solid var(--border);
@@ -367,7 +368,8 @@ button {
 /* Red gym banner across the top fifth of a day */
 .gym-banner {
   flex: none;
-  height: calc(var(--cell-h) / 5);
+  height: 20%; /* the top fifth of the day */
+  min-height: 18px;
   margin: -4px -4px 2px; /* reach the cell's edges */
   display: flex;
   align-items: center;
@@ -387,7 +389,8 @@ button {
   position: absolute;
   top: 0;
   left: 2px;
-  height: calc(var(--cell-h) / 5);
+  height: 20%;
+  min-height: 18px;
   display: flex;
   align-items: center;
   background: none;
@@ -436,8 +439,12 @@ button {
   overflow-wrap: anywhere;
 }
 
-.day-cell.today .cell-event {
-  font-size: 13px;
+/* (used for a split second while measuring how wide today's entries are) */
+.day-cell.today.measuring .cell-event-title {
+  white-space: nowrap;
+}
+.day-cell.today.measuring .cell-event {
+  width: max-content;
 }
 
 .cell-more {
@@ -464,7 +471,7 @@ button {
     min-width: 0;
   }
   .calendar {
-    --cell-h: 92px;
+    --cell-min-h: 84px;
   }
   .day-cell {
     padding: 2px;
@@ -570,9 +577,90 @@ button {
   color: var(--text);
 }
 
-/* The Library button would sit inside the to-do column, so it's hidden on that board */
-.todo-board .default-sidebar-trigger {
+/* Hidden Excalidraw parts: the Library button, the ☰ menu (replaced by our 🗑 and BG
+   buttons), and "Mermaid to Excalidraw" in the extra-tools menu (plus its "Generate" heading). */
+.excalidraw .default-sidebar-trigger,
+.excalidraw .main-menu-trigger,
+.excalidraw .dropdown-menu-item[data-testid='toolbar-embeddable'] ~ .dropdown-menu-item[data-testid='toolbar-embeddable'],
+.excalidraw .dropdown-menu-item[data-testid='toolbar-laser'] + div {
   display: none !important;
+}
+
+/* Our 🗑 and BG buttons, where the ☰ menu used to be */
+.canvas-buttons {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 10; /* above Excalidraw's side panels */
+  display: flex;
+  gap: 6px;
+}
+
+.canvas-buttons > button {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: #232329; /* matches Excalidraw's dark toolbar */
+  color: var(--text);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+
+.canvas-buttons > button:hover {
+  background: #31303b;
+}
+
+.bg-picker {
+  position: absolute;
+  top: 42px;
+  left: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 28px);
+  gap: 6px;
+  padding: 8px;
+  background: #232329;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.bg-swatch {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+}
+
+.bg-custom {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--border);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.bg-custom input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+@media (max-width: 600px) {
+  /* on phones the tool bar is on top, so these go to the bottom-left corner */
+  .canvas-buttons {
+    top: auto;
+    bottom: 22px;
+    left: 22px;
+  }
+  .bg-picker {
+    top: auto;
+    bottom: 42px;
+  }
 }
 
 .event-dot {
@@ -623,7 +711,6 @@ button {
     display: inline; /* today's column is wide enough */
   }
   .day-cell.today .cell-event {
-    font-size: 10px;
     flex-wrap: wrap; /* the time goes on its own line under the title */
   }
   .day-cell.today .cell-event-title {
@@ -635,9 +722,6 @@ button {
   .cell-event .event-dot {
     width: 5px;
     height: 5px;
-  }
-  .templates-btn {
-    display: none; /* moved below the calendar on phones */
   }
 }
 
@@ -772,8 +856,8 @@ button {
 
 /* ---- Zoomed-in day ---- */
 .day-zoom {
-  width: min(760px, 100%);
-  height: min(560px, calc(100vh - 32px));
+  width: min(1200px, 100%);
+  height: min(760px, calc(100vh - 32px));
   display: flex;
   flex-direction: column;
   border-radius: 16px;
@@ -787,8 +871,8 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 16px;
-  font-size: 18px;
+  padding: 12px 20px;
+  font-size: 24px;
   font-weight: 600;
 }
 
@@ -803,8 +887,8 @@ button {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 6px;
-  padding: 16px;
+  gap: 10px;
+  padding: 24px;
   overflow: auto;
   cursor: pointer;
 }
@@ -818,7 +902,7 @@ button {
 }
 
 .zoom-half-title {
-  font-size: 13px;
+  font-size: 18px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -838,7 +922,7 @@ button {
   background: rgba(255, 255, 255, 0.14);
   color: inherit;
   text-align: left;
-  font-size: 15px;
+  font-size: 22px;
 }
 
 .zoom-item:hover {
@@ -854,20 +938,18 @@ button {
 .zoom-item-title {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere; /* long titles wrap onto more lines instead of "…" */
 }
 
 .zoom-item-notes {
-  font-size: 13px;
+  font-size: 18px;
   opacity: 0.85;
   white-space: pre-wrap;
 }
 
 /* One logged lift in the zoomed day */
 .zoom-lift {
-  font-size: 15px;
+  font-size: 21px;
   line-height: 1.35;
 }
 
@@ -1005,74 +1087,26 @@ button {
   margin-top: 6px;
 }
 
-/* ---- Templates editor ---- */
-.templates-editor {
-  width: min(620px, 100%);
-  padding: 16px 20px 0;
-}
-
-.templates-editor h3 {
-  margin: 0 0 4px;
-}
-
-.muted {
-  color: var(--muted);
-  font-size: 14px;
-  margin: 0 0 12px;
-}
-
-.templates-columns {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.templates-columns label {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 13px;
-  font-weight: 700;
-  color: #e7a3b0;
-}
-
-.templates-columns textarea {
-  background: var(--bg) !important;
-  border-radius: 8px;
-  padding: 8px;
-  font-size: 14px;
-  resize: vertical;
-}
-
 @media (max-width: 600px) {
   .day-zoom {
-    height: min(520px, calc(100vh - 32px));
+    height: min(620px, calc(100vh - 32px));
   }
-  .templates-columns {
-    grid-template-columns: 1fr;
+  .zoom-half {
+    padding: 16px;
+  }
+  .zoom-item {
+    font-size: 17px;
+  }
+  .zoom-item-notes,
+  .zoom-lift,
+  .zoom-hint {
+    font-size: 15px;
   }
   .wl-actions {
     opacity: 1;
   }
 }
 
-/* Phone-only "Workout templates" button under the calendar */
-.templates-btn-bottom {
-  display: none;
-  align-self: center;
-}
-@media (max-width: 600px) {
-  .templates-btn-bottom {
-    display: block;
-  }
-}
-
-.month-header .templates-btn {
-  margin-left: 0;
-}
-.templates-btn-bottom {
-  margin: 0 auto !important;
-}
 
 /* ---- SQUARE CORNERS (trial) ----
    Every rounded corner on the site (and in Excalidraw) becomes a sharp square.
@@ -1081,4 +1115,11 @@ button {
 *::before,
 *::after {
   border-radius: 0 !important;
+}
+
+/* ---- No bold text anywhere: everything is regular-weight Avenir ---- */
+*,
+*::before,
+*::after {
+  font-weight: 400 !important;
 }
