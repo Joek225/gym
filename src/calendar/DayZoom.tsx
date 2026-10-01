@@ -1,19 +1,19 @@
 // The zoomed-in day: zooms out of the day you clicked.
 //   Left (blue)  = events, with each event's notes underneath. Click an event to edit it,
 //                  or empty space to add one.
-//   Right (red)  = the workout: its type and every logged line. Click to open the sheet.
-//                  Underneath is the cardio line, which you type into right here.
+//   Right, top (red)        = the workout: its type and every logged line. Click to open the sheet.
+//   Right, bottom (pink)    = cardio, typed in right here.
 // After saving either one, you come back here.
 import { useLayoutEffect, useRef } from 'react';
 import type { Cardio, EventRecord, SpanRecord, WorkoutRecord } from '../db';
 import {
-  CUSTOM_GYM_COLOR,
+  CARDIO_COLOR,
+  CARDIO_TEXT,
   EVENT_COLOR_DARK,
   GYM_COLOR_DARK,
   formatLine,
   isLogged,
   workoutLabel,
-  workoutTypeFor,
 } from '../gym/workouts';
 import CardioEditor from './CardioEditor';
 import { formatLongDate, formatTime } from './dates';
@@ -51,8 +51,6 @@ export default function DayZoom(props: Props) {
   }, [from]);
 
   const lines = workout?.rows.filter(isLogged) ?? [];
-  // Custom days (Wed/Sat/Sun) use the darker red.
-  const redColor = workoutTypeFor(date) === 'custom' ? CUSTOM_GYM_COLOR : GYM_COLOR_DARK;
 
   return (
     <div className="modal-backdrop zoom-backdrop" onMouseDown={(e) => e.target === e.currentTarget && props.onClose()}>
@@ -92,16 +90,20 @@ export default function DayZoom(props: Props) {
             <span className="zoom-hint">+ Add event</span>
           </div>
 
-          {/* Red half: workout */}
-          <div className="zoom-half" style={{ background: redColor }} onClick={props.onWorkout}>
-            <div className="zoom-half-title">{workout ? workoutLabel(workout) : 'Workout'}</div>
-            {lines.map((r, i) => (
-              <div key={i} className="zoom-lift">
-                {formatLine(r)}
-              </div>
-            ))}
-            <span className="zoom-hint">{workout && lines.length ? 'Edit workout' : '+ Log workout'}</span>
-            <CardioEditor cardio={workout?.cardio} onChange={props.onCardioChange} />
+          {/* Right half: workout on top (red), cardio below (pink) */}
+          <div className="zoom-right">
+            <div className="zoom-half" style={{ background: GYM_COLOR_DARK }} onClick={props.onWorkout}>
+              <div className="zoom-half-title">{workout && lines.length ? workoutLabel(workout) : 'Workout'}</div>
+              {lines.map((r, i) => (
+                <div key={i} className="zoom-lift">
+                  {formatLine(r)}
+                </div>
+              ))}
+              <span className="zoom-hint">{lines.length ? 'Edit workout' : '+ Log workout'}</span>
+            </div>
+            <div className="zoom-half zoom-cardio" style={{ background: CARDIO_COLOR, color: CARDIO_TEXT }}>
+              <CardioEditor cardio={workout?.cardio} onChange={props.onCardioChange} />
+            </div>
           </div>
         </div>
       </div>

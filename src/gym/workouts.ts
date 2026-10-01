@@ -10,7 +10,9 @@ import {
 } from '../db';
 
 export const GYM_COLOR = '#A85868'; // the red (gym) color
-export const CUSTOM_GYM_COLOR = '#6B2A3A'; // darker red for Custom days (Wed/Sat/Sun)
+export const CUSTOM_GYM_COLOR = '#6B2A3A'; // darker red for Custom-day banners (Wed/Sat/Sun)
+export const CARDIO_COLOR = '#E9C9C9'; // pale pink for cardio
+export const CARDIO_TEXT = '#5A2833'; // dark text that reads well on the pale pink
 export const EVENT_COLOR = '#90D5FF'; // the blue (events) color
 // Slightly darker versions for the big zoomed-in day, so white text reads well on both.
 export const GYM_COLOR_DARK = '#8F4656';
@@ -33,7 +35,8 @@ export function workoutTypeFor(date: string): WorkoutType {
   return TYPE_BY_WEEKDAY[new Date(y, m - 1, d).getDay()];
 }
 
-// The banner color: normal red for Upper/Lower, darker red for Custom days.
+// The calendar banner color: normal red for Upper/Lower, darker red for Custom days.
+// (Only the banners in the big month; everything else uses the normal red.)
 export function workoutColor(w: WorkoutRecord): string {
   return w.type === 'custom' ? CUSTOM_GYM_COLOR : GYM_COLOR;
 }
@@ -91,6 +94,11 @@ export async function newWorkout(date: string): Promise<WorkoutRecord> {
 // True if a line has any numbers/weight filled in.
 export function isLogged(r: WorkoutRow): boolean {
   return !!(r.reps.trim() || r.partial?.trim() || r.weight.trim());
+}
+
+// True if any lifts were logged (or a Custom day was named): this gets the red banner.
+export function hasLifts(w: WorkoutRecord): boolean {
+  return !!w.customName.trim() || w.rows.some(isLogged);
 }
 
 // True if any cardio box is filled in.

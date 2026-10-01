@@ -1,12 +1,22 @@
 // The large month grid in the middle of the Calendar tab (Monday → Sunday).
 // Each day cell, top to bottom:
-//   • the top fifth: the date, and a red banner if there's a workout (UPPER / LOWER / name)
+//   • the top fifth: the date, and a red banner if lifts were logged (UPPER / LOWER / name)
+//   • a pink CARDIO banner under it if cardio was logged
 //   • blue bars for multi-day labels (e.g. "Holiday"), which run across the days they cover
 //   • events: a blue dot, the title, and the time
 // Click a day to zoom into it. Click and DRAG across several days to label them all.
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { EventRecord, SpanRecord, WorkoutRecord } from '../db';
-import { EVENT_COLOR, EVENT_COLOR_DARK, workoutColor, workoutLabel } from '../gym/workouts';
+import {
+  CARDIO_COLOR,
+  CARDIO_TEXT,
+  EVENT_COLOR,
+  EVENT_COLOR_DARK,
+  hasCardio,
+  hasLifts,
+  workoutColor,
+  workoutLabel,
+} from '../gym/workouts';
 import { WEEKDAYS, dateKey, formatTime, monthGrid, todayKey, type YearMonth } from './dates';
 
 const MAX_EVENTS_SHOWN = 3;
@@ -134,14 +144,41 @@ export default function BigMonth(props: Props) {
               props.onDayClick(key, e.currentTarget.getBoundingClientRect());
             }}
           >
-            <div className="cell-top">
-              {workout && (
-                <div className="gym-banner" style={{ background: workoutColor(workout) }}>
-                  {workoutLabel(workout)}
-                </div>
-              )}
-              <span className={workout ? 'day-number on-banner' : 'day-number'}>{d.getDate()}</span>
-            </div>
+            {(() => {
+              // The banners for this day, top to bottom. The date sits on the first one.
+              const banners: { label: string; bg: string; fg: string }[] = [];
+              if (workout && hasLifts(workout)) {
+                banners.push({ label: workoutLabel(workout), bg: workoutColor(workout), fg: '#fff' });
+              }
+              if (workout && hasCardio(workout.cardio)) {
+                banners.push({ label: 'CARDIO', bg: CARDIO_COLOR, fg: CARDIO_TEXT });
+              }
+              const [first, ...rest] = banners;
+              return (
+                <>
+                  <div className="cell-top">
+                    {first && (
+                      <div className="gym-banner" style={{ background: first.bg, color: first.fg }}>
+                        {first.label}
+                      </div>
+                    )}
+                    <span
+                      className={first ? 'day-number on-banner' : 'day-number'}
+                      style={first ? { color: first.fg } : undefined}
+                    >
+                      {d.getDate()}
+                    </span>
+                  </div>
+                  {rest.map((b) => (
+                    <div key={b.label} className="cell-top">
+                      <div className="gym-banner" style={{ background: b.bg, color: b.fg }}>
+                        {b.label}
+                      </div>
+                    </div>
+                  ))}
+                </>
+              );
+            })()}
 
             {daySpans.map((sp) => (
               <div

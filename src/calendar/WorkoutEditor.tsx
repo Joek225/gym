@@ -15,7 +15,7 @@
 // reps AND weight (partial reps can stay empty). Untouched template lines are fine.
 import { useEffect, useRef, useState, type FocusEvent, type KeyboardEvent } from 'react';
 import type { WorkoutRecord, WorkoutRow } from '../db';
-import { saveWorkout, workoutColor, workoutLabel } from '../gym/workouts';
+import { GYM_COLOR, saveWorkout, workoutLabel } from '../gym/workouts';
 import { formatLongDate } from './dates';
 import Modal from './Modal';
 
@@ -140,7 +140,7 @@ export default function WorkoutEditor({ workout, onClose }: Props) {
 
   return (
     <Modal onClose={tryClose} className="workout-editor">
-      <div className="workout-header" style={{ background: workoutColor(w) }}>
+      <div className="workout-header" style={{ background: GYM_COLOR }}>
         {isCustom ? (
           <input
             className="workout-name-input"

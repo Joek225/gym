@@ -397,7 +397,6 @@ button {
 .day-number.on-banner {
   position: relative; /* sits on top of the banner */
   background: none !important;
-  color: #fff !important;
   font-size: 12px;
 }
 
@@ -592,6 +591,30 @@ button {
   margin-bottom: 14px; /* gap between events, so each can be crossed out on its own */
   font-size: 18px;
   line-height: 1.3;
+}
+
+.todo-row.struck {
+  text-decoration: line-through;
+  opacity: 0.35;
+  transition: opacity 0.6s;
+}
+
+/* The line you're drawing over the to-do column, shown on top so you can see it */
+.strike-preview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.strike-preview polyline {
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .todo-row .event-dot {
@@ -1012,13 +1035,24 @@ button {
   white-space: pre-wrap;
 }
 
+/* Right side of the zoomed day: workout on top, cardio below (equal halves) */
+.zoom-right {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  min-height: 0;
+}
+
+.zoom-cardio {
+  cursor: default;
+}
+
+.zoom-cardio:hover {
+  filter: none;
+}
+
 /* Cardio line in the zoomed day: speed - incline - h:mm */
 .cardio {
-  margin-top: auto; /* sits at the bottom of the red half */
   width: 100%;
-  padding-top: 14px;
-  border-top: 1px solid rgba(255, 255, 255, 0.25);
-  cursor: default;
 }
 
 .cardio-title {
@@ -1040,20 +1074,21 @@ button {
   width: 5ch;
   padding: 4px 2px;
   border: none;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.5);
+  border-bottom: 1px solid currentColor;
   background: transparent;
-  color: #fff;
+  color: inherit;
   font: inherit;
   text-align: center;
   outline: none;
 }
 
 .cardio-box:focus {
-  border-bottom-color: #fff;
+  border-bottom-width: 2px;
 }
 
 .cardio-box::placeholder {
-  color: rgba(255, 255, 255, 0.5);
+  color: inherit;
+  opacity: 0.45;
 }
 
 .cardio-hours,

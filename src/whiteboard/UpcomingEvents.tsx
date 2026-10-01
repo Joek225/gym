@@ -13,12 +13,13 @@ export interface UpcomingEventsHandle {
 
 interface Props {
   events: EventRecord[];
+  struckIds: string[]; // just crossed out: shown struck through while they fade away
   onRevert: () => void; // bring back every crossed-out event
   position: { left: number; top: number }; // where the column starts on the board
 }
 
 const UpcomingEvents = forwardRef<UpcomingEventsHandle, Props>(function UpcomingEvents(
-  { events, onRevert, position },
+  { events, struckIds, onRevert, position },
   ref,
 ) {
   const rows = useRef(new Map<string, HTMLElement>());
@@ -43,7 +44,7 @@ const UpcomingEvents = forwardRef<UpcomingEventsHandle, Props>(function Upcoming
       {events.map((e) => (
         <div
           key={e.id}
-          className="todo-row"
+          className={struckIds.includes(e.id) ? 'todo-row struck' : 'todo-row'}
           ref={(el) => {
             if (el) rows.current.set(e.id, el);
             else rows.current.delete(e.id);
