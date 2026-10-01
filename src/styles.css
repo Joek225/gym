@@ -38,6 +38,24 @@ button {
     format('woff2');
 }
 
+/* Bold whiteboard text. Excalidraw has no bold, so we borrow its "Liberation Sans" font slot
+   (its own Liberation font file is left out of the site) and point it at Avenir's bold.
+   Where Avenir isn't installed, a common system bold font is used instead. */
+@font-face {
+  font-family: 'Liberation Sans';
+  src:
+    local('Avenir Next Demi Bold'),
+    local('AvenirNext-DemiBold'),
+    local('Avenir Heavy'),
+    local('Avenir-Heavy'),
+    local('Arial Bold'),
+    local('Arial-BoldMT'),
+    local('Roboto Bold'),
+    local('Roboto-Bold'),
+    local('DejaVu Sans Bold'),
+    local('DejaVuSans-Bold');
+}
+
 /* Excalidraw's own buttons and menus use Avenir too */
 .excalidraw {
   --ui-font: 'Avenir Next', Avenir, 'Avenir Fallback', sans-serif !important;
@@ -559,7 +577,7 @@ button {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 22px;
+  font-size: 28px;
   font-weight: 600;
   margin-bottom: 14px;
 }
@@ -578,6 +596,22 @@ button {
   color: var(--text);
 }
 
+.todo-section {
+  margin-bottom: 10px;
+}
+
+.todo-section-title {
+  margin: 6px 0 4px;
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.todo-time {
+  color: var(--text);
+}
+
 .todo-empty {
   color: var(--muted);
   font-size: 16px;
@@ -588,8 +622,8 @@ button {
   align-items: baseline;
   gap: 10px;
   padding: 8px 0;
-  margin-bottom: 14px; /* gap between events, so each can be crossed out on its own */
-  font-size: 18px;
+  margin-bottom: 16px; /* gap between events, so each can be crossed out on its own */
+  font-size: 24px;
   line-height: 1.3;
 }
 
@@ -624,7 +658,7 @@ button {
 
 .todo-date {
   color: var(--muted);
-  font-size: 14px;
+  font-size: 17px;
 }
 
 .todo-date b {
@@ -640,6 +674,61 @@ button {
   display: none !important;
 }
 
+/* ---- Toolbar order: hand, select 1, pen 2, text 3, line 4, image 5, square 6, circle 7,
+   eraser 8, stroke eraser 9. (Excalidraw's buttons keep their place in the page; "order"
+   just changes where each one is drawn.) The arrow tool is hidden. ---- */
+.excalidraw .App-toolbar .Stack_horizontal > * {
+  order: 50; /* anything not listed (dividers, extra-tools menu) goes at the end */
+}
+/* (each line below starts with the same words so it wins over the line above) */
+.excalidraw .App-toolbar .Stack_horizontal > label:has([data-testid='toolbar-hand']) { order: 0; }
+.excalidraw .App-toolbar .Stack_horizontal > label:has([data-testid='toolbar-selection']) { order: 1; }
+.excalidraw .App-toolbar .Stack_horizontal > label:has([data-testid='toolbar-freedraw']) { order: 2; }
+.excalidraw .App-toolbar .Stack_horizontal > label:has([data-testid='toolbar-text']) { order: 3; }
+.excalidraw .App-toolbar .Stack_horizontal > label:has([data-testid='toolbar-line']) { order: 4; }
+.excalidraw .App-toolbar .Stack_horizontal > label:has([data-testid='toolbar-image']) { order: 5; }
+.excalidraw .App-toolbar .Stack_horizontal > label:has([data-testid='toolbar-rectangle']) { order: 6; }
+.excalidraw .App-toolbar .Stack_horizontal > label:has([data-testid='toolbar-ellipse']) { order: 7; }
+.excalidraw .App-toolbar .Stack_horizontal > label:has([data-testid='toolbar-eraser']) { order: 8; }
+.excalidraw .App-toolbar .Stack_horizontal .stroke-eraser-slot > label { order: 9; }
+.excalidraw label:has([data-testid='toolbar-arrow']) {
+  display: none !important;
+}
+
+/* Text size: Excalidraw's own S/M/L/XL buttons are hidden; ours (bigger sizes) show instead */
+.excalidraw .buttonList:has([data-testid='fontSize-small']) {
+  display: none !important;
+}
+
+/* Style panel: no Font family, no Opacity slider, no Actions row (duplicate/delete/link).
+   (Actions is the last section, right after Layers, and only shows when something is selected.) */
+.excalidraw .panelColumn > fieldset:has([data-testid='font-family-normal']),
+.excalidraw .panelColumn > label:has([data-testid='opacity']),
+.excalidraw .panelColumn > fieldset + fieldset:last-child {
+  display: none !important;
+}
+
+.text-extra-slot {
+  display: contents; /* our Style / Spacing sections sit in the panel like Excalidraw's own */
+}
+
+.text-extra-slot .buttonList label {
+  width: auto !important; /* "Single" / "Double" need more room than an icon */
+  padding: 0 4px;
+}
+
+/* No clock icon in the time box (just -- : -- --) */
+input[type='time']::-webkit-calendar-picker-indicator {
+  display: none;
+}
+
+.text-option-label {
+  padding: 0 6px;
+  font-size: 13px;
+  min-width: 20px;
+  text-align: center;
+}
+
 /* Excalidraw's style panel (stroke, background, stroke width…) sits at the bottom-left,
    just above the zoom (100%) and undo/redo buttons, instead of at the top. */
 .excalidraw .FixedSideContainer_side_top .App-menu__left {
@@ -650,11 +739,9 @@ button {
   overflow-y: auto;
 }
 
-/* Our 🗑 and BG buttons, where the ☰ menu used to be */
+/* Our trash button: placed just left of the toolbar (position set in CanvasButtons) */
 .canvas-buttons {
   position: absolute;
-  top: 16px;
-  left: 16px;
   z-index: 10; /* above Excalidraw's side panels */
   display: flex;
   gap: 6px;
@@ -677,58 +764,15 @@ button {
   background: #31303b;
 }
 
-.bg-picker {
-  position: absolute;
-  top: 42px;
-  left: 0;
-  display: grid;
-  grid-template-columns: repeat(3, 28px);
-  gap: 6px;
-  padding: 8px;
-  background: #232329;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-}
-
-.bg-swatch {
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--border);
-}
-
-.bg-custom {
-  position: relative;
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px dashed var(--border);
-  color: var(--muted);
-  cursor: pointer;
-}
-
-.bg-custom input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-
-@media (max-width: 600px) {
-  /* on phones the tool bar is on top, so these go to the bottom-left corner */
-  .canvas-buttons {
-    top: auto;
-    bottom: 22px;
-    left: 22px;
-  }
-  .bg-picker {
-    top: auto;
-    bottom: 42px;
-  }
+/* Phones: the toolbar fills the width, so the trash button goes to the bottom-left */
+.canvas-buttons.phone {
+  bottom: 22px;
+  left: 22px;
 }
 
 .event-dot {
   flex: none;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35); /* so the dark reminder dot still shows */
   width: 8px;
   height: 8px;
   border-radius: 50%;
@@ -740,16 +784,16 @@ button {
     padding: 10px 10px;
   }
   .todo-title {
-    font-size: 16px;
+    font-size: 19px;
     margin-bottom: 8px;
   }
   .todo-row {
-    font-size: 14px;
+    font-size: 17px;
     margin-bottom: 8px;
     gap: 6px;
   }
   .todo-date {
-    font-size: 11px;
+    font-size: 13px;
   }
 }
 
@@ -871,12 +915,31 @@ button {
   padding: 8px;
 }
 
-.block-select {
+/* The ▾ next to the time box: a dropdown that shows only its arrow until opened */
+.block-arrow {
+  width: 30px;
+  padding: 4px 0;
   font: inherit;
   color: var(--text);
   background: var(--bg);
   border: none;
-  padding: 5px 8px;
+  text-align: center;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+.block-arrow option {
+  text-align: left;
+}
+
+/* A picked block (or time range) shown in place of the time box */
+.time-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px 2px 10px;
+  background: var(--bg);
 }
 
 .editor-row input[type='time'] {
@@ -1055,6 +1118,22 @@ button {
   width: 100%;
 }
 
+.cardio-delete {
+  margin-left: 12px;
+  padding: 2px 10px;
+  border: 1px solid currentColor;
+  background: none;
+  color: inherit;
+  font-size: 13px;
+  letter-spacing: 0;
+  text-transform: none;
+  opacity: 0.8;
+}
+
+.cardio-delete:hover {
+  opacity: 1;
+}
+
 .cardio-title {
   font-size: 18px;
   letter-spacing: 0.08em;
@@ -1125,17 +1204,12 @@ button {
 
 .workout-type,
 .workout-name-input {
-  font-size: 24px !important;
-  font-weight: 800 !important;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: 22px !important;
   color: #fff !important;
 }
 
 .workout-name-input::placeholder {
   color: rgba(255, 255, 255, 0.6);
-  text-transform: none;
-  letter-spacing: 0;
 }
 
 .workout-date {
@@ -1256,7 +1330,23 @@ button {
   .zoom-item-notes,
   .zoom-lift,
   .zoom-hint,
-  .cardio-title {
+  .cardio-delete {
+  margin-left: 12px;
+  padding: 2px 10px;
+  border: 1px solid currentColor;
+  background: none;
+  color: inherit;
+  font-size: 13px;
+  letter-spacing: 0;
+  text-transform: none;
+  opacity: 0.8;
+}
+
+.cardio-delete:hover {
+  opacity: 1;
+}
+
+.cardio-title {
     font-size: 15px;
   }
   .cardio-line {

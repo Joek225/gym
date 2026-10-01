@@ -9,11 +9,18 @@ import type {
 } from '@excalidraw/excalidraw/types';
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types';
 import { db, type EventRecord } from '../db';
-import { timeSortKey, todayKey } from '../calendar/dates';
+import { byDateAndTime, todayKey } from '../calendar/dates';
+import { recurringReady } from '../calendar/recurring';
 import { eraseAlong } from './strokeEraser';
 import { STROKE_ERASER, StrokeEraserButton, useToolHotkeys } from './toolbar';
 import UpcomingEvents, { type UpcomingEventsHandle } from './UpcomingEvents';
 import CanvasButtons from './CanvasButtons';
+import TextStyleButtons, {
+  BOLD_FONT,
+  DEFAULT_FONT_SIZE,
+  DOUBLE,
+  type TextStyle,
+} from './TextStyleButtons';
 
 // Excalidraw's own types for its callbacks.
 type Props = Parameters<typeof Excalidraw>[0];
@@ -28,10 +35,10 @@ const START_SETTINGS = {
   // New text uses Avenir (see the "Helvetica" font rule in styles.css for how).
   currentItemFontFamily: FONT_FAMILY.Helvetica,
   currentItemStrokeWidth: 1, // thin pen by default
+  currentItemFontSize: DEFAULT_FONT_SIZE, // new text starts at "L"
 };
 
-// New text boxes are double-spaced (Excalidraw's own default is about 1.15).
-const TEXT_LINE_HEIGHT = 2;
+
 
 // Background for a brand-new board. Excalidraw's dark mode flips canvas colors,
 // so this light color shows up on screen as the site's dark grey (#282a37).
@@ -51,7 +58,10 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
   // 1) When the board opens, load its saved drawing.
   useEffect(() => {
     // Load the Avenir font first, so text is measured with the right letter widths.
-    const fontReady = document.fonts.load('20px Helvetica').catch(() => {});
+    const fontReady = Promise.all([
+      document.fonts.load('20px Helvetica'),
+      document.fonts.load('20px "Liberation Sans"'), // the bold slot
+    ]).catch(() => {});
     Promise.all([db.whiteboard.get(boardId), fontReady]).then(([record]) => {
       const saved = record?.data as InitialData | null | undefined;
       if (saved) lastSaved.current = JSON.stringify(saved);
@@ -97,12 +107,16 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
   const seenIds = useRef(new Set<string>()); // drawings that existed before (not new lines)
   const spacedIds = useRef(new Set<string>()); // new text boxes already made double-spaced
 
+  // What's on the list: every reminder you haven't crossed out (even past ones), plus
+  // events from today on. Past events drop off by themselves.
   const loadEvents = useCallback(async () => {
-    const list = await db.events.where('date').aboveOrEqual(todayKey()).toArray(); // no past events
+    await recurringReady;
+    const today = todayKey();
+    const list = await db.events.toArray();
     setEvents(
       list
-        .filter((e) => !e.struck)
-        .sort((a, b) => (a.date + timeSortKey(a.time)).localeCompare(b.date + timeSortKey(b.time))),
+        .filter((e) => !e.struck && (e.kind === 'reminder' || e.date >= today))
+        .sort(byDateAndTime),
     );
   }, []);
 
@@ -110,9 +124,12 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
     if (isFirstBoard) loadEvents();
   }, [isFirstBoard, loadEvents]);
 
-  // "Revert": un-cross every upcoming event, so the list matches the calendar again.
+  // "Revert": un-cross every reminder and upcoming event, so the list matches the calendar.
   const revertTodo = async () => {
-    await db.events.where('date').aboveOrEqual(todayKey()).modify({ struck: false });
+    const today = todayKey();
+    await db.events
+      .filter((e) => e.kind === 'reminder' || e.date >= today)
+      .modify({ struck: false });
     loadEvents();
   };
 
@@ -202,6 +219,10 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
 
   // ---------- Stroke eraser ----------
   const [strokeEraserOn, setStrokeEraserOn] = useState(false);
+  // Spacing for new text boxes (double by default; the Spacing buttons change it).
+  const spacingDefault = useRef(DOUBLE);
+  // What the text buttons show as picked: the selected text's style, or the new-text style.
+  const [textStyle, setTextStyle] = useState<TextStyle>({ size: DEFAULT_FONT_SIZE, bold: false, spacing: DOUBLE });
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
   const lastErasePoint = useRef<[number, number] | null>(null);
 
@@ -257,16 +278,31 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
 
   // Excalidraw calls this on every change (each stroke, typed letter, even mouse moves).
   const handleChange: OnChange = (elements, appState, files) => {
-    // A brand-new text box: make it double-spaced (once per text box).
+    // A brand-new text box: give it the chosen line spacing (once per text box).
     const editing = appState.editingTextElement as any;
     if (api && editing && !seenIds.current.has(editing.id) && !spacedIds.current.has(editing.id)) {
       spacedIds.current.add(editing.id);
       api.updateScene({
         elements: api
           .getSceneElementsIncludingDeleted()
-          .map((el: any) => (el.id === editing.id ? { ...el, lineHeight: TEXT_LINE_HEIGHT } : el)),
+          .map((el: any) => (el.id === editing.id ? { ...el, lineHeight: spacingDefault.current } : el)),
         captureUpdate: CaptureUpdateAction.NEVER,
       });
+    }
+
+    // Which text size our S/M/L/XL buttons should show as picked.
+    const selectedText = elements.find(
+      (el) => el.type === 'text' && (appState.selectedElementIds[el.id] || el.id === editing?.id),
+    ) as any;
+    const styleNow: TextStyle = selectedText
+      ? { size: selectedText.fontSize, bold: selectedText.fontFamily === BOLD_FONT, spacing: selectedText.lineHeight }
+      : { size: appState.currentItemFontSize, bold: appState.currentItemFontFamily === BOLD_FONT, spacing: spacingDefault.current };
+    if (
+      styleNow.size !== textStyle.size ||
+      styleNow.bold !== textStyle.bold ||
+      styleNow.spacing !== textStyle.spacing
+    ) {
+      setTextStyle(styleNow);
     }
 
     const tool = appState.activeTool;
@@ -321,8 +357,18 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
         }}
       />
 
-      {/* Clear-board and background buttons (instead of Excalidraw's ☰ menu) */}
-      <CanvasButtons api={api} />
+      {/* Clear-board button, just left of the toolbar */}
+      <CanvasButtons api={api} container={container} />
+
+      <TextStyleButtons
+        container={container}
+        api={api}
+        current={textStyle}
+        onSpacingDefault={(sp) => {
+          spacingDefault.current = sp;
+          setTextStyle((t) => ({ ...t, spacing: sp }));
+        }}
+      />
 
       <StrokeEraserButton container={container} active={strokeEraserOn} onSelect={selectStrokeEraser} />
 

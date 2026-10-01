@@ -9,7 +9,7 @@ const EMPTY: Cardio = { speed: '', incline: '', hours: '', mins: '' };
 
 interface Props {
   cardio?: Cardio;
-  onChange: (c: Cardio) => void;
+  onChange: (c: Cardio | undefined) => void; // undefined = cardio deleted
 }
 
 export default function CardioEditor({ cardio, onChange }: Props) {
@@ -53,7 +53,21 @@ export default function CardioEditor({ cardio, onChange }: Props) {
   return (
     // Clicks here shouldn't open the workout sheet behind it.
     <div className="cardio" onClick={(e) => e.stopPropagation()}>
-      <div className="cardio-title">Cardio</div>
+      <div className="cardio-title">
+        Cardio
+        {(c.speed || c.incline || c.hours || c.mins) && (
+          <button
+            className="cardio-delete"
+            title="Delete this cardio"
+            onClick={() => {
+              setC(EMPTY);
+              onChange(undefined);
+            }}
+          >
+            Delete
+          </button>
+        )}
+      </div>
       <div className="cardio-line">
         {box(0, 'speed')}
         <span>-</span>

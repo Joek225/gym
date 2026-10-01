@@ -1,9 +1,10 @@
-// The zoomed-in day: zooms out of the day you clicked.
-//   Left (blue)  = events, with each event's notes underneath. Click an event to edit it,
-//                  or empty space to add one.
-//   Right, top (red)        = the workout: its type and every logged line. Click to open the sheet.
-//   Right, bottom (pink)    = cardio, typed in right here.
-// After saving either one, you come back here.
+// The zoomed-in day: zooms out of the day you clicked. Four quarters:
+//   Left, top (blue)         = events, in time order, notes underneath. Click one to edit it,
+//                              or empty space to add one.
+//   Left, bottom (dark blue) = reminders, the same way.
+//   Right, top (red)         = the workout: its type and every logged line. Click to open the sheet.
+//   Right, bottom (plum)     = cardio, typed in right here.
+// After saving anything, you come back here.
 import { useLayoutEffect, useRef } from 'react';
 import type { Cardio, EventRecord, SpanRecord, WorkoutRecord } from '../db';
 import {
@@ -11,6 +12,7 @@ import {
   CARDIO_TEXT,
   EVENT_COLOR_DARK,
   GYM_COLOR_DARK,
+  REMINDER_COLOR,
   formatLine,
   isLogged,
   workoutLabel,
@@ -24,8 +26,8 @@ interface Props {
   events: EventRecord[];
   workout?: WorkoutRecord;
   spans: SpanRecord[]; // multi-day labels covering this day (e.g. "Holiday")
-  onCardioChange: (c: Cardio) => void;
-  onAddEvent: () => void;
+  onCardioChange: (c: Cardio | undefined) => void; // undefined = delete the cardio
+  onAddEvent: (kind: 'event' | 'reminder') => void;
   onEditEvent: (e: EventRecord) => void;
   onWorkout: () => void;
   onClose: () => void;
@@ -63,34 +65,46 @@ export default function DayZoom(props: Props) {
         </div>
 
         <div className="zoom-halves">
-          {/* Blue half: events */}
-          <div className="zoom-half" style={{ background: EVENT_COLOR_DARK }} onClick={props.onAddEvent}>
-            <div className="zoom-half-title">Events</div>
-            {props.spans.map((sp) => (
-              <div key={sp.id} className="zoom-span">
-                {sp.label}
+          {/* Left side: events on top (blue), reminders below (dark blue) */}
+          <div className="zoom-right">
+            {(['event', 'reminder'] as const).map((kind) => (
+              <div
+                key={kind}
+                className="zoom-half"
+                style={{ background: kind === 'event' ? EVENT_COLOR_DARK : REMINDER_COLOR }}
+                onClick={() => props.onAddEvent(kind)}
+              >
+                <div className="zoom-half-title">{kind === 'event' ? 'Events' : 'Reminders'}</div>
+                {kind === 'event' &&
+                  props.spans.map((sp) => (
+                    <div key={sp.id} className="zoom-span">
+                      {sp.label}
+                    </div>
+                  ))}
+                {events
+                  .filter((ev) => (ev.kind ?? 'event') === kind)
+                  .map((ev) => (
+                    <button
+                      key={ev.id}
+                      className="zoom-item"
+                      onClick={(e) => {
+                        e.stopPropagation(); // don't also trigger "add"
+                        props.onEditEvent(ev);
+                      }}
+                    >
+                      <span className="zoom-item-head">
+                        <span className="zoom-item-title">{ev.title}</span>
+                        {ev.time && <span>{formatTime(ev.time)}</span>}
+                      </span>
+                      {ev.notes && <span className="zoom-item-notes">{ev.notes}</span>}
+                    </button>
+                  ))}
+                <span className="zoom-hint">{kind === 'event' ? '+ Add event' : '+ Add reminder'}</span>
               </div>
             ))}
-            {events.map((ev) => (
-              <button
-                key={ev.id}
-                className="zoom-item"
-                onClick={(e) => {
-                  e.stopPropagation(); // don't also trigger "add event"
-                  props.onEditEvent(ev);
-                }}
-              >
-                <span className="zoom-item-head">
-                  <span className="zoom-item-title">{ev.title}</span>
-                  {ev.time && <b>{formatTime(ev.time)}</b>}
-                </span>
-                {ev.notes && <span className="zoom-item-notes">{ev.notes}</span>}
-              </button>
-            ))}
-            <span className="zoom-hint">+ Add event</span>
           </div>
 
-          {/* Right half: workout on top (red), cardio below (pink) */}
+          {/* Right side: workout on top (red), cardio below (plum) */}
           <div className="zoom-right">
             <div className="zoom-half" style={{ background: GYM_COLOR_DARK }} onClick={props.onWorkout}>
               <div className="zoom-half-title">{workout && lines.length ? workoutLabel(workout) : 'Workout'}</div>

@@ -1,26 +1,33 @@
-// Add / edit / delete one event — a small Google-Calendar-style card.
+// Add / edit / delete one event or reminder — a small Google-Calendar-style card.
+// Time: type a clock time in the box, or use the ▾ arrow next to it to pick a school block.
+// Leaving the time empty is fine.
 import { useState } from 'react';
 import { db, type EventRecord } from '../db';
-import { EVENT_COLOR } from '../gym/workouts';
-import { BLOCKS, formatLongDate } from './dates';
+import { EVENT_COLOR, REMINDER_COLOR } from '../gym/workouts';
+import { BLOCKS, formatLongDate, formatTime } from './dates';
 import Modal from './Modal';
 
 interface Props {
   date: string;
-  event?: EventRecord; // given = editing an existing event; missing = adding a new one
+  kind: 'event' | 'reminder';
+  event?: EventRecord; // given = editing an existing one; missing = adding a new one
   onSaved: () => void; // after ✓
   onClose: () => void; // after × / Escape / delete
 }
 
-export default function EventEditor({ date, event, onSaved, onClose }: Props) {
+const isClock = (t: string) => /^\d{1,2}:\d{2}$/.test(t);
+
+export default function EventEditor({ date, kind, event, onSaved, onClose }: Props) {
   const [title, setTitle] = useState(event?.title ?? '');
   const [time, setTime] = useState(event?.time ?? '');
   const [notes, setNotes] = useState(event?.notes ?? '');
+  const isReminder = (event?.kind ?? kind) === 'reminder';
 
   const save = async () => {
     if (!title.trim()) return; // a title is needed
     await db.events.put({
       id: event?.id ?? crypto.randomUUID(),
+      kind: isReminder ? 'reminder' : 'event',
       date,
       title: title.trim(),
       time,
@@ -39,42 +46,45 @@ export default function EventEditor({ date, event, onSaved, onClose }: Props) {
 
   return (
     <Modal onClose={onClose} className="event-editor">
-      <div className="editor-stripe" style={{ background: EVENT_COLOR }} />
+      <div className="editor-stripe" style={{ background: isReminder ? REMINDER_COLOR : EVENT_COLOR }} />
       <div className="editor-body">
         <input
           className="event-title-input"
-          placeholder="Add title"
+          placeholder={isReminder ? 'Add reminder' : 'Add title'}
           value={title}
           autoFocus
           onChange={(e) => setTitle(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && save()}
         />
         <div className="editor-row">
-          <span className="editor-icon">🕒</span>
           <span>{formatLongDate(date)}</span>
-          {/* A clock time, OR a school block from the dropdown. Both can be left empty. */}
-          <input
-            type="time"
-            value={BLOCKS.includes(time) ? '' : time}
-            onChange={(e) => setTime(e.target.value)}
-          />
+          {/* A typed clock time — or, if a block (or a range) was picked, that instead. */}
+          {time && !isClock(time) ? (
+            <span className="time-chip">
+              {formatTime(time)}
+              <button className="link-btn" onClick={() => setTime('')} title="Clear">
+                ×
+              </button>
+            </span>
+          ) : (
+            <input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+          )}
+          {/* Just a ▾ arrow: opens the list of school blocks */}
           <select
-            className="block-select"
-            value={BLOCKS.includes(time) ? time : ''}
-            onChange={(e) => setTime(e.target.value)}
+            className="block-arrow"
+            value=""
+            title="Pick a block"
+            onChange={(e) => e.target.value && setTime(e.target.value)}
           >
-            <option value="">Block…</option>
+            <option value="" disabled hidden>
+              ▾
+            </option>
             {BLOCKS.map((b) => (
               <option key={b} value={b}>
                 {b}
               </option>
             ))}
           </select>
-          {time && (
-            <button className="link-btn" onClick={() => setTime('')}>
-              clear
-            </button>
-          )}
         </div>
         <div className="editor-row">
           <span className="editor-icon">≡</span>

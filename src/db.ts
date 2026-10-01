@@ -12,12 +12,13 @@ export interface WhiteboardRecord {
   updatedAt: number; // when it was last saved (milliseconds since 1970)
 }
 
-// A calendar event (the blue side of a day).
+// A calendar event (blue) or reminder (dark blue) for a day.
 export interface EventRecord {
   id: string;
+  kind?: 'event' | 'reminder'; // missing = event (older entries)
   date: string; // "2026-10-01"
   title: string;
-  time: string; // "09:30", or "" if no time
+  time: string; // "09:30", a block like "Block 2", "06:00-10:00", or "" if no time
   notes: string;
   struck: boolean; // crossed out on Board 1 (hidden from the board, kept in the calendar)
   createdAt: number;

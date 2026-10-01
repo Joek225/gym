@@ -65,20 +65,66 @@ export function formatLongDate(key: string): string {
   return parseKey(key).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
 }
 
-// School blocks you can pick instead of a clock time (in day order).
-export const BLOCKS = ['Block 1', 'Block 2', 'Block 3', 'Block 4', 'After school'];
+// School blocks you can pick instead of a clock time (shown in the time dropdown).
+export const BLOCKS = ['Flex', 'Block 1', 'Block 2', 'Block 3', 'Block 4', 'After school'];
 
-// An event's time: a clock time "14:30" → "2:30 PM", or a block name shown as is.
-export function formatTime(time: string): string {
-  if (!/^\d{1,2}:\d{2}$/.test(time)) return time; // a block, e.g. "Block 2"
+// When each block starts, in minutes after midnight, so events can be put in time order.
+// Wednesday and Thursday start later (Flex 8:00–8:30, Block 1 8:30–9:50).
+function blockStart(block: string, weekday: number): number {
+  const wedThu = weekday === 3 || weekday === 4;
+  switch (block) {
+    case 'Flex':
+      return 8 * 60; // 8:00
+    case 'Block 1':
+      return wedThu ? 8 * 60 + 30 : 8 * 60 + 1; // 8:30 Wed/Thu, otherwise 8:00 (just after Flex)
+    case 'Block 2':
+      return 9 * 60 + 30; // 9:30
+    case 'Block 3':
+      return 12 * 60 + 10; // 12:10
+    case 'Block 4':
+      return 13 * 60 + 40; // 1:40
+    case 'After school':
+      return 15 * 60; // 3:00, when school finishes
+    default:
+      return -1;
+  }
+}
+
+const CLOCK = /^(\d{1,2}):(\d{2})$/;
+const RANGE = /^(\d{1,2}:\d{2})-(\d{1,2}:\d{2})$/; // "06:00-10:00"
+
+function clockText(time: string): string {
   const [h, m] = time.split(':').map(Number);
   return new Date(2000, 0, 1, h, m).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 }
 
-// For putting a day's events in order: blocks in block order, clock times by time,
-// and events with no time last.
-export function timeSortKey(time: string): string {
-  const block = BLOCKS.indexOf(time);
-  if (block >= 0) return `B${block}`;
-  return time ? `T${time.padStart(5, '0')}` : 'Z';
+// An event's time for showing: "14:30" → "2:30 PM", "06:00-10:00" → "6:00 AM – 10:00 AM",
+// or a block name as is ("Block 2").
+export function formatTime(time: string): string {
+  const range = time.match(RANGE);
+  if (range) return `${clockText(range[1])} – ${clockText(range[2])}`;
+  if (CLOCK.test(time)) return clockText(time);
+  return time;
+}
+
+// For putting a day's events in time order (blocks placed at their real times).
+// Events with no time go last.
+export function timeOrder(time: string, date: string): number {
+  if (!time) return 24 * 60;
+  const start = time.match(RANGE)?.[1] ?? time;
+  const clock = start.match(CLOCK);
+  if (clock) return Number(clock[1]) * 60 + Number(clock[2]);
+  const b = blockStart(time, parseKey(date).getDay());
+  return b >= 0 ? b : 24 * 60 - 1;
+}
+
+// Compare two events (date first, then time of day) — for .sort().
+export function byDateAndTime(a: { date: string; time: string }, b: { date: string; time: string }): number {
+  return a.date.localeCompare(b.date) || timeOrder(a.time, a.date) - timeOrder(b.time, b.date);
+}
+
+// The date `days` days after "2026-10-01".
+export function addDays(key: string, days: number): string {
+  const d = parseKey(key);
+  return dateKey(new Date(d.getFullYear(), d.getMonth(), d.getDate() + days));
 }
