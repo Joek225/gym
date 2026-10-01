@@ -1,4 +1,4 @@
-# Publishes the website to GitHub Pages every time code lands on "main".
+# Builds the website and publishes it to GitHub Pages every time code lands on "main".
 name: Deploy site
 
 on:
@@ -23,10 +23,15 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci # install the exact package versions from package-lock.json
+      - run: npm run build # creates the finished site in the "dist" folder
       - uses: actions/configure-pages@v5
-      # Phase 0: the site is just index.html. Later this step will build the React app.
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: dist
       - id: deployment
         uses: actions/deploy-pages@v4
