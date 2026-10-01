@@ -1,0 +1,78 @@
+/* ---- Colors and basics used across the whole site ---- */
+:root {
+  --bg: #fafafa;
+  --surface: #ffffff;
+  --text: #1f2328;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --accent: #2563eb;
+  --gym-red: #e53935;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+/* ---- Page layout: tab bar on top, content fills the rest ---- */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.tab-content {
+  flex: 1;
+  min-height: 0; /* lets the content area shrink and scroll properly */
+  overflow: auto;
+}
+
+/* ---- Tab bar ---- */
+.tab-bar {
+  display: flex;
+  gap: 4px;
+  padding: 0 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto; /* on a narrow phone, many tabs can scroll sideways */
+}
+
+.tab {
+  padding: 14px 16px;
+  border: none;
+  border-bottom: 3px solid transparent;
+  background: none;
+  color: var(--muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: var(--text);
+}
+
+.tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* ---- Placeholder text for tabs not built yet ---- */
+.placeholder {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--muted);
+}
