@@ -7,7 +7,7 @@ import EventEditor from '../calendar/EventEditor';
 import MiniMonth from '../calendar/MiniMonth';
 import TemplatesEditor from '../calendar/TemplatesEditor';
 import WorkoutEditor from '../calendar/WorkoutEditor';
-import { MONTH_NAMES, addMonths, dateKey, monthGrid, thisMonth } from '../calendar/dates';
+import { MONTH_NAMES, addMonths, thisMonth } from '../calendar/dates';
 import { db, type EventRecord, type WorkoutRecord } from '../db';
 import { newWorkout } from '../gym/workouts';
 
@@ -19,15 +19,6 @@ type Popup =
   | { kind: 'workout'; workout: WorkoutRecord }
   | { kind: 'templates' };
 
-// TEMPORARY PREVIEW (asked for as a test): paint Mon/Tue/Thu/Fri of July 2026 red in the
-// mini calendars, without saving anything. Set to false (or delete) once you've seen it.
-const DEMO_JULY_RED = true;
-function demoDates(): string[] {
-  if (!DEMO_JULY_RED) return [];
-  return monthGrid({ year: 2026, month: 6 })
-    .filter((d) => d.getMonth() === 6 && [1, 2, 4, 5].includes(d.getDay()))
-    .map(dateKey);
-}
 
 export default function CalendarTab() {
   // The month shown large. Starts at the current month.
@@ -71,7 +62,7 @@ export default function CalendarTab() {
 
   // The 3 months before the big one, oldest first (left → right).
   const previous = [3, 2, 1].map((n) => addMonths(shown, -n));
-  const workoutDates = new Set([...workoutsByDate.keys(), ...demoDates()]);
+  const workoutDates = new Set(workoutsByDate.keys());
 
   return (
     <div className="calendar">

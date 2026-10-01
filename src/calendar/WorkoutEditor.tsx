@@ -11,6 +11,8 @@
 //             Enter               → another set of the same exercise, on a new line below
 //   Backspace in an empty box     → back one box
 // A line whose exercise name is left empty disappears when you leave it.
+// You can't close the sheet while a line is half done: once a line is started it needs
+// reps AND weight (partial reps can stay empty). Untouched template lines are fine.
 import { useEffect, useRef, useState, type FocusEvent, type KeyboardEvent } from 'react';
 import type { WorkoutRecord, WorkoutRow } from '../db';
 import { GYM_COLOR, saveWorkout, workoutLabel } from '../gym/workouts';
@@ -47,6 +49,23 @@ export default function WorkoutEditor({ workout, onClose }: Props) {
   }, [focusNext, w]);
 
   const go = (row: number, field: Field) => setFocusNext(`${row}:${field}`);
+
+  // Which lines are started but missing reps or weight (or a name).
+  const [showMissing, setShowMissing] = useState(false);
+  const isIncomplete = (r: WorkoutRow) => {
+    const started = r.reps || r.partial || r.weight || (isCustom && r.name.trim());
+    return !!started && (!r.name.trim() || !r.reps || !r.weight);
+  };
+  const missing = w.rows.map(isIncomplete);
+
+  // Close only if every started line is complete; otherwise point at the first gap.
+  const tryClose = () => {
+    const i = missing.indexOf(true);
+    if (i === -1) return onClose();
+    setShowMissing(true);
+    const r = w.rows[i];
+    go(i, !r.name.trim() ? 'name' : !r.reps ? 'reps' : 'weight');
+  };
 
   const updateRow = (i: number, patch: Partial<WorkoutRow>) =>
     setW((cur) => ({ ...cur, rows: cur.rows.map((r, j) => (j === i ? { ...r, ...patch } : r)) }));
@@ -120,7 +139,7 @@ export default function WorkoutEditor({ workout, onClose }: Props) {
   };
 
   return (
-    <Modal onClose={onClose} className="workout-editor">
+    <Modal onClose={tryClose} className="workout-editor">
       <div className="workout-header" style={{ background: GYM_COLOR }}>
         {isCustom ? (
           <input
@@ -140,7 +159,11 @@ export default function WorkoutEditor({ workout, onClose }: Props) {
       <div className="workout-lines">
         <div className="workout-legend">exercise - reps - partial reps - weight</div>
         {w.rows.map((row, i) => (
-          <div className="workout-line" key={i} onBlur={(e) => onRowBlur(e, i)}>
+          <div
+            className={showMissing && missing[i] ? 'workout-line missing' : 'workout-line'}
+            key={i}
+            onBlur={(e) => onRowBlur(e, i)}
+          >
             <input
               className="wl-name"
               placeholder="exercise"
@@ -186,11 +209,15 @@ export default function WorkoutEditor({ workout, onClose }: Props) {
         </button>
       </div>
 
+      {showMissing && missing.includes(true) && (
+        <div className="workout-warning">Add reps and weight to the highlighted lines (partials can stay empty).</div>
+      )}
+
       <div className="editor-footer">
         <button className="danger-btn" onClick={remove}>
           Delete workout
         </button>
-        <button className="check-btn" onClick={onClose} title="Done">
+        <button className="check-btn" onClick={tryClose} title="Done">
           ✓
         </button>
       </div>

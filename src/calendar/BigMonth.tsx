@@ -14,16 +14,27 @@ interface Props {
   onDayClick: (date: string, cell: DOMRect) => void;
 }
 
+// Today's column is made wider (and today's entries never get cut off) so long
+// entries are readable; the other six columns share the rest of the space.
+const TODAY_COLUMN_WIDTH = '2.4fr';
+
 export default function BigMonth({ ym, eventsByDate, workoutsByDate, onDayClick }: Props) {
   const today = todayKey();
+  const grid = monthGrid(ym);
+  const todayShown = grid.some((d) => dateKey(d) === today && d.getMonth() === ym.month);
+  const todayColumn = (new Date().getDay() + 6) % 7; // Monday = 0 … Sunday = 6
+  const columns = WEEKDAYS.map((_, i) =>
+    todayShown && i === todayColumn ? TODAY_COLUMN_WIDTH : 'minmax(0, 1fr)',
+  ).join(' ');
+
   return (
-    <div className="big-month">
+    <div className="big-month" style={{ gridTemplateColumns: columns }}>
       {WEEKDAYS.map((w) => (
         <div key={w} className="big-weekday">
           {w}
         </div>
       ))}
-      {monthGrid(ym).map((d) => {
+      {grid.map((d) => {
         const key = dateKey(d);
         const events = eventsByDate.get(key) ?? [];
         const workout = workoutsByDate.get(key);
@@ -44,14 +55,14 @@ export default function BigMonth({ ym, eventsByDate, workoutsByDate, onDayClick 
             )}
             <span className="day-number">{d.getDate()}</span>
             <div className="cell-events">
-              {events.slice(0, MAX_EVENTS_SHOWN).map((ev) => (
+              {(key === today ? events : events.slice(0, MAX_EVENTS_SHOWN)).map((ev) => (
                 <div key={ev.id} className="cell-event">
                   <span className="event-dot" style={{ background: EVENT_COLOR }} />
                   <span className="cell-event-title">{ev.title}</span>
                   {ev.time && <b className="cell-event-time">{formatTime(ev.time)}</b>}
                 </div>
               ))}
-              {events.length > MAX_EVENTS_SHOWN && (
+              {key !== today && events.length > MAX_EVENTS_SHOWN && (
                 <div className="cell-more">+{events.length - MAX_EVENTS_SHOWN} more</div>
               )}
             </div>

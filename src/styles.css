@@ -9,7 +9,9 @@
   --accent: #7aa2f7;
   --gym-red: #e53935;
   color-scheme: dark; /* makes scrollbars and form controls dark too */
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* Avenir everywhere. Apple devices have it built in; elsewhere "Avenir Fallback" (Nunito,
+     a similar free font) is used. */
+  font-family: 'Avenir Next', Avenir, 'Avenir Fallback', sans-serif;
   color: var(--text);
   background: var(--bg);
 }
@@ -28,6 +30,17 @@ body,
 button {
   font: inherit;
   cursor: pointer;
+}
+
+@font-face {
+  font-family: 'Avenir Fallback';
+  src: url('/fonts/Nunito/Nunito-Regular-XRXI3I6Li01BKofiOc5wtlZ2di8HDIkhdTQ3j6zbXWjgeg.woff2')
+    format('woff2');
+}
+
+/* Excalidraw's own buttons and menus use Avenir too */
+.excalidraw {
+  --ui-font: 'Avenir Next', Avenir, 'Avenir Fallback', sans-serif !important;
 }
 
 /* ---- Page layout: tab bar on top, content fills the rest ---- */
@@ -416,6 +429,17 @@ button {
   font-size: 11px;
 }
 
+/* Today: show entries in full, wrapping onto more lines instead of "…" */
+.day-cell.today .cell-event-title {
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+}
+
+.day-cell.today .cell-event {
+  font-size: 13px;
+}
+
 .cell-more {
   font-size: 11px;
   color: var(--muted);
@@ -488,16 +512,33 @@ button {
   padding: 16px 20px;
   border-left: 1px dashed var(--border);
   background: var(--bg); /* same as the board, and covers any drawing underneath */
-  font-family: 'Helvetica', sans-serif; /* same Avenir as whiteboard text */
+  font-family: 'Helvetica', sans-serif; /* same Avenir font slot as whiteboard text */
   overflow: hidden;
   pointer-events: none; /* drawing goes "through" it, so you can cross things out */
   z-index: 2;
 }
 
 .todo-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   font-size: 22px;
   font-weight: 600;
   margin-bottom: 14px;
+}
+
+.todo-revert {
+  pointer-events: auto; /* the column lets clicks through, but this button is clickable */
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.todo-revert:hover {
+  color: var(--text);
 }
 
 .todo-empty {
@@ -577,6 +618,19 @@ button {
   }
   .cell-event-time {
     display: none; /* not enough room on a phone; shown in the zoomed day */
+  }
+  .day-cell.today .cell-event-time {
+    display: inline; /* today's column is wide enough */
+  }
+  .day-cell.today .cell-event {
+    font-size: 10px;
+    flex-wrap: wrap; /* the time goes on its own line under the title */
+  }
+  .day-cell.today .cell-event-title {
+    flex-basis: calc(100% - 9px);
+  }
+  .day-cell.today .cell-event-time {
+    padding-left: 7px;
   }
   .cell-event .event-dot {
     width: 5px;
@@ -932,6 +986,21 @@ button {
   color: var(--text);
 }
 
+.workout-line.missing {
+  box-shadow: inset 3px 0 0 #ff8a8a; /* red bar on the left of a half-done line */
+  padding-left: 8px;
+}
+
+.workout-line.missing input:placeholder-shown:not(.wl-partial) {
+  border-bottom-color: #ff8a8a !important;
+}
+
+.workout-warning {
+  margin: 4px 20px 0;
+  color: #ff8a8a;
+  font-size: 13px;
+}
+
 .add-line {
   margin-top: 6px;
 }
@@ -1003,4 +1072,13 @@ button {
 }
 .templates-btn-bottom {
   margin: 0 auto !important;
+}
+
+/* ---- SQUARE CORNERS (trial) ----
+   Every rounded corner on the site (and in Excalidraw) becomes a sharp square.
+   Dots and the eraser circle stay round. To go back to rounded corners, delete this block. */
+*:not(.event-dot):not(.eraser-cursor),
+*::before,
+*::after {
+  border-radius: 0 !important;
 }

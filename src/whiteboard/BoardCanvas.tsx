@@ -93,20 +93,24 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
   const upcomingRef = useRef<UpcomingEventsHandle>(null);
   const seenIds = useRef(new Set<string>()); // drawings that existed before (not new lines)
 
+  const loadEvents = useCallback(async () => {
+    const list = await db.events.where('date').aboveOrEqual(todayKey()).toArray(); // no past events
+    setEvents(
+      list
+        .filter((e) => !e.struck)
+        .sort((a, b) => (a.date + (a.time || '99')).localeCompare(b.date + (b.time || '99'))),
+    );
+  }, []);
+
   useEffect(() => {
-    if (!isFirstBoard) return;
-    db.events
-      .where('date')
-      .aboveOrEqual(todayKey()) // past events are left out
-      .toArray()
-      .then((list) =>
-        setEvents(
-          list
-            .filter((e) => !e.struck)
-            .sort((a, b) => (a.date + (a.time || '99')).localeCompare(b.date + (b.time || '99'))),
-        ),
-      );
-  }, [isFirstBoard]);
+    if (isFirstBoard) loadEvents();
+  }, [isFirstBoard, loadEvents]);
+
+  // "Revert": un-cross every upcoming event, so the list matches the calendar again.
+  const revertTodo = async () => {
+    await db.events.where('date').aboveOrEqual(todayKey()).modify({ struck: false });
+    loadEvents();
+  };
 
   // Work out where the to-do column starts, and redo it when the window size changes.
   useEffect(() => {
@@ -296,7 +300,7 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
         />
       )}
 
-      {isFirstBoard && column && <UpcomingEvents ref={upcomingRef} events={events} position={column} />}
+      {isFirstBoard && column && <UpcomingEvents ref={upcomingRef} events={events} onRevert={revertTodo} position={column} />}
     </div>
   );
 }
