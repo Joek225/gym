@@ -27,7 +27,11 @@ const ERASER_SIZE = 12; // stroke eraser radius, in screen pixels
 const START_SETTINGS = {
   // New text uses Avenir (see the "Helvetica" font rule in styles.css for how).
   currentItemFontFamily: FONT_FAMILY.Helvetica,
+  currentItemStrokeWidth: 1, // thin pen by default
 };
+
+// New text boxes are double-spaced (Excalidraw's own default is about 1.15).
+const TEXT_LINE_HEIGHT = 2;
 
 // Background for a brand-new board. Excalidraw's dark mode flips canvas colors,
 // so this light color shows up on screen as the site's dark grey (#282a37).
@@ -86,7 +90,12 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
   const [events, setEvents] = useState<EventRecord[]>([]);
   const [column, setColumn] = useState<{ left: number; top: number } | null>(null);
   const upcomingRef = useRef<UpcomingEventsHandle>(null);
+  const [struckIds, setStruckIds] = useState<string[]>([]); // just crossed out (fading away)
+  // The line you're drawing inside the to-do column. The column covers the board, so
+  // Excalidraw's own line would be hidden there; we draw a copy on top so you can see it.
+  const [strikePath, setStrikePath] = useState<[number, number][]>([]);
   const seenIds = useRef(new Set<string>()); // drawings that existed before (not new lines)
+  const spacedIds = useRef(new Set<string>()); // new text boxes already made double-spaced
 
   const loadEvents = useCallback(async () => {
     const list = await db.events.where('date').aboveOrEqual(todayKey()).toArray(); // no past events
@@ -173,7 +182,12 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
       });
       if (hit) {
         db.events.update(hit.id, { struck: true });
-        setEvents((list) => list.filter((e) => e.id !== hit.id));
+        // Show the row crossed out for a moment, then remove it from the list.
+        setStruckIds((ids) => [...ids, hit.id]);
+        window.setTimeout(() => {
+          setEvents((list) => list.filter((e) => e.id !== hit.id));
+          setStruckIds((ids) => ids.filter((x) => x !== hit.id));
+        }, 700);
       }
     }
 
@@ -200,7 +214,22 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
 
   // Excalidraw tells us where the pointer is (in board coordinates) as it moves.
   const handlePointerUpdate: OnPointerUpdate = ({ pointer, button }) => {
-    if (!api || !strokeEraserOn) return;
+    if (!api) return;
+
+    // Drawing in the to-do column: keep a visible copy of the line on top of the column.
+    if (isFirstBoard && column && !strokeEraserOn) {
+      const st = api.getAppState();
+      const drawing = ['freedraw', 'line', 'arrow'].includes(st.activeTool.type);
+      const x = (pointer.x + st.scrollX) * st.zoom.value;
+      const y = (pointer.y + st.scrollY) * st.zoom.value;
+      if (drawing && button === 'down') {
+        setStrikePath((path) => (path.length || (x >= column.left && y >= column.top) ? [...path, [x, y]] : path));
+      } else if (strikePath.length) {
+        window.setTimeout(() => setStrikePath([]), 250); // let it linger for a moment
+      }
+    }
+
+    if (!strokeEraserOn) return;
     const { scrollX, scrollY, zoom } = api.getAppState();
     setCursor({ x: (pointer.x + scrollX) * zoom.value, y: (pointer.y + scrollY) * zoom.value });
 
@@ -228,6 +257,18 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
 
   // Excalidraw calls this on every change (each stroke, typed letter, even mouse moves).
   const handleChange: OnChange = (elements, appState, files) => {
+    // A brand-new text box: make it double-spaced (once per text box).
+    const editing = appState.editingTextElement as any;
+    if (api && editing && !seenIds.current.has(editing.id) && !spacedIds.current.has(editing.id)) {
+      spacedIds.current.add(editing.id);
+      api.updateScene({
+        elements: api
+          .getSceneElementsIncludingDeleted()
+          .map((el: any) => (el.id === editing.id ? { ...el, lineHeight: TEXT_LINE_HEIGHT } : el)),
+        captureUpdate: CaptureUpdateAction.NEVER,
+      });
+    }
+
     const tool = appState.activeTool;
     const eraserNow = tool.type === 'custom' && tool.customType === STROKE_ERASER;
     if (eraserNow !== strokeEraserOn) setStrokeEraserOn(eraserNow);
@@ -293,7 +334,22 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
         />
       )}
 
-      {isFirstBoard && column && <UpcomingEvents ref={upcomingRef} events={events} onRevert={revertTodo} position={column} />}
+      {isFirstBoard && column && (
+        <UpcomingEvents
+          ref={upcomingRef}
+          events={events}
+          struckIds={struckIds}
+          onRevert={revertTodo}
+          position={column}
+        />
+      )}
+
+      {/* Your line while you cross something out (drawn above the to-do column) */}
+      {strikePath.length > 1 && (
+        <svg className="strike-preview">
+          <polyline points={strikePath.map((p) => p.join(',')).join(' ')} />
+        </svg>
+      )}
     </div>
   );
 }
