@@ -120,6 +120,13 @@ class AppDatabase extends Dexie {
     this.version(5).stores({
       spans: 'id, start',
     });
+    // Version 6: remove the weekly "EcoMiles" events (no longer wanted).
+    this.version(6)
+      .stores({})
+      .upgrade(async (tx) => {
+        await tx.table('events').filter((e) => String(e.id).startsWith('ecomiles-')).delete();
+        await tx.table('settings').delete('recurring:ecomiles:until');
+      });
   }
 }
 

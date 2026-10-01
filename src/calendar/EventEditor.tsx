@@ -1,7 +1,7 @@
 // Add / edit / delete one event or reminder — a small Google-Calendar-style card.
 // Time: type a clock time in the box, or use the ▾ arrow next to it to pick a school block.
 // Leaving the time empty is fine.
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { db, type EventRecord } from '../db';
 import { EVENT_COLOR, REMINDER_COLOR } from '../gym/workouts';
 import { BLOCKS, formatLongDate, formatTime } from './dates';
@@ -50,6 +50,7 @@ export default function EventEditor({ date, kind, event, onSaved, onClose }: Pro
       <div className="editor-body">
         <input
           className="event-title-input"
+          style={{ '--focus-line': isReminder ? REMINDER_COLOR : EVENT_COLOR } as CSSProperties}
           placeholder={isReminder ? 'Add reminder' : 'Add title'}
           value={title}
           autoFocus
