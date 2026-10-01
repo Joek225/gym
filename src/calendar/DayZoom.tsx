@@ -2,10 +2,20 @@
 //   Left (blue)  = events, with each event's notes underneath. Click an event to edit it,
 //                  or empty space to add one.
 //   Right (red)  = the workout: its type and every logged line. Click to open the sheet.
+//                  Underneath is the cardio line, which you type into right here.
 // After saving either one, you come back here.
 import { useLayoutEffect, useRef } from 'react';
-import type { EventRecord, WorkoutRecord } from '../db';
-import { EVENT_COLOR_DARK, GYM_COLOR_DARK, formatLine, isLogged, workoutLabel } from '../gym/workouts';
+import type { Cardio, EventRecord, SpanRecord, WorkoutRecord } from '../db';
+import {
+  CUSTOM_GYM_COLOR,
+  EVENT_COLOR_DARK,
+  GYM_COLOR_DARK,
+  formatLine,
+  isLogged,
+  workoutLabel,
+  workoutTypeFor,
+} from '../gym/workouts';
+import CardioEditor from './CardioEditor';
 import { formatLongDate, formatTime } from './dates';
 
 interface Props {
@@ -13,6 +23,8 @@ interface Props {
   from: DOMRect | null; // where the clicked day cell was, so we can zoom out of it
   events: EventRecord[];
   workout?: WorkoutRecord;
+  spans: SpanRecord[]; // multi-day labels covering this day (e.g. "Holiday")
+  onCardioChange: (c: Cardio) => void;
   onAddEvent: () => void;
   onEditEvent: (e: EventRecord) => void;
   onWorkout: () => void;
@@ -39,6 +51,8 @@ export default function DayZoom(props: Props) {
   }, [from]);
 
   const lines = workout?.rows.filter(isLogged) ?? [];
+  // Custom days (Wed/Sat/Sun) use the darker red.
+  const redColor = workoutTypeFor(date) === 'custom' ? CUSTOM_GYM_COLOR : GYM_COLOR_DARK;
 
   return (
     <div className="modal-backdrop zoom-backdrop" onMouseDown={(e) => e.target === e.currentTarget && props.onClose()}>
@@ -54,6 +68,11 @@ export default function DayZoom(props: Props) {
           {/* Blue half: events */}
           <div className="zoom-half" style={{ background: EVENT_COLOR_DARK }} onClick={props.onAddEvent}>
             <div className="zoom-half-title">Events</div>
+            {props.spans.map((sp) => (
+              <div key={sp.id} className="zoom-span">
+                {sp.label}
+              </div>
+            ))}
             {events.map((ev) => (
               <button
                 key={ev.id}
@@ -74,14 +93,15 @@ export default function DayZoom(props: Props) {
           </div>
 
           {/* Red half: workout */}
-          <div className="zoom-half" style={{ background: GYM_COLOR_DARK }} onClick={props.onWorkout}>
+          <div className="zoom-half" style={{ background: redColor }} onClick={props.onWorkout}>
             <div className="zoom-half-title">{workout ? workoutLabel(workout) : 'Workout'}</div>
             {lines.map((r, i) => (
               <div key={i} className="zoom-lift">
                 {formatLine(r)}
               </div>
             ))}
-            <span className="zoom-hint">{workout ? 'Edit workout' : '+ Log workout'}</span>
+            <span className="zoom-hint">{workout && lines.length ? 'Edit workout' : '+ Log workout'}</span>
+            <CardioEditor cardio={workout?.cardio} onChange={props.onCardioChange} />
           </div>
         </div>
       </div>

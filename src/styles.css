@@ -327,8 +327,10 @@ button {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  padding: 4px;
+  padding: 0 0 4px; /* banners and bars reach the cell's edges */
   cursor: pointer;
+  user-select: none; /* dragging across days shouldn't highlight text */
+  touch-action: pan-y; /* on phones, sideways drags select days; up/down still scrolls */
   border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
 }
@@ -365,18 +367,26 @@ button {
   background: rgba(255, 255, 255, 0.04);
 }
 
-/* Red gym banner across the top fifth of a day */
-.gym-banner {
+/* Top fifth of a day: the date, plus the red gym banner behind it if there's a workout */
+.cell-top {
+  position: relative;
   flex: none;
-  height: 20%; /* the top fifth of the day */
-  min-height: 18px;
-  margin: -4px -4px 2px; /* reach the cell's edges */
+  height: 20%;
+  min-height: 22px;
+  display: flex;
+  align-items: center;
+  padding-left: 4px;
+}
+
+.gym-banner {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 0 22px; /* leave room for the date on the left */
   color: #fff;
   font-size: 12px;
-  font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   overflow: hidden;
@@ -384,23 +394,46 @@ button {
   text-overflow: ellipsis;
 }
 
-/* With a banner, the date number sits on top of it, in white */
-.day-cell.has-workout .day-number {
-  position: absolute;
-  top: 0;
-  left: 2px;
-  height: 20%;
-  min-height: 18px;
-  display: flex;
-  align-items: center;
-  background: none;
-  color: #fff;
+.day-number.on-banner {
+  position: relative; /* sits on top of the banner */
+  background: none !important;
+  color: #fff !important;
   font-size: 12px;
 }
 
-.day-cell.today.has-workout .day-number {
+.day-cell.today .day-number.on-banner {
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+
+/* Blue bar for a label covering several days (e.g. "Holiday").
+   Bars in neighbouring days touch, so they read as one long line. */
+.span-bar {
+  flex: none;
+  height: 20px;
+  margin: 2px -1px 2px 0; /* -1px covers the line between days */
+  padding: 0 6px;
+  display: flex;
+  align-items: center;
+  color: #fff;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+}
+
+.span-bar.span-start {
+  margin-left: 4px;
+}
+
+.span-bar.span-end {
+  margin-right: 4px;
+}
+
+/* Days being selected while you drag */
+.day-cell.selecting {
+  background: rgba(144, 213, 255, 0.18) !important;
 }
 
 /* Events inside a day: blue dot, title, bold time */
@@ -410,6 +443,7 @@ button {
   gap: 2px;
   min-width: 0;
   margin-top: 2px;
+  padding: 0 4px;
 }
 
 .cell-event {
@@ -472,9 +506,6 @@ button {
   }
   .calendar {
     --cell-min-h: 84px;
-  }
-  .day-cell {
-    padding: 2px;
   }
   .day-number {
     font-size: 12px;
@@ -586,6 +617,16 @@ button {
   display: none !important;
 }
 
+/* Excalidraw's style panel (stroke, background, stroke width…) sits at the bottom-left,
+   just above the zoom (100%) and undo/redo buttons, instead of at the top. */
+.excalidraw .FixedSideContainer_side_top .App-menu__left {
+  position: absolute;
+  left: 0;
+  bottom: 48px;
+  max-height: calc(100% - 110px) !important;
+  overflow-y: auto;
+}
+
 /* Our 🗑 and BG buttons, where the ☰ menu used to be */
 .canvas-buttons {
   position: absolute;
@@ -694,11 +735,27 @@ button {
   .gym-banner {
     font-size: 8px;
     letter-spacing: 0;
-    margin: -2px -2px 2px;
+    padding: 0 2px 0 16px;
   }
-  .day-cell.has-workout .day-number {
+  .cell-top {
+    padding-left: 1px;
+  }
+  .day-number.on-banner {
     font-size: 9px;
-    left: 0;
+  }
+  .span-bar {
+    height: 14px;
+    font-size: 8px;
+    padding: 0 2px;
+  }
+  .span-bar.span-start {
+    margin-left: 2px;
+  }
+  .span-bar.span-end {
+    margin-right: 2px;
+  }
+  .cell-events {
+    padding: 0 2px;
   }
   .cell-event {
     font-size: 9px;
@@ -789,6 +846,14 @@ button {
   background: var(--bg) !important;
   border-radius: 8px;
   padding: 8px;
+}
+
+.block-select {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: none;
+  padding: 5px 8px;
 }
 
 .editor-row input[type='time'] {
@@ -947,6 +1012,62 @@ button {
   white-space: pre-wrap;
 }
 
+/* Cardio line in the zoomed day: speed - incline - h:mm */
+.cardio {
+  margin-top: auto; /* sits at the bottom of the red half */
+  width: 100%;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.25);
+  cursor: default;
+}
+
+.cardio-title {
+  font-size: 18px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.9;
+  margin-bottom: 6px;
+}
+
+.cardio-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 21px;
+}
+
+.cardio-box {
+  width: 5ch;
+  padding: 4px 2px;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.5);
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  text-align: center;
+  outline: none;
+}
+
+.cardio-box:focus {
+  border-bottom-color: #fff;
+}
+
+.cardio-box::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.cardio-hours,
+.cardio-mins {
+  width: 3ch;
+}
+
+/* A multi-day label (e.g. "Holiday") shown in the zoomed day */
+.zoom-span {
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.2);
+  font-size: 18px;
+}
+
 /* One logged lift in the zoomed day */
 .zoom-lift {
   font-size: 21px;
@@ -1099,8 +1220,13 @@ button {
   }
   .zoom-item-notes,
   .zoom-lift,
-  .zoom-hint {
+  .zoom-hint,
+  .cardio-title {
     font-size: 15px;
+  }
+  .cardio-line {
+    font-size: 15px;
+    gap: 4px;
   }
   .wl-actions {
     opacity: 1;

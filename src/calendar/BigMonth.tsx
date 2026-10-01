@@ -1,32 +1,39 @@
 // The large month grid in the middle of the Calendar tab (Monday → Sunday).
-// A day with a workout gets a red banner across its top fifth (UPPER / LOWER / custom name);
-// its events are listed below with a blue dot, the title, and the time in bold.
-import { useLayoutEffect, useRef, useState } from 'react';
-import type { EventRecord, WorkoutRecord } from '../db';
-import { EVENT_COLOR, GYM_COLOR, workoutLabel } from '../gym/workouts';
+// Each day cell, top to bottom:
+//   • the top fifth: the date, and a red banner if there's a workout (UPPER / LOWER / name)
+//   • blue bars for multi-day labels (e.g. "Holiday"), which run across the days they cover
+//   • events: a blue dot, the title, and the time
+// Click a day to zoom into it. Click and DRAG across several days to label them all.
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { EventRecord, SpanRecord, WorkoutRecord } from '../db';
+import { EVENT_COLOR, EVENT_COLOR_DARK, workoutColor, workoutLabel } from '../gym/workouts';
 import { WEEKDAYS, dateKey, formatTime, monthGrid, todayKey, type YearMonth } from './dates';
 
 const MAX_EVENTS_SHOWN = 3;
-
-interface Props {
-  ym: YearMonth;
-  eventsByDate: Map<string, EventRecord[]>;
-  workoutsByDate: Map<string, WorkoutRecord>;
-  onDayClick: (date: string, cell: DOMRect) => void;
-}
 
 // Today's column gets wider ONLY when its entries don't fit on one line; it grows just
 // enough to fit them (up to 40% of the calendar, after which the text wraps instead).
 const TODAY_MAX_SHARE = 0.4;
 
-export default function BigMonth({ ym, eventsByDate, workoutsByDate, onDayClick }: Props) {
+interface Props {
+  ym: YearMonth;
+  eventsByDate: Map<string, EventRecord[]>;
+  workoutsByDate: Map<string, WorkoutRecord>;
+  spans: SpanRecord[];
+  onDayClick: (date: string, cell: DOMRect) => void;
+  onRangeSelected: (start: string, end: string) => void; // after dragging across days
+  onSpanClick: (span: SpanRecord) => void;
+}
+
+export default function BigMonth(props: Props) {
+  const { ym, eventsByDate, workoutsByDate, spans } = props;
   const today = todayKey();
   const grid = monthGrid(ym);
   const todayColumn = (new Date().getDay() + 6) % 7; // Monday = 0 … Sunday = 6
   const gridRef = useRef<HTMLDivElement>(null);
   const [todayWidth, setTodayWidth] = useState<number | null>(null); // null = normal width
 
-  // Measure how wide today's entries are on a single line, and widen the column if needed.
+  // ---------- Today's column width ----------
   const todayEvents = eventsByDate.get(today);
   useLayoutEffect(() => {
     const measure = () => {
@@ -38,14 +45,45 @@ export default function BigMonth({ ym, eventsByDate, workoutsByDate, onDayClick 
       const needed = Math.max(0, ...lines.map((el) => el.scrollWidth)) + 12; // + cell padding
       cell.classList.remove('measuring');
       const total = gridEl.clientWidth;
-      const normal = total / 7;
-      setTodayWidth(needed <= normal ? null : Math.min(needed, total * TODAY_MAX_SHARE));
+      setTodayWidth(needed <= total / 7 ? null : Math.min(needed, total * TODAY_MAX_SHARE));
     };
     measure();
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
   }, [ym, todayEvents, workoutsByDate]);
 
+  // ---------- Drag to select several days ----------
+  const [drag, setDrag] = useState<{ from: string; to: string } | null>(null);
+  const dragRef = useRef(drag);
+  dragRef.current = drag;
+  const skipClick = useRef(false); // the click right after a drag shouldn't open a day
+
+  const dayUnder = (x: number, y: number) =>
+    (document.elementFromPoint(x, y)?.closest('[data-date]') as HTMLElement | null)?.dataset.date;
+
+  useEffect(() => {
+    const finish = () => {
+      const d = dragRef.current;
+      if (!d) return;
+      setDrag(null);
+      if (d.from !== d.to) {
+        skipClick.current = true;
+        const [start, end] = [d.from, d.to].sort();
+        props.onRangeSelected(start, end);
+      }
+    };
+    const cancel = () => setDrag(null);
+    window.addEventListener('pointerup', finish);
+    window.addEventListener('pointercancel', cancel);
+    return () => {
+      window.removeEventListener('pointerup', finish);
+      window.removeEventListener('pointercancel', cancel);
+    };
+  }, [props]);
+
+  const [selStart, selEnd] = drag ? [drag.from, drag.to].sort() : ['', ''];
+
+  // ---------- Layout ----------
   const columns = WEEKDAYS.map((_, i) =>
     todayWidth && i === todayColumn ? `${todayWidth}px` : 'minmax(0, 1fr)',
   ).join(' ');
@@ -55,39 +93,85 @@ export default function BigMonth({ ym, eventsByDate, workoutsByDate, onDayClick 
     <div
       className="big-month"
       ref={gridRef}
-      style={{ gridTemplateColumns: columns, gridTemplateRows: `auto repeat(${weeks}, minmax(var(--cell-min-h), 1fr))` }}
+      style={{
+        gridTemplateColumns: columns,
+        gridTemplateRows: `auto repeat(${weeks}, minmax(var(--cell-min-h), 1fr))`,
+      }}
+      onPointerMove={(e) => {
+        if (!drag) return;
+        const date = dayUnder(e.clientX, e.clientY);
+        if (date && date !== drag.to) setDrag({ ...drag, to: date });
+      }}
     >
       {WEEKDAYS.map((w) => (
         <div key={w} className="big-weekday">
           {w}
         </div>
       ))}
-      {grid.map((d) => {
+      {grid.map((d, i) => {
         const key = dateKey(d);
         const events = eventsByDate.get(key) ?? [];
         const workout = workoutsByDate.get(key);
+        const daySpans = spans.filter((sp) => sp.start <= key && key <= sp.end);
+        const weekStart = i % 7 === 0;
         const classes = ['day-cell'];
         if (d.getMonth() !== ym.month) classes.push('other-month');
         if (key === today) classes.push('today');
-        if (workout) classes.push('has-workout');
+        if (drag && selStart <= key && key <= selEnd) classes.push('selecting');
         return (
           <div
             key={key}
+            data-date={key}
             className={classes.join(' ')}
-            onClick={(e) => onDayClick(key, e.currentTarget.getBoundingClientRect())}
+            onPointerDown={(e) => {
+              if (e.button === 0) setDrag({ from: key, to: key });
+            }}
+            onClick={(e) => {
+              if (skipClick.current) {
+                skipClick.current = false;
+                return;
+              }
+              props.onDayClick(key, e.currentTarget.getBoundingClientRect());
+            }}
           >
-            {workout && (
-              <div className="gym-banner" style={{ background: GYM_COLOR }}>
-                {workoutLabel(workout)}
+            <div className="cell-top">
+              {workout && (
+                <div className="gym-banner" style={{ background: workoutColor(workout) }}>
+                  {workoutLabel(workout)}
+                </div>
+              )}
+              <span className={workout ? 'day-number on-banner' : 'day-number'}>{d.getDate()}</span>
+            </div>
+
+            {daySpans.map((sp) => (
+              <div
+                key={sp.id}
+                className={[
+                  'span-bar',
+                  sp.start === key && 'span-start',
+                  sp.end === key && 'span-end',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                style={{ background: EVENT_COLOR_DARK }}
+                title={sp.label}
+                onPointerDown={(e) => e.stopPropagation()} // clicking a bar edits it, not a drag
+                onClick={(e) => {
+                  e.stopPropagation();
+                  props.onSpanClick(sp);
+                }}
+              >
+                {/* The label is written at the start, and again at the start of each week. */}
+                {(sp.start === key || weekStart) && sp.label}
               </div>
-            )}
-            <span className="day-number">{d.getDate()}</span>
+            ))}
+
             <div className="cell-events">
               {(key === today ? events : events.slice(0, MAX_EVENTS_SHOWN)).map((ev) => (
                 <div key={ev.id} className="cell-event">
                   <span className="event-dot" style={{ background: EVENT_COLOR }} />
                   <span className="cell-event-title">{ev.title}</span>
-                  {ev.time && <b className="cell-event-time">{formatTime(ev.time)}</b>}
+                  {ev.time && <span className="cell-event-time">{formatTime(ev.time)}</span>}
                 </div>
               ))}
               {key !== today && events.length > MAX_EVENTS_SHOWN && (

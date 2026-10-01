@@ -4,18 +4,20 @@ import { useCallback, useEffect, useState } from 'react';
 import BigMonth from '../calendar/BigMonth';
 import DayZoom from '../calendar/DayZoom';
 import EventEditor from '../calendar/EventEditor';
+import SpanEditor from '../calendar/SpanEditor';
 import MiniMonth from '../calendar/MiniMonth';
 import WorkoutEditor from '../calendar/WorkoutEditor';
-import { MONTH_NAMES, addMonths, thisMonth } from '../calendar/dates';
-import { db, type EventRecord, type WorkoutRecord } from '../db';
-import { newWorkout } from '../gym/workouts';
+import { MONTH_NAMES, addMonths, thisMonth, timeSortKey } from '../calendar/dates';
+import { db, type Cardio, type EventRecord, type SpanRecord, type WorkoutRecord } from '../db';
+import { newWorkout, saveWorkout } from '../gym/workouts';
 
 // What's open on top of the calendar right now.
 type Popup =
   | { kind: 'none' }
   | { kind: 'zoom' }
   | { kind: 'event'; event?: EventRecord }
-  | { kind: 'workout'; workout: WorkoutRecord };
+  | { kind: 'workout'; workout: WorkoutRecord }
+  | { kind: 'span'; start: string; end: string; span?: SpanRecord };
 
 
 export default function CalendarTab() {
@@ -23,15 +25,21 @@ export default function CalendarTab() {
   const [shown, setShown] = useState(thisMonth);
   const [eventsByDate, setEventsByDate] = useState(new Map<string, EventRecord[]>());
   const [workoutsByDate, setWorkoutsByDate] = useState(new Map<string, WorkoutRecord>());
+  const [spans, setSpans] = useState<SpanRecord[]>([]);
   const [day, setDay] = useState<{ date: string; rect: DOMRect | null } | null>(null);
   const [popup, setPopup] = useState<Popup>({ kind: 'none' });
 
   // Load all events and workouts from the database, grouped by date.
   const reload = useCallback(async () => {
-    const [events, workouts] = await Promise.all([db.events.toArray(), db.workouts.toArray()]);
+    const [events, workouts, allSpans] = await Promise.all([
+      db.events.toArray(),
+      db.workouts.toArray(),
+      db.spans.orderBy('start').toArray(),
+    ]);
+    setSpans(allSpans);
     const byDate = new Map<string, EventRecord[]>();
     events
-      .sort((a, b) => (a.time || '99').localeCompare(b.time || '99')) // timed events first, in order
+      .sort((a, b) => timeSortKey(a.time).localeCompare(timeSortKey(b.time))) // in time/block order
       .forEach((e) => byDate.set(e.date, [...(byDate.get(e.date) ?? []), e]));
     setEventsByDate(byDate);
     setWorkoutsByDate(new Map(workouts.map((w) => [w.date, w])));
@@ -52,6 +60,20 @@ export default function CalendarTab() {
     setPopup({ kind: 'zoom' });
     reload();
   };
+  // Cardio typed in the zoomed day: save it into that day's workout (making one if needed).
+  const saveCardio = async (cardio: Cardio) => {
+    const date = day!.date;
+    const w = (await db.workouts.get(date)) ?? (await newWorkout(date));
+    await saveWorkout({ ...w, cardio });
+    const saved = await db.workouts.get(date);
+    setWorkoutsByDate((m) => {
+      const next = new Map(m);
+      if (saved) next.set(date, saved);
+      else next.delete(date);
+      return next;
+    });
+  };
+
   const openWorkout = async () => {
     const date = day!.date;
     const workout = workoutsByDate.get(date) ?? (await db.workouts.get(date)) ?? (await newWorkout(date));
@@ -94,11 +116,18 @@ export default function CalendarTab() {
         ym={shown}
         eventsByDate={eventsByDate}
         workoutsByDate={workoutsByDate}
+        spans={spans}
         onDayClick={(date, rect) => {
           setDay({ date, rect });
           setPopup({ kind: 'zoom' });
         }}
+        onRangeSelected={(start, end) => setPopup({ kind: 'span', start, end })}
+        onSpanClick={(span) => setPopup({ kind: 'span', start: span.start, end: span.end, span })}
       />
+
+      {popup.kind === 'span' && (
+        <SpanEditor start={popup.start} end={popup.end} span={popup.span} onClose={closeAll} />
+      )}
 
       {day && popup.kind === 'zoom' && (
         <DayZoom
@@ -106,6 +135,8 @@ export default function CalendarTab() {
           from={day.rect}
           events={eventsByDate.get(day.date) ?? []}
           workout={workoutsByDate.get(day.date)}
+          spans={spans.filter((sp) => sp.start <= day.date && day.date <= sp.end)}
+          onCardioChange={saveCardio}
           onAddEvent={() => setPopup({ kind: 'event' })}
           onEditEvent={(event) => setPopup({ kind: 'event', event })}
           onWorkout={openWorkout}

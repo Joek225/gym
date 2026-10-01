@@ -9,7 +9,7 @@ import type {
 } from '@excalidraw/excalidraw/types';
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types';
 import { db, type EventRecord } from '../db';
-import { todayKey } from '../calendar/dates';
+import { timeSortKey, todayKey } from '../calendar/dates';
 import { eraseAlong } from './strokeEraser';
 import { STROKE_ERASER, StrokeEraserButton, useToolHotkeys } from './toolbar';
 import UpcomingEvents, { type UpcomingEventsHandle } from './UpcomingEvents';
@@ -93,7 +93,7 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
     setEvents(
       list
         .filter((e) => !e.struck)
-        .sort((a, b) => (a.date + (a.time || '99')).localeCompare(b.date + (b.time || '99'))),
+        .sort((a, b) => (a.date + timeSortKey(a.time)).localeCompare(b.date + timeSortKey(b.time))),
     );
   }, []);
 
