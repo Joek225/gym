@@ -65,8 +65,20 @@ export function formatLongDate(key: string): string {
   return parseKey(key).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
 }
 
-// "14:30" → "2:30pm" (or "14:30" style, depending on your device's settings)
+// School blocks you can pick instead of a clock time (in day order).
+export const BLOCKS = ['Block 1', 'Block 2', 'Block 3', 'Block 4', 'After school'];
+
+// An event's time: a clock time "14:30" → "2:30 PM", or a block name shown as is.
 export function formatTime(time: string): string {
+  if (!/^\d{1,2}:\d{2}$/.test(time)) return time; // a block, e.g. "Block 2"
   const [h, m] = time.split(':').map(Number);
   return new Date(2000, 0, 1, h, m).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+
+// For putting a day's events in order: blocks in block order, clock times by time,
+// and events with no time last.
+export function timeSortKey(time: string): string {
+  const block = BLOCKS.indexOf(time);
+  if (block >= 0) return `B${block}`;
+  return time ? `T${time.padStart(5, '0')}` : 'Z';
 }

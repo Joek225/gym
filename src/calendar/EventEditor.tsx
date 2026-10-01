@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { db, type EventRecord } from '../db';
 import { EVENT_COLOR } from '../gym/workouts';
-import { formatLongDate } from './dates';
+import { BLOCKS, formatLongDate } from './dates';
 import Modal from './Modal';
 
 interface Props {
@@ -52,10 +52,27 @@ export default function EventEditor({ date, event, onSaved, onClose }: Props) {
         <div className="editor-row">
           <span className="editor-icon">🕒</span>
           <span>{formatLongDate(date)}</span>
-          <input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+          {/* A clock time, OR a school block from the dropdown. Both can be left empty. */}
+          <input
+            type="time"
+            value={BLOCKS.includes(time) ? '' : time}
+            onChange={(e) => setTime(e.target.value)}
+          />
+          <select
+            className="block-select"
+            value={BLOCKS.includes(time) ? time : ''}
+            onChange={(e) => setTime(e.target.value)}
+          >
+            <option value="">Block…</option>
+            {BLOCKS.map((b) => (
+              <option key={b} value={b}>
+                {b}
+              </option>
+            ))}
+          </select>
           {time && (
             <button className="link-btn" onClick={() => setTime('')}>
-              no time
+              clear
             </button>
           )}
         </div>

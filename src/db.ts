@@ -23,8 +23,7 @@ export interface EventRecord {
   createdAt: number;
 }
 
-// One line of a workout: exercise - reps - partial reps - weight. Empty text = not filled in.
-// Weight is text, so it can be a number in kg or a word like "stack".
+// One line of a workout: exercise - reps - partial reps - weight (kg). Empty text = not filled in.
 export interface WorkoutRow {
   name: string;
   reps: string;
@@ -34,13 +33,31 @@ export interface WorkoutRow {
 
 export type WorkoutType = 'upper' | 'lower' | 'custom';
 
+// Cardio for a day: speed - incline - hours:mins (all text so boxes can be left empty).
+export interface Cardio {
+  speed: string;
+  incline: string;
+  hours: string;
+  mins: string;
+}
+
 // A day's workout (the red side of a day). One per date.
 export interface WorkoutRecord {
   date: string; // "2026-10-01"
   type: WorkoutType;
   customName: string; // only used for custom days, e.g. "Push" or "Cardio"
   rows: WorkoutRow[];
+  cardio?: Cardio; // older workouts don't have this
   updatedAt: number;
+}
+
+// A label across several days, e.g. "Holiday" from Oct 8 to Oct 10 (the long blue bar).
+export interface SpanRecord {
+  id: string;
+  start: string; // first day, "2026-10-08"
+  end: string; // last day, "2026-10-10"
+  label: string;
+  createdAt: number;
 }
 
 export const TODO_BOARD_NAME = 'To do list';
@@ -56,6 +73,7 @@ class AppDatabase extends Dexie {
   settings!: Table<SettingRecord, string>;
   events!: Table<EventRecord, string>;
   workouts!: Table<WorkoutRecord, string>;
+  spans!: Table<SpanRecord, string>;
 
   constructor() {
     super('gym-app');
@@ -97,6 +115,10 @@ class AppDatabase extends Dexie {
           await tx.table('whiteboard').update(first.id, { name: TODO_BOARD_NAME });
         }
       });
+    // Version 5: multi-day labels (blue bars).
+    this.version(5).stores({
+      spans: 'id, start',
+    });
   }
 }
 

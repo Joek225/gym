@@ -2,7 +2,7 @@
 // Each line reads:  exercise - reps - partial reps - weight
 //   • Upper/Lower days start with the template's exercise names already filled in.
 //   • Custom days (Wed/Sat/Sun) start empty and get a name of your choice.
-//   • Weight can be a number (kg) or a word like "stack". Partial reps are optional.
+//   • Weight is in kg (numbers only). Partial reps are optional.
 // Typing shortcuts (you never need to type the dashes):
 //   exercise: Enter, or " -"      → reps
 //   reps:     Space               → partial reps
@@ -15,7 +15,7 @@
 // reps AND weight (partial reps can stay empty). Untouched template lines are fine.
 import { useEffect, useRef, useState, type FocusEvent, type KeyboardEvent } from 'react';
 import type { WorkoutRecord, WorkoutRow } from '../db';
-import { GYM_COLOR, saveWorkout, workoutLabel } from '../gym/workouts';
+import { saveWorkout, workoutColor, workoutLabel } from '../gym/workouts';
 import { formatLongDate } from './dates';
 import Modal from './Modal';
 
@@ -140,7 +140,7 @@ export default function WorkoutEditor({ workout, onClose }: Props) {
 
   return (
     <Modal onClose={tryClose} className="workout-editor">
-      <div className="workout-header" style={{ background: GYM_COLOR }}>
+      <div className="workout-header" style={{ background: workoutColor(w) }}>
         {isCustom ? (
           <input
             className="workout-name-input"
@@ -197,9 +197,10 @@ export default function WorkoutEditor({ workout, onClose }: Props) {
             <input
               className="wl-num wl-weight"
               placeholder="kg"
+              inputMode="decimal"
               value={row.weight}
               ref={boxRef(i, 'weight')}
-              onChange={(e) => updateRow(i, { weight: e.target.value.replace(/[\s-]/g, '') })}
+              onChange={(e) => updateRow(i, { weight: e.target.value.replace(/[^0-9.]/g, '') })}
               onKeyDown={(e) => onKey(e, i, 'weight')}
             />
           </div>

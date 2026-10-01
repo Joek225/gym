@@ -1,7 +1,16 @@
 // Gym rules and templates: which workout each weekday gets, and the exercise lists.
-import { db, getSetting, setSetting, type WorkoutRecord, type WorkoutRow, type WorkoutType } from '../db';
+import {
+  db,
+  getSetting,
+  setSetting,
+  type Cardio,
+  type WorkoutRecord,
+  type WorkoutRow,
+  type WorkoutType,
+} from '../db';
 
 export const GYM_COLOR = '#A85868'; // the red (gym) color
+export const CUSTOM_GYM_COLOR = '#6B2A3A'; // darker red for Custom days (Wed/Sat/Sun)
 export const EVENT_COLOR = '#90D5FF'; // the blue (events) color
 // Slightly darker versions for the big zoomed-in day, so white text reads well on both.
 export const GYM_COLOR_DARK = '#8F4656';
@@ -22,6 +31,11 @@ const TYPE_BY_WEEKDAY: WorkoutType[] = [
 export function workoutTypeFor(date: string): WorkoutType {
   const [y, m, d] = date.split('-').map(Number);
   return TYPE_BY_WEEKDAY[new Date(y, m - 1, d).getDay()];
+}
+
+// The banner color: normal red for Upper/Lower, darker red for Custom days.
+export function workoutColor(w: WorkoutRecord): string {
+  return w.type === 'custom' ? CUSTOM_GYM_COLOR : GYM_COLOR;
 }
 
 // The label shown on the red banner: UPPER, LOWER, or the custom name.
@@ -79,9 +93,20 @@ export function isLogged(r: WorkoutRow): boolean {
   return !!(r.reps.trim() || r.partial?.trim() || r.weight.trim());
 }
 
+// True if any cardio box is filled in.
+export function hasCardio(c?: Cardio): boolean {
+  return !!c && !!(c.speed || c.incline || c.hours || c.mins);
+}
+
+// Cardio as text: "10 - 12 - 0:30" (speed - incline - hours:mins).
+export function formatCardio(c: Cardio): string {
+  const time = c.hours || c.mins ? `${c.hours || '0'}:${(c.mins || '0').padStart(2, '0')}` : '';
+  return [c.speed, c.incline, time].filter(Boolean).join(' - ');
+}
+
 // True if anything was actually logged (otherwise we don't keep the workout).
 export function hasContent(w: WorkoutRecord): boolean {
-  if (w.customName.trim()) return true;
+  if (w.customName.trim() || hasCardio(w.cardio)) return true;
   return w.rows.some((r) => isLogged(r) || (w.type === 'custom' && r.name.trim()));
 }
 
@@ -94,7 +119,7 @@ export function saveWorkout(w: WorkoutRecord) {
 
 // One line as text: "Lat Pulldown - 10 - 2 - 60kg" (partial reps left out if empty).
 export function formatLine(r: WorkoutRow): string {
-  const weight = /^[0-9.]+$/.test(r.weight) ? `${r.weight}kg` : r.weight;
+  const weight = r.weight ? `${r.weight}kg` : '';
   return [r.name, r.reps, r.partial, weight].filter((x) => x && x.trim()).join(' - ');
 }
 
