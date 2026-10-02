@@ -3,21 +3,22 @@
 //                              or empty space to add one.
 //   Left, bottom (dark blue) = reminders, the same way.
 //   Right, top (red)         = the workout: its type and every logged line. Click to open the sheet.
-//   Right, bottom (plum)     = cardio, typed in right here.
+//   Right, bottom (plum)     = cardio: what was logged. Click to open the cardio popup.
 // After saving anything, you come back here.
 import { useLayoutEffect, useRef } from 'react';
-import type { Cardio, EventRecord, SpanRecord, WorkoutRecord } from '../db';
+import type { EventRecord, SpanRecord, WorkoutRecord } from '../db';
 import {
   CARDIO_COLOR,
   CARDIO_TEXT,
   EVENT_COLOR_DARK,
   GYM_COLOR_DARK,
   REMINDER_COLOR,
+  formatCardio,
   formatLine,
+  hasCardio,
   isLogged,
   workoutLabel,
 } from '../gym/workouts';
-import CardioEditor from './CardioEditor';
 import { formatLongDate, formatTime } from './dates';
 
 interface Props {
@@ -26,7 +27,7 @@ interface Props {
   events: EventRecord[];
   workout?: WorkoutRecord;
   spans: SpanRecord[]; // multi-day labels covering this day (e.g. "Holiday")
-  onCardioChange: (c: Cardio | undefined) => void; // undefined = delete the cardio
+  onCardio: () => void;
   onAddEvent: (kind: 'event' | 'reminder') => void;
   onEditEvent: (e: EventRecord) => void;
   onWorkout: () => void;
@@ -115,8 +116,19 @@ export default function DayZoom(props: Props) {
               ))}
               <span className="zoom-hint">{lines.length ? 'Edit workout' : '+ Log workout'}</span>
             </div>
-            <div className="zoom-half zoom-cardio" style={{ background: CARDIO_COLOR, color: CARDIO_TEXT }}>
-              <CardioEditor cardio={workout?.cardio} onChange={props.onCardioChange} />
+            <div
+              className="zoom-half"
+              style={{ background: CARDIO_COLOR, color: CARDIO_TEXT }}
+              onClick={props.onCardio}
+            >
+              <div className="zoom-half-title">Cardio</div>
+              {workout?.cardio && hasCardio(workout.cardio) && (
+                <>
+                  <div className="zoom-lift">{formatCardio(workout.cardio)}</div>
+                  {workout.cardio.weight && <div className="zoom-lift">weight {workout.cardio.weight}kg</div>}
+                </>
+              )}
+              <span className="zoom-hint">{hasCardio(workout?.cardio) ? 'Edit cardio' : '+ Log cardio'}</span>
             </div>
           </div>
         </div>

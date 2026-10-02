@@ -14,12 +14,10 @@ import { eraseAlong } from './strokeEraser';
 import { STROKE_ERASER, StrokeEraserButton, useToolHotkeys } from './toolbar';
 import UpcomingEvents, { type UpcomingEventsHandle } from './UpcomingEvents';
 import CanvasButtons from './CanvasButtons';
-import TextStyleButtons, {
-  BOLD_FONT,
-  DEFAULT_FONT_SIZE,
-  DOUBLE,
-  type TextStyle,
-} from './TextStyleButtons';
+import FontSizeButtons, { DEFAULT_FONT_SIZE } from './FontSizeButtons';
+
+// New text boxes are double-spaced (Excalidraw's own default is about 1.15).
+const TEXT_LINE_HEIGHT = 2;
 
 // Excalidraw's own types for its callbacks.
 type Props = Parameters<typeof Excalidraw>[0];
@@ -57,10 +55,7 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
   // 1) When the board opens, load its saved drawing.
   useEffect(() => {
     // Load the Avenir font first, so text is measured with the right letter widths.
-    const fontReady = Promise.all([
-      document.fonts.load('20px Helvetica'),
-      document.fonts.load('20px "Liberation Sans"'), // the bold slot
-    ]).catch(() => {});
+    const fontReady = document.fonts.load('20px Helvetica').catch(() => {});
     Promise.all([db.whiteboard.get(boardId), fontReady]).then(([record]) => {
       const saved = record?.data as InitialData | null | undefined;
       if (saved) lastSaved.current = JSON.stringify(saved);
@@ -104,6 +99,7 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
   // The line you're drawing inside the to-do column. The column covers the board, so
   // Excalidraw's own line would be hidden there; we draw a copy on top so you can see it.
   const [strikePath, setStrikePath] = useState<[number, number][]>([]);
+  const strikePathRef = useRef<[number, number][]>([]);
   const seenIds = useRef(new Set<string>()); // drawings that existed before (not new lines)
   const spacedIds = useRef(new Set<string>()); // new text boxes already made double-spaced
 
@@ -174,14 +170,23 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
     return () => container.removeEventListener('wheel', onWheel, { capture: true });
   }, [isFirstBoard, container]);
 
-  // When a drawing is finished, check whether it landed in the to-do column.
-  // If it crosses out an event, hide that event. Either way, remove the drawing.
+  // The to-do list's box on the board (it's only as tall as the list itself).
+  const todoRect = () => {
+    const list = todoScrollRef.current;
+    if (!list || !container) return null;
+    const box = container.getBoundingClientRect();
+    const r = list.getBoundingClientRect();
+    return { left: r.left - box.left, right: r.right - box.left, top: r.top - box.top, bottom: r.bottom - box.top };
+  };
+
+  // When a drawing is finished, check whether it landed on the to-do list.
+  // Anything drawn there is removed (the list stays clear). Below the list you can draw freely.
   const checkTodoColumn = (elements: readonly ExcalidrawElement[], appState: any) => {
     const newOnes = elements.filter((el) => !seenIds.current.has(el.id));
     newOnes.forEach((el) => seenIds.current.add(el.id));
-    if (!isFirstBoard || !api || !column || !container) return;
+    const area = isFirstBoard && api ? todoRect() : null;
+    if (!area) return;
 
-    const box = container.getBoundingClientRect();
     const zoom = appState.zoom.value;
     const toScreenX = (x: number) => (x + appState.scrollX) * zoom;
     const toScreenY = (y: number) => (y + appState.scrollY) * zoom;
@@ -193,52 +198,83 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
       const pts: number[][] = el.points ?? [[0, 0], [el.width, el.height]];
       const xs = pts.map((p) => toScreenX(el.x + p[0]));
       const ys = pts.map((p) => toScreenY(el.y + p[1]));
-      const left = Math.min(...xs);
-      const right = Math.max(...xs);
-      const top = Math.min(...ys);
-      const bottom = Math.max(...ys);
-      if (right < column.left || bottom < column.top) continue; // not in the column: keep it
-
-      toRemove.add(el.id);
-      if (!['freedraw', 'line', 'arrow'].includes(el.type)) continue;
-      const middleY = (top + bottom) / 2;
-      const hit = upcomingRef.current?.rowRects().find(({ id, rect }) => {
-        const r = { left: rect.left - box.left, right: rect.right - box.left, top: rect.top - box.top, bottom: rect.bottom - box.top };
-        const overlap = Math.min(right, r.right) - Math.max(left, r.left);
-        return (
-          !!id &&
-          overlap > (r.right - r.left) * 0.3 && // covers a good part of the row's width
-          middleY > r.top - 6 &&
-          middleY < r.bottom + 6 && // goes through this row
-          bottom - top < (r.bottom - r.top) * 2.5 // mostly sideways, not a big scribble
-        );
-      });
-      if (hit) {
-        db.events.update(hit.id, { struck: true });
-        // Show the row crossed out for a moment, then remove it from the list.
-        setStruckIds((ids) => [...ids, hit.id]);
-        window.setTimeout(() => {
-          setEvents((list) => list.filter((e) => e.id !== hit.id));
-          setStruckIds((ids) => ids.filter((x) => x !== hit.id));
-        }, 700);
-      }
+      const overlaps =
+        Math.max(...xs) > area.left &&
+        Math.min(...xs) < area.right &&
+        Math.max(...ys) > area.top &&
+        Math.min(...ys) < area.bottom;
+      if (overlaps) toRemove.add(el.id);
     }
 
     if (toRemove.size === 0) return;
-    api.updateScene({
-      elements: api
+    api!.updateScene({
+      elements: api!
         .getSceneElementsIncludingDeleted()
         .map((x) => (toRemove.has(x.id) ? { ...x, isDeleted: true, version: x.version + 1 } : x)),
       captureUpdate: CaptureUpdateAction.NEVER,
     });
   };
 
+  // Letting go of the mouse/finger ends a cross-out line.
+  const finishStrike = () => {
+    const path = strikePathRef.current;
+    if (!path.length) return;
+    strikePathRef.current = [];
+    crossOut(path);
+    window.setTimeout(() => setStrikePath([]), 250); // let the line linger for a moment
+  };
+  const finishStrikeRef = useRef(finishStrike);
+  finishStrikeRef.current = finishStrike;
+  useEffect(() => {
+    const onUp = () => finishStrikeRef.current();
+    window.addEventListener('pointerup', onUp);
+    return () => window.removeEventListener('pointerup', onUp);
+  }, []);
+
+  // A line drawn across the to-do list (with any tool except the hand) crosses out the row it
+  // goes through. It doesn't need to be straight or centered: the row whose middle is closest
+  // to the line wins, as long as the line runs a fair way across it.
+  const crossOut = (path: [number, number][]) => {
+    const container_ = container;
+    if (!container_ || path.length < 2) return;
+    const box = container_.getBoundingClientRect();
+    const xs = path.map((p) => p[0]);
+    const ys = path.map((p) => p[1]);
+    const left = Math.min(...xs);
+    const right = Math.max(...xs);
+    if (right - left < 30) return; // a click or a tiny wiggle
+    if (Math.max(...ys) - Math.min(...ys) > 140) return; // a big scribble, not a cross-out
+
+    let best: { id: string; dist: number } | null = null;
+    for (const { id, rect } of upcomingRef.current?.rowRects() ?? []) {
+      const r = { left: rect.left - box.left, right: rect.right - box.left, top: rect.top - box.top, bottom: rect.bottom - box.top };
+      const overlap = Math.min(right, r.right) - Math.max(left, r.left);
+      if (overlap < Math.min(40, (r.right - r.left) * 0.25)) continue;
+      // Average height of the line where it passes over this row.
+      const over = path.filter((p) => p[0] >= r.left && p[0] <= r.right);
+      const avgY = over.reduce((sum, p) => sum + p[1], 0) / Math.max(over.length, 1);
+      const dist = Math.abs(avgY - (r.top + r.bottom) / 2);
+      if (dist > (r.bottom - r.top) / 2 + 16) continue; // too far above/below this row
+      if (!best || dist < best.dist) best = { id, dist };
+    }
+    if (!best) return;
+    const id = best.id;
+    db.events.update(id, { struck: true });
+    // Show the row crossed out for a moment, then remove it from the list.
+    setStruckIds((ids) => [...ids, id]);
+    window.setTimeout(() => {
+      setEvents((list) => list.filter((e) => e.id !== id));
+      setStruckIds((ids) => ids.filter((x) => x !== id));
+    }, 700);
+  };
+
+
   // ---------- Stroke eraser ----------
   const [strokeEraserOn, setStrokeEraserOn] = useState(false);
   // Spacing for new text boxes (double by default; the Spacing buttons change it).
-  const spacingDefault = useRef(DOUBLE);
+
   // What the text buttons show as picked: the selected text's style, or the new-text style.
-  const [textStyle, setTextStyle] = useState<TextStyle>({ size: DEFAULT_FONT_SIZE, bold: false, spacing: DOUBLE });
+  const [fontSizeNow, setFontSizeNow] = useState<number | null>(DEFAULT_FONT_SIZE);
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
   const lastErasePoint = useRef<[number, number] | null>(null);
 
@@ -253,16 +289,22 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
   const handlePointerUpdate: OnPointerUpdate = ({ pointer, button }) => {
     if (!api) return;
 
-    // Drawing in the to-do column: keep a visible copy of the line on top of the column.
-    if (isFirstBoard && column && !strokeEraserOn) {
+    // Dragging across the to-do list: draw a visible copy of the line on top of the list,
+    // and when you let go, cross out the row it went through.
+    if (isFirstBoard && column && !strokeEraserOn && api.getAppState().activeTool.type !== 'hand') {
       const st = api.getAppState();
-      const drawing = ['freedraw', 'line', 'arrow'].includes(st.activeTool.type);
       const x = (pointer.x + st.scrollX) * st.zoom.value;
       const y = (pointer.y + st.scrollY) * st.zoom.value;
-      if (drawing && button === 'down') {
-        setStrikePath((path) => (path.length || (x >= column.left && y >= column.top) ? [...path, [x, y]] : path));
-      } else if (strikePath.length) {
-        window.setTimeout(() => setStrikePath([]), 250); // let it linger for a moment
+      const path = strikePathRef.current;
+      if (button === 'down') {
+        const area = todoRect();
+        const startsOnList = !!area && x >= area.left && x <= area.right && y >= area.top && y <= area.bottom;
+        if (path.length || startsOnList) {
+          strikePathRef.current = [...path, [x, y]];
+          setStrikePath(strikePathRef.current);
+        }
+      } else if (path.length) {
+        finishStrike();
       }
     }
 
@@ -294,14 +336,14 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
 
   // Excalidraw calls this on every change (each stroke, typed letter, even mouse moves).
   const handleChange: OnChange = (elements, appState, files) => {
-    // A brand-new text box: give it the chosen line spacing (once per text box).
+    // A brand-new text box: make it double-spaced (once per text box).
     const editing = appState.editingTextElement as any;
     if (api && editing && !seenIds.current.has(editing.id) && !spacedIds.current.has(editing.id)) {
       spacedIds.current.add(editing.id);
       api.updateScene({
         elements: api
           .getSceneElementsIncludingDeleted()
-          .map((el: any) => (el.id === editing.id ? { ...el, lineHeight: spacingDefault.current } : el)),
+          .map((el: any) => (el.id === editing.id ? { ...el, lineHeight: TEXT_LINE_HEIGHT } : el)),
         captureUpdate: CaptureUpdateAction.NEVER,
       });
     }
@@ -310,16 +352,8 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
     const selectedText = elements.find(
       (el) => el.type === 'text' && (appState.selectedElementIds[el.id] || el.id === editing?.id),
     ) as any;
-    const styleNow: TextStyle = selectedText
-      ? { size: selectedText.fontSize, bold: selectedText.fontFamily === BOLD_FONT, spacing: selectedText.lineHeight }
-      : { size: appState.currentItemFontSize, bold: appState.currentItemFontFamily === BOLD_FONT, spacing: spacingDefault.current };
-    if (
-      styleNow.size !== textStyle.size ||
-      styleNow.bold !== textStyle.bold ||
-      styleNow.spacing !== textStyle.spacing
-    ) {
-      setTextStyle(styleNow);
-    }
+    const sizeNow = selectedText ? selectedText.fontSize : appState.currentItemFontSize;
+    if (sizeNow !== fontSizeNow) setFontSizeNow(sizeNow);
 
     const tool = appState.activeTool;
     const eraserNow = tool.type === 'custom' && tool.customType === STROKE_ERASER;
@@ -376,15 +410,7 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
       {/* Clear-board button, just left of the toolbar */}
       <CanvasButtons api={api} container={container} />
 
-      <TextStyleButtons
-        container={container}
-        api={api}
-        current={textStyle}
-        onSpacingDefault={(sp) => {
-          spacingDefault.current = sp;
-          setTextStyle((t) => ({ ...t, spacing: sp }));
-        }}
-      />
+      <FontSizeButtons container={container} api={api} current={fontSizeNow} />
 
       <StrokeEraserButton container={container} active={strokeEraserOn} onSelect={selectStrokeEraser} />
 

@@ -16,6 +16,7 @@ interface Props {
 }
 
 const isClock = (t: string) => /^\d{1,2}:\d{2}$/.test(t);
+const CLOCK_OPTION = '__clock__'; // the "Time" choice in the dropdown: back to a clock time
 
 export default function EventEditor({ date, kind, event, onSaved, onClose }: Props) {
   const [title, setTitle] = useState(event?.title ?? '');
@@ -59,27 +60,23 @@ export default function EventEditor({ date, kind, event, onSaved, onClose }: Pro
         />
         <div className="editor-row">
           <span>{formatLongDate(date)}</span>
-          {/* A typed clock time — or, if a block (or a range) was picked, that instead. */}
+          {/* A typed clock time — or, if a block was picked, its name instead. */}
           {time && !isClock(time) ? (
-            <span className="time-chip">
-              {formatTime(time)}
-              <button className="link-btn" onClick={() => setTime('')} title="Clear">
-                ×
-              </button>
-            </span>
+            <span className="time-chip">{formatTime(time)}</span>
           ) : (
             <input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
           )}
-          {/* Just a ▾ arrow: opens the list of school blocks */}
+          {/* Just a ▾ arrow: pick a school block, or "Time" to go back to a clock time */}
           <select
             className="block-arrow"
             value=""
             title="Pick a block"
-            onChange={(e) => e.target.value && setTime(e.target.value)}
+            onChange={(e) => setTime(e.target.value === CLOCK_OPTION ? '' : e.target.value)}
           >
             <option value="" disabled hidden>
               ▾
             </option>
+            <option value={CLOCK_OPTION}>Time</option>
             {BLOCKS.map((b) => (
               <option key={b} value={b}>
                 {b}

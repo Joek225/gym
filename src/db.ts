@@ -34,12 +34,13 @@ export interface WorkoutRow {
 
 export type WorkoutType = 'upper' | 'lower' | 'custom';
 
-// Cardio for a day: speed - incline - hours:mins (all text so boxes can be left empty).
+// Cardio for a day: speed - incline - hours:mins, plus weight (all text so boxes can be empty).
 export interface Cardio {
   speed: string;
   incline: string;
   hours: string;
   mins: string;
+  weight?: string; // kg (older entries don't have this)
 }
 
 // A day's workout (the red side of a day). One per date.
