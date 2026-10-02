@@ -45,7 +45,12 @@ const UpcomingEvents = forwardRef<UpcomingEventsHandle, Props>(function Upcoming
   }));
 
   return (
-    <aside className="todo-column" ref={scrollRef} style={{ left: position.left, top: position.top }}>
+    <aside
+      className="todo-column"
+      ref={scrollRef}
+      // Only as tall as the list (so you can write below it), scrolling if it gets too long.
+      style={{ left: position.left, top: position.top, maxHeight: `calc(100% - ${position.top + 16}px)` }}
+    >
       <div className="todo-title">
         To do
         <button className="todo-revert" onClick={onRevert} title="Bring back everything you crossed out">

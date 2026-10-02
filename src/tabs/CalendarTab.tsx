@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import BigMonth from '../calendar/BigMonth';
 import DayZoom from '../calendar/DayZoom';
+import CardioEditor from '../calendar/CardioEditor';
 import EventEditor from '../calendar/EventEditor';
 import SpanEditor from '../calendar/SpanEditor';
 import MiniMonth from '../calendar/MiniMonth';
@@ -17,6 +18,7 @@ type Popup =
   | { kind: 'zoom' }
   | { kind: 'event'; eventKind: 'event' | 'reminder'; event?: EventRecord }
   | { kind: 'workout'; workout: WorkoutRecord }
+  | { kind: 'cardio' }
   | { kind: 'span'; start: string; end: string; span?: SpanRecord };
 
 
@@ -60,7 +62,7 @@ export default function CalendarTab() {
     setPopup({ kind: 'zoom' });
     reload();
   };
-  // Cardio typed in the zoomed day: save it into that day's workout (making one if needed).
+  // Cardio from the cardio popup: save it into that day's workout (making one if needed).
   const saveCardio = async (cardio: Cardio | undefined) => {
     const date = day!.date;
     const w = (await db.workouts.get(date)) ?? (await newWorkout(date));
@@ -137,7 +139,7 @@ export default function CalendarTab() {
           events={eventsByDate.get(day.date) ?? []}
           workout={workoutsByDate.get(day.date)}
           spans={spans.filter((sp) => sp.start <= day.date && day.date <= sp.end)}
-          onCardioChange={saveCardio}
+          onCardio={() => setPopup({ kind: 'cardio' })}
           onAddEvent={(eventKind) => setPopup({ kind: 'event', eventKind })}
           onEditEvent={(event) => setPopup({ kind: 'event', eventKind: event.kind ?? 'event', event })}
           onWorkout={openWorkout}
@@ -151,6 +153,18 @@ export default function CalendarTab() {
           kind={popup.eventKind}
           event={popup.event}
           onSaved={backToZoom}
+          onClose={backToZoom}
+        />
+      )}
+
+      {day && popup.kind === 'cardio' && (
+        <CardioEditor
+          date={day.date}
+          cardio={workoutsByDate.get(day.date)?.cardio}
+          onSave={async (c) => {
+            await saveCardio(c);
+            backToZoom();
+          }}
           onClose={backToZoom}
         />
       )}

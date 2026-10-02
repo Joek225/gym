@@ -1,8 +1,6 @@
 // Gym rules and templates: which workout each weekday gets, and the exercise lists.
 import {
   db,
-  getSetting,
-  setSetting,
   type Cardio,
   type WorkoutRecord,
   type WorkoutRow,
@@ -54,35 +52,35 @@ export interface Templates {
   lower: string[];
 }
 
-export const DEFAULT_TEMPLATES: Templates = {
+// The exercise lists for Upper and Lower days, in the order you do them.
+// To change them, edit these lists. (Changes only affect NEW workouts.)
+export const TEMPLATES: Templates = {
   upper: [
     'Lat Pulldown',
     'T-Bar Row',
-    'Smith Shoulder Press',
     'Incline Chest Machine Press',
     'Cable Chest Fly',
-    'Hammer Curl',
-    'Preacher Curl',
+    'Smith Shoulder Press',
     'Tricep Pushdown',
+    'Tricep Overhead Extension',
+    'Preacher Curl',
+    'Hammer Curl',
     'Lateral Raise',
   ],
-  lower: ['Deadlift', 'Quad Extension', 'Lying Hamstring Curl', 'Angled Hack Squat', 'Hip Thrust'],
+  lower: ['Deadlift', 'Quad Extension', 'Lying Hamstring Curl', 'Hack Squat', 'Hip Thrust'],
 };
 
-export async function getTemplates(): Promise<Templates> {
-  return (await getSetting<Templates>('templates')) ?? DEFAULT_TEMPLATES;
-}
-
-export function saveTemplates(t: Templates) {
-  return setSetting('templates', t);
-}
+// Exercises you do a few different ways: the sheet asks which one before you log it,
+// and the choice becomes part of the name (e.g. "Cable Lateral Raise").
+export const VARIANTS: Record<string, string[]> = {
+  'Lateral Raise': ['Cable', 'Dumbbell'],
+};
 
 // A new workout for a date. Upper/Lower days start with the template's exercise names
 // (copied, so later template changes don't touch this workout).
 export async function newWorkout(date: string): Promise<WorkoutRecord> {
   const type = workoutTypeFor(date);
-  const templates = await getTemplates();
-  const names = type === 'custom' ? [''] : templates[type];
+  const names = type === 'custom' ? [''] : TEMPLATES[type];
   return {
     date,
     type,
@@ -104,7 +102,7 @@ export function hasLifts(w: WorkoutRecord): boolean {
 
 // True if any cardio box is filled in.
 export function hasCardio(c?: Cardio): boolean {
-  return !!c && !!(c.speed || c.incline || c.hours || c.mins);
+  return !!c && !!(c.speed || c.incline || c.hours || c.mins || c.weight);
 }
 
 // Cardio as text: "10 - 12 - 0:30" (speed - incline - hours:mins).

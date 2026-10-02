@@ -11,11 +11,13 @@
 //             Enter               → another set of the same exercise, on a new line below
 //   Backspace in an empty box     → back one box
 // A line whose exercise name is left empty disappears when you leave it.
+// Some exercises (e.g. Lateral Raise) first ask which kind — "Cable | Dumbbell" — and the
+// choice becomes the name ("Cable Lateral Raise"); then the normal boxes appear.
 // You can't close the sheet while a line is half done: once a line is started it needs
 // reps AND weight (partial reps can stay empty). Untouched template lines are fine.
 import { useEffect, useRef, useState, type FocusEvent, type KeyboardEvent } from 'react';
 import type { WorkoutRecord, WorkoutRow } from '../db';
-import { GYM_COLOR, saveWorkout, workoutLabel } from '../gym/workouts';
+import { GYM_COLOR, VARIANTS, saveWorkout, workoutLabel } from '../gym/workouts';
 import { formatLongDate } from './dates';
 import Modal from './Modal';
 
@@ -158,7 +160,29 @@ export default function WorkoutEditor({ workout, onClose }: Props) {
 
       <div className="workout-lines">
         <div className="workout-legend">exercise - reps - partial reps - weight</div>
-        {w.rows.map((row, i) => (
+        {w.rows.map((row, i) =>
+          VARIANTS[row.name] ? (
+            // Pick a kind first; the boxes appear once one is picked.
+            <div className="workout-line" key={i}>
+              <span className="wl-name wl-static">{row.name}</span>
+              <span className="variant-pick">
+                {VARIANTS[row.name].map((kind, k) => (
+                  <span key={kind}>
+                    {k > 0 && <span className="wl-dash"> | </span>}
+                    <button
+                      className="link-btn"
+                      onClick={() => {
+                        updateRow(i, { name: `${kind} ${row.name}` });
+                        go(i, 'reps');
+                      }}
+                    >
+                      {kind}
+                    </button>
+                  </span>
+                ))}
+              </span>
+            </div>
+          ) : (
           <div
             className={showMissing && missing[i] ? 'workout-line missing' : 'workout-line'}
             key={i}
@@ -204,7 +228,8 @@ export default function WorkoutEditor({ workout, onClose }: Props) {
               onKeyDown={(e) => onKey(e, i, 'weight')}
             />
           </div>
-        ))}
+          ),
+        )}
         <button className="link-btn add-line" onClick={() => addRow(w.rows.length)}>
           + Add line
         </button>

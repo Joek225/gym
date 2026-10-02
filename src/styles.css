@@ -38,24 +38,6 @@ button {
     format('woff2');
 }
 
-/* Bold whiteboard text. Excalidraw has no bold, so we borrow its "Liberation Sans" font slot
-   (its own Liberation font file is left out of the site) and point it at Avenir's bold.
-   Where Avenir isn't installed, a common system bold font is used instead. */
-@font-face {
-  font-family: 'Liberation Sans';
-  src:
-    local('Avenir Next Demi Bold'),
-    local('AvenirNext-DemiBold'),
-    local('Avenir Heavy'),
-    local('Avenir-Heavy'),
-    local('Arial Bold'),
-    local('Arial-BoldMT'),
-    local('Roboto Bold'),
-    local('Roboto-Bold'),
-    local('DejaVu Sans Bold'),
-    local('DejaVuSans-Bold');
-}
-
 /* Excalidraw's own buttons and menus use Avenir too */
 .excalidraw {
   --ui-font: 'Avenir Next', Avenir, 'Avenir Fallback', sans-serif !important;
@@ -344,7 +326,7 @@ button {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  min-height: 0;
+  min-height: var(--cell-min-h);
   padding: 0 0 4px; /* banners and bars reach the cell's edges */
   cursor: pointer;
   user-select: none; /* dragging across days shouldn't highlight text */
@@ -389,7 +371,7 @@ button {
 .cell-top {
   position: relative;
   flex: none;
-  height: 20%;
+  height: calc(var(--cell-min-h) / 4.5);
   min-height: 22px;
   display: flex;
   align-items: center;
@@ -563,9 +545,9 @@ button {
 .todo-column {
   position: absolute;
   right: 0;
-  bottom: 0;
-  padding: 16px 20px;
+  padding: 16px 20px 8px;
   border-left: 1px dashed var(--border);
+  border-bottom: 1px dashed var(--border); /* where the list ends; you can write below it */
   background: var(--bg); /* same as the board, and covers any drawing underneath */
   font-family: 'Helvetica', sans-serif; /* same Avenir font slot as whiteboard text */
   overflow-y: auto; /* scrolls when the list is long */
@@ -671,7 +653,8 @@ button {
 .excalidraw .default-sidebar-trigger,
 .excalidraw .main-menu-trigger,
 .excalidraw .dropdown-menu-item[data-testid='toolbar-embeddable'] ~ .dropdown-menu-item[data-testid='toolbar-embeddable'],
-.excalidraw .dropdown-menu-item[data-testid='toolbar-laser'] + div {
+.excalidraw .dropdown-menu-item[data-testid='toolbar-laser'] + div,
+.excalidraw .dropdown-menu-item[data-testid='toolbar-frame'] {
   display: none !important;
 }
 
@@ -701,21 +684,16 @@ button {
   display: none !important;
 }
 
-/* Style panel: no Font family, no Opacity slider, no Actions row (duplicate/delete/link).
-   (Actions is the last section, right after Layers, and only shows when something is selected.) */
+/* Style panel, kept short:
+   - no Font family, Text align (always left), Opacity, or Actions row (duplicate/delete/link;
+     it's the last section, right after Layers, and only shows when something is selected)
+   - the pen gets no Background colors (pen panels have no "Fill" section, shapes do) */
 .excalidraw .panelColumn > fieldset:has([data-testid='font-family-normal']),
+.excalidraw .panelColumn > fieldset:has([data-testid='align-left']),
 .excalidraw .panelColumn > label:has([data-testid='opacity']),
-.excalidraw .panelColumn > fieldset + fieldset:last-child {
+.excalidraw .panelColumn > fieldset + fieldset:last-child,
+.excalidraw .panelColumn:not(:has([data-testid^='fill-'])) > div:has([data-testid='color-top-pick-transparent']) {
   display: none !important;
-}
-
-.text-extra-slot {
-  display: contents; /* our Style / Spacing sections sit in the panel like Excalidraw's own */
-}
-
-.text-extra-slot .buttonList label {
-  width: auto !important; /* "Single" / "Double" need more room than an icon */
-  padding: 0 4px;
 }
 
 /* No clock icon in the time box (just -- : -- --) */
@@ -1106,41 +1084,20 @@ input[type='time']::-webkit-calendar-picker-indicator {
   min-height: 0;
 }
 
-.zoom-cardio {
-  cursor: default;
+
+
+/* Cardio popup: speed - incline - h:mm, then weight */
+.cardio-sheet {
+  padding: 14px 20px 4px;
 }
 
-.zoom-cardio:hover {
-  filter: none;
+.cardio-weight-label {
+  margin-top: 14px;
 }
 
-/* Cardio line in the zoomed day: speed - incline - h:mm */
-.cardio {
-  width: 100%;
-}
-
-.cardio-delete {
-  margin-left: 12px;
-  padding: 2px 10px;
-  border: 1px solid currentColor;
-  background: none;
-  color: inherit;
-  font-size: 13px;
-  letter-spacing: 0;
-  text-transform: none;
-  opacity: 0.8;
-}
-
-.cardio-delete:hover {
-  opacity: 1;
-}
-
-.cardio-title {
-  font-size: 18px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  opacity: 0.9;
-  margin-bottom: 6px;
+.muted-unit {
+  color: var(--muted);
+  font-size: 16px;
 }
 
 .cardio-line {
@@ -1151,7 +1108,7 @@ input[type='time']::-webkit-calendar-picker-indicator {
 }
 
 .cardio-box {
-  width: 5ch;
+  width: 6ch;
   padding: 4px 2px;
   border: none;
   border-bottom: 1px solid currentColor;
@@ -1174,6 +1131,10 @@ input[type='time']::-webkit-calendar-picker-indicator {
 .cardio-hours,
 .cardio-mins {
   width: 3ch;
+}
+
+.cardio-weight {
+  width: 7ch;
 }
 
 /* A multi-day label (e.g. "Holiday") shown in the zoomed day */
@@ -1269,6 +1230,20 @@ input[type='time']::-webkit-calendar-picker-indicator {
   width: 7ch;
 }
 
+.wl-static {
+  padding: 4px 2px;
+}
+
+.variant-pick .link-btn {
+  font-size: 16px;
+  color: var(--text);
+  padding: 4px 6px;
+}
+
+.variant-pick .link-btn:hover {
+  color: var(--accent);
+}
+
 .wl-dash {
   color: var(--muted);
 }
@@ -1331,25 +1306,8 @@ input[type='time']::-webkit-calendar-picker-indicator {
   .zoom-item-notes,
   .zoom-lift,
   .zoom-hint,
-  .cardio-delete {
-  margin-left: 12px;
-  padding: 2px 10px;
-  border: 1px solid currentColor;
-  background: none;
-  color: inherit;
-  font-size: 13px;
-  letter-spacing: 0;
-  text-transform: none;
-  opacity: 0.8;
-}
+  
 
-.cardio-delete:hover {
-  opacity: 1;
-}
-
-.cardio-title {
-    font-size: 15px;
-  }
   .cardio-line {
     font-size: 15px;
     gap: 4px;
@@ -1374,4 +1332,269 @@ input[type='time']::-webkit-calendar-picker-indicator {
 *::before,
 *::after {
   font-weight: 400 !important;
+}
+
+/* ---- Spotify tab (dark, like Stats for Spotify; highlights in Smiski green) ---- */
+.spotify {
+  --sp-green: #79c38c; /* the green from the Smiski icon */
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 20px 16px 40px;
+}
+
+.sp-setup {
+  max-width: 640px;
+  margin: 24px auto;
+  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.sp-setup h2 {
+  margin: 0 0 8px;
+}
+
+.sp-setup ol {
+  padding-left: 20px;
+  line-height: 1.7;
+}
+
+.sp-setup a {
+  color: var(--sp-green);
+}
+
+.sp-code {
+  padding: 2px 6px;
+  background: var(--bg);
+  color: var(--sp-green);
+  user-select: all; /* one click selects it all, easy to copy */
+}
+
+.sp-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.sp-input {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+
+.sp-input:focus {
+  border-color: var(--sp-green);
+}
+
+.sp-btn {
+  padding: 10px 20px;
+  border: none;
+  background: var(--sp-green);
+  color: #0f1a12;
+  font-size: 15px;
+}
+
+.sp-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.sp-error {
+  color: #ff8a8a;
+}
+
+.sp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.sp-me {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 22px;
+}
+
+.sp-me img {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+}
+
+/* Top tracks / Top artists / … */
+.sp-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.sp-tabs button {
+  padding: 12px 16px;
+  border: none;
+  border-bottom: 3px solid transparent;
+  background: none;
+  color: var(--muted);
+  font-size: 16px;
+  white-space: nowrap;
+}
+
+.sp-tabs button.active {
+  color: var(--text);
+  border-bottom-color: var(--sp-green);
+}
+
+/* Last 4 weeks / 6 months / All time */
+.sp-ranges {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0;
+  flex-wrap: wrap;
+}
+
+.sp-ranges button {
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--muted);
+}
+
+.sp-ranges button.active {
+  border-color: var(--sp-green);
+  background: var(--sp-green);
+  color: #0f1a12;
+}
+
+.sp-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.sp-track {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sp-track img {
+  width: 52px;
+  height: 52px;
+  object-fit: cover;
+  flex: none;
+}
+
+.sp-rank {
+  width: 32px;
+  flex: none;
+  text-align: right;
+  color: var(--sp-green);
+  font-size: 18px;
+}
+
+.sp-track-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.sp-title {
+  font-size: 17px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sp-sub {
+  color: var(--muted);
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sp-when {
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+/* Top artists: a grid of big pictures */
+.sp-artists {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 20px 16px;
+}
+
+.sp-artists li {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sp-artist-img {
+  aspect-ratio: 1;
+  background: var(--surface) center / cover no-repeat;
+}
+
+.sp-rank-inline {
+  color: var(--sp-green);
+}
+
+/* Top genres: name + bar */
+.sp-genres {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.sp-genres li {
+  display: grid;
+  grid-template-columns: 32px minmax(120px, 260px) 1fr;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 4px;
+}
+
+.sp-genre-name {
+  font-size: 16px;
+  text-transform: capitalize;
+}
+
+.sp-bar {
+  height: 10px;
+  background: var(--surface);
+}
+
+.sp-bar span {
+  display: block;
+  height: 100%;
+  background: var(--sp-green);
+}
+
+@media (max-width: 600px) {
+  .sp-artists {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .sp-genres li {
+    grid-template-columns: 24px 1fr 1fr;
+  }
+  .sp-track img {
+    width: 44px;
+    height: 44px;
+  }
 }

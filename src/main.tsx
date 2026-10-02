@@ -8,6 +8,12 @@ import App from './App';
 (window as unknown as { EXCALIDRAW_ASSET_PATH: string }).EXCALIDRAW_ASSET_PATH = import.meta.env.BASE_URL;
 import './styles.css';
 
+// Coming back from Spotify's login page (".../gym/?code=..."): open the Spotify tab,
+// which finishes signing in.
+if (new URLSearchParams(window.location.search).has('code') || new URLSearchParams(window.location.search).has('error')) {
+  window.location.hash = '/spotify';
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />

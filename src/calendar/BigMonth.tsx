@@ -20,7 +20,6 @@ import {
 } from '../gym/workouts';
 import { WEEKDAYS, dateKey, formatTime, monthGrid, todayKey, type YearMonth } from './dates';
 
-const MAX_EVENTS_SHOWN = 3;
 // Reminder dots: the dark reminder blue, with a light ring so it shows on the dark calendar.
 const REMINDER_DOT = REMINDER_COLOR;
 
@@ -108,7 +107,9 @@ export default function BigMonth(props: Props) {
       ref={gridRef}
       style={{
         gridTemplateColumns: columns,
-        gridTemplateRows: `auto repeat(${weeks}, minmax(var(--cell-min-h), 1fr))`,
+        // Each week is at least as tall as its busiest day (so every event shows),
+        // and the weeks share any extra height to fill the screen.
+        gridTemplateRows: `auto repeat(${weeks}, minmax(auto, 1fr))`,
       }}
       onPointerMove={(e) => {
         if (!drag) return;
@@ -207,7 +208,7 @@ export default function BigMonth(props: Props) {
             ))}
 
             <div className="cell-events">
-              {(key === today ? events : events.slice(0, MAX_EVENTS_SHOWN)).map((ev) => (
+              {events.map((ev) => (
                 <div key={ev.id} className="cell-event">
                   <span
                     className="event-dot"
@@ -217,9 +218,6 @@ export default function BigMonth(props: Props) {
                   {ev.time && <span className="cell-event-time">{formatTime(ev.time)}</span>}
                 </div>
               ))}
-              {key !== today && events.length > MAX_EVENTS_SHOWN && (
-                <div className="cell-more">+{events.length - MAX_EVENTS_SHOWN} more</div>
-              )}
             </div>
           </div>
         );
