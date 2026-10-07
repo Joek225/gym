@@ -15,6 +15,7 @@ import { STROKE_ERASER, StrokeEraserButton, useToolHotkeys } from './toolbar';
 import UpcomingEvents, { type UpcomingEventsHandle } from './UpcomingEvents';
 import CanvasButtons from './CanvasButtons';
 import FontSizeButtons, { DEFAULT_FONT_SIZE } from './FontSizeButtons';
+import { renderEmbeddable, validateEmbeddable } from '../slides/videos';
 
 // New text boxes are double-spaced (Excalidraw's own default is about 1.15).
 const TEXT_LINE_HEIGHT = 2;
@@ -46,15 +47,21 @@ interface BoardCanvasProps {
   isFirstBoard: boolean; // the To do list board
   store?: 'whiteboard' | 'slides'; // where the drawing is saved (whiteboards, or slideshow pages)
   onSaved?: (data: unknown) => void; // told after each save (used for slide previews)
+  onApi?: (api: ExcalidrawImperativeAPI | null) => void; // hands out the board's controls (used to add videos)
 }
 
-export default function BoardCanvas({ boardId, isFirstBoard, store = 'whiteboard', onSaved }: BoardCanvasProps) {
+export default function BoardCanvas({ boardId, isFirstBoard, store = 'whiteboard', onSaved, onApi }: BoardCanvasProps) {
   // undefined = still loading from the database.
   const [initialData, setInitialData] = useState<InitialData | undefined>(undefined);
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
   const saveTimer = useRef<number | undefined>(undefined);
   const pendingSave = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    onApi?.(api);
+    return () => onApi?.(null);
+  }, [api, onApi]);
   const lastSaved = useRef<string>('');
 
   // ---------- Loading & saving ----------
@@ -404,6 +411,8 @@ export default function BoardCanvas({ boardId, isFirstBoard, store = 'whiteboard
         onPointerUpdate={handlePointerUpdate}
         theme="dark"
         aiEnabled={false}
+        validateEmbeddable={validateEmbeddable}
+        renderEmbeddable={renderEmbeddable}
         UIOptions={{
           // Hide file buttons: everything already saves automatically.
           canvasActions: {

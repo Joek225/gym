@@ -81,6 +81,15 @@ export interface SlideRecord {
   updatedAt: number;
 }
 
+// A video file you put on a slide. The slide only stores a link like
+// "https://video.local/<id>"; the video itself is kept here.
+export interface VideoRecord {
+  id: string;
+  blob: Blob;
+  name: string;
+  createdAt: number;
+}
+
 // Small app-wide settings, e.g. which board was open last.
 export interface SettingRecord {
   key: string;
@@ -95,6 +104,7 @@ class AppDatabase extends Dexie {
   spans!: Table<SpanRecord, string>;
   slideshows!: Table<SlideshowRecord, string>;
   slides!: Table<SlideRecord, string>;
+  videos!: Table<VideoRecord, string>;
 
   constructor() {
     super('gym-app');
@@ -151,6 +161,10 @@ class AppDatabase extends Dexie {
     this.version(7).stores({
       slideshows: 'id, updatedAt',
       slides: 'id, showId',
+    });
+    // Version 8: video files placed on slides.
+    this.version(8).stores({
+      videos: 'id',
     });
   }
 }

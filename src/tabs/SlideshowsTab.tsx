@@ -2,13 +2,17 @@
 //   • The list: all your slideshows, with a preview of their first page. "+ New slideshow" makes one;
 //     × deletes one.
 //   • Inside a slideshow: the same drawing board as the Whiteboard tab, for the page you're on.
-//     Top: ← back to the list, and the slideshow's title (click to edit).
+//     Top: ← back to the list, the slideshow's title (click to edit), and "Video" to put a video
+//     on the page (a file from your computer, or a YouTube/Vimeo link).
 //     Bottom: a strip with a preview of every page — click one to open it, + adds a page,
 //     ▾ has "Duplicate page" and "Delete page".
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { db, type SlideRecord, type SlideshowRecord } from '../db';
 import BoardCanvas from '../whiteboard/BoardCanvas';
 import { pagePreview, svgUrl } from '../slides/preview';
+import { cleanVideoLink, insertVideo, saveVideoFile, videoIdsIn } from '../slides/videos';
+import Modal from '../calendar/Modal';
+import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 
 const newPage = (showId: string, order: number, data: unknown = null): SlideRecord => ({
   id: crypto.randomUUID(),
@@ -17,6 +21,13 @@ const newPage = (showId: string, order: number, data: unknown = null): SlideReco
   data,
   updatedAt: Date.now(),
 });
+
+// Remove saved video files that no page uses any more (e.g. after deleting a page or a video).
+async function cleanUpVideos() {
+  const used = new Set((await db.slides.toArray()).flatMap((p) => videoIdsIn(p.data)));
+  const unused = (await db.videos.toCollection().primaryKeys()).filter((id) => !used.has(id));
+  if (unused.length) await db.videos.bulkDelete(unused);
+}
 
 export default function SlideshowsTab() {
   const [openId, setOpenId] = useState<string | null>(null);
@@ -40,6 +51,7 @@ function SlideshowList({ onOpen }: { onOpen: (id: string) => void }) {
       }),
     );
     setShows(withInfo);
+    cleanUpVideos();
   }, []);
 
   useEffect(() => {
@@ -99,6 +111,8 @@ function SlideshowEditor({ showId, onExit }: { showId: string; onExit: () => voi
   const [current, setCurrent] = useState<string | null>(null);
   const [previews, setPreviews] = useState<Record<string, string | null>>({});
   const [menuOpen, setMenuOpen] = useState(false);
+  const [videoOpen, setVideoOpen] = useState(false);
+  const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const stripRef = useRef<HTMLDivElement>(null);
 
   // Load the slideshow, its pages, and their previews.
@@ -195,11 +209,14 @@ function SlideshowEditor({ showId, onExit }: { showId: string; onExit: () => voi
           onFocus={(e) => e.currentTarget.select()}
           onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
         />
+        <button className="show-video-btn" onClick={() => setVideoOpen(true)} disabled={!api}>
+          ▶ Video
+        </button>
       </div>
 
       <div className="board-canvas">
         {/* "key" builds a fresh board for each page */}
-        <BoardCanvas key={current} boardId={current} isFirstBoard={false} store="slides" onSaved={onSaved} />
+        <BoardCanvas key={current} boardId={current} isFirstBoard={false} store="slides" onSaved={onSaved} onApi={setApi} />
       </div>
 
       {/* Page previews along the bottom */}
@@ -229,6 +246,78 @@ function SlideshowEditor({ showId, onExit }: { showId: string; onExit: () => voi
           )}
         </div>
       </div>
+
+      {videoOpen && api && (
+        <VideoPicker
+          onPick={(link, ratio) => {
+            insertVideo(api, link, ratio);
+            setVideoOpen(false);
+          }}
+          onClose={() => setVideoOpen(false)}
+        />
+      )}
     </div>
+  );
+}
+
+// ---------- "Video" popup ----------
+function VideoPicker({ onPick, onClose }: { onPick: (link: string, ratio?: number) => void; onClose: () => void }) {
+  const [link, setLink] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const pickFile = async (file: File | undefined) => {
+    if (!file) return;
+    setBusy(true);
+    try {
+      const { link, ratio } = await saveVideoFile(file);
+      onPick(link, ratio);
+    } catch {
+      setError("Couldn't save that video. It may be too big for the browser's storage.");
+      setBusy(false);
+    }
+  };
+
+  const pickLink = () => {
+    const url = cleanVideoLink(link);
+    if (url) onPick(url);
+    else setError('Paste a YouTube or Vimeo link.');
+  };
+
+  return (
+    <Modal onClose={onClose} className="video-picker">
+      <div className="video-picker-body">
+        <h3>Add a video</h3>
+        <button className="video-file-btn" onClick={() => fileRef.current?.click()} disabled={busy}>
+          {busy ? 'Saving…' : 'Choose a video file'}
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="video/*"
+          hidden
+          onChange={(e) => pickFile(e.target.files?.[0])}
+        />
+        <div className="video-or">or</div>
+        <div className="video-link-row">
+          <input
+            className="video-link-input"
+            placeholder="Paste a YouTube or Vimeo link"
+            value={link}
+            onChange={(e) => {
+              setLink(e.target.value);
+              setError('');
+            }}
+            onKeyDown={(e) => e.key === 'Enter' && pickLink()}
+            autoFocus
+          />
+          <button className="video-link-add" onClick={pickLink} disabled={!link.trim()}>
+            Add
+          </button>
+        </div>
+        {error && <div className="video-error">{error}</div>}
+      </div>
+    </Modal>
   );
 }
