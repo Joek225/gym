@@ -41,7 +41,14 @@ const START_SETTINGS = {
 // so this light color shows up on screen as the site's dark grey (#282a37).
 const NEW_BOARD_BACKGROUND = '#dfe2f1';
 
-export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string; isFirstBoard: boolean }) {
+interface BoardCanvasProps {
+  boardId: string;
+  isFirstBoard: boolean; // the To do list board
+  store?: 'whiteboard' | 'slides'; // where the drawing is saved (whiteboards, or slideshow pages)
+  onSaved?: (data: unknown) => void; // told after each save (used for slide previews)
+}
+
+export default function BoardCanvas({ boardId, isFirstBoard, store = 'whiteboard', onSaved }: BoardCanvasProps) {
   // undefined = still loading from the database.
   const [initialData, setInitialData] = useState<InitialData | undefined>(undefined);
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
@@ -56,7 +63,7 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
   useEffect(() => {
     // Load the Avenir font first, so text is measured with the right letter widths.
     const fontReady = document.fonts.load('20px Helvetica').catch(() => {});
-    Promise.all([db.whiteboard.get(boardId), fontReady]).then(([record]) => {
+    Promise.all([db.table(store).get(boardId), fontReady]).then(([record]) => {
       const saved = record?.data as InitialData | null | undefined;
       if (saved) lastSaved.current = JSON.stringify(saved);
       seenIds.current = new Set((saved?.elements ?? []).map((e) => e.id));
@@ -369,7 +376,9 @@ export default function BoardCanvas({ boardId, isFirstBoard }: { boardId: string
       const json = serializeAsJSON(elements, appState, files, 'local');
       if (json === lastSaved.current) return; // nothing really changed, skip
       lastSaved.current = json;
-      db.whiteboard.update(boardId, { data: JSON.parse(json), updatedAt: Date.now() });
+      const data = JSON.parse(json);
+      db.table(store).update(boardId, { data, updatedAt: Date.now() });
+      onSaved?.(data);
     };
     window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => {

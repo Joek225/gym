@@ -64,6 +64,23 @@ export interface SpanRecord {
 
 export const TODO_BOARD_NAME = 'To do list';
 
+// A slideshow: a title and an ordered list of pages (each page is its own whiteboard).
+export interface SlideshowRecord {
+  id: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+// One page of a slideshow. Same drawing format as a whiteboard.
+export interface SlideRecord {
+  id: string;
+  showId: string; // which slideshow it belongs to
+  order: number; // position in the slideshow (0, 1, 2, …)
+  data: unknown; // the drawing in Excalidraw's own save format (null = empty page)
+  updatedAt: number;
+}
+
 // Small app-wide settings, e.g. which board was open last.
 export interface SettingRecord {
   key: string;
@@ -76,6 +93,8 @@ class AppDatabase extends Dexie {
   events!: Table<EventRecord, string>;
   workouts!: Table<WorkoutRecord, string>;
   spans!: Table<SpanRecord, string>;
+  slideshows!: Table<SlideshowRecord, string>;
+  slides!: Table<SlideRecord, string>;
 
   constructor() {
     super('gym-app');
@@ -128,6 +147,11 @@ class AppDatabase extends Dexie {
         await tx.table('events').filter((e) => String(e.id).startsWith('ecomiles-')).delete();
         await tx.table('settings').delete('recurring:ecomiles:until');
       });
+    // Version 7: slideshows and their pages.
+    this.version(7).stores({
+      slideshows: 'id, updatedAt',
+      slides: 'id, showId',
+    });
   }
 }
 
