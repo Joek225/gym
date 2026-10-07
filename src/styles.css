@@ -1811,3 +1811,86 @@ input[type='time']::-webkit-calendar-picker-indicator {
     height: 66px;
   }
 }
+
+/* ---- Videos on slides ---- */
+.show-video-btn {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text);
+  font: inherit;
+}
+
+.show-video-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.video-picker-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+}
+
+.video-picker-body h3 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.video-file-btn,
+.video-link-add {
+  height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.video-file-btn:hover:not(:disabled),
+.video-link-add:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.video-or {
+  text-align: center;
+  color: var(--muted);
+}
+
+.video-link-row {
+  display: flex;
+  gap: 8px;
+}
+
+.modal .video-link-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal .video-link-input:focus {
+  border-bottom-color: var(--accent);
+}
+
+.video-error {
+  color: #ff8a8a;
+}
+
+.slide-video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #000;
+}
+
+.slide-video-msg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--muted);
+  background: #1d1f29;
+}
