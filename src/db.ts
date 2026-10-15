@@ -24,7 +24,7 @@ export interface EventRecord {
   createdAt: number;
 }
 
-// One line of a workout: exercise - reps - partial reps - weight (kg). Empty text = not filled in.
+// One line of a workout: exercise - weight (kg) - reps - partial reps. Empty text = not filled in.
 export interface WorkoutRow {
   name: string;
   reps: string;
