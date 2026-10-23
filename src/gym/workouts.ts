@@ -127,7 +127,7 @@ export function saveWorkout(w: WorkoutRecord) {
 // One line as text: "Lat Pulldown - 10 - 2 - 60kg" (partial reps left out if empty).
 export function formatLine(r: WorkoutRow): string {
   const weight = r.weight ? `${r.weight}kg` : '';
-  return [r.name, r.reps, r.partial, weight].filter((x) => x && x.trim()).join(' - ');
+  return [r.name, weight, r.reps, r.partial].filter((x) => x && x.trim()).join(' - ');
 }
 
 // Same exercise written slightly differently ("lat pulldown " vs "Lat Pulldown")

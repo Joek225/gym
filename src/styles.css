@@ -1189,7 +1189,7 @@ input[type='time']::-webkit-calendar-picker-indicator {
   margin-bottom: 6px;
 }
 
-/* One line: name - reps - weight. Looks like text, not a table. */
+/* One line: name - weight - reps. Looks like text, not a table. */
 .workout-line {
   display: flex;
   align-items: center;

@@ -16,6 +16,7 @@ import UpcomingEvents, { type UpcomingEventsHandle } from './UpcomingEvents';
 import CanvasButtons from './CanvasButtons';
 import FontSizeButtons, { DEFAULT_FONT_SIZE } from './FontSizeButtons';
 import { renderEmbeddable, validateEmbeddable } from '../slides/videos';
+import { usePastePictures } from './pasteImages';
 
 // New text boxes are double-spaced (Excalidraw's own default is about 1.15).
 const TEXT_LINE_HEIGHT = 2;
@@ -298,6 +299,7 @@ export default function BoardCanvas({ boardId, isFirstBoard, store = 'whiteboard
   }, [api]);
 
   useToolHotkeys(container, selectStrokeEraser);
+  usePastePictures(api, container);
 
   // Excalidraw tells us where the pointer is (in board coordinates) as it moves.
   const handlePointerUpdate: OnPointerUpdate = ({ pointer, button }) => {

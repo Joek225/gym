@@ -1,14 +1,14 @@
 // The workout sheet (what opens from the red side of a day).
-// Each line reads:  exercise - reps - partial reps - weight
+// Each line reads:  exercise - weight - reps - partial reps
 //   • Upper/Lower days start with the template's exercise names already filled in.
 //   • Custom days (Wed/Sat/Sun) start empty and get a name of your choice.
 //   • Weight is in kg (numbers only). Partial reps are optional.
 // Typing shortcuts (you never need to type the dashes):
-//   exercise: Enter, or " -"      → reps
+//   exercise: Enter, or " -"      → weight
+//   weight:   Space or Enter      → reps
 //   reps:     Space               → partial reps
-//   partial:  Space               → weight   (so Space Space after reps skips partials)
-//   weight:   Space               → next line
-//             Enter               → another set of the same exercise, on a new line below
+//   partial:  Space               → next line   (so Space Space after reps skips partials)
+//   reps or partial: Enter        → another set of the same exercise, on a new line below
 //   Backspace in an empty box     → back one box
 // A line whose exercise name is left empty disappears when you leave it.
 // Some exercises (e.g. Lateral Raise) first ask which kind — "Cable | Dumbbell" — and the
@@ -27,7 +27,7 @@ interface Props {
 }
 
 type Field = 'name' | 'reps' | 'partial' | 'weight';
-const FIELDS: Field[] = ['name', 'reps', 'partial', 'weight'];
+const FIELDS: Field[] = ['name', 'weight', 'reps', 'partial'];
 const isSeparator = (key: string) => key === ' ' || key === '-';
 
 export default function WorkoutEditor({ workout, onClose }: Props) {
@@ -66,7 +66,7 @@ export default function WorkoutEditor({ workout, onClose }: Props) {
     if (i === -1) return onClose();
     setShowMissing(true);
     const r = w.rows[i];
-    go(i, !r.name.trim() ? 'name' : !r.reps ? 'reps' : 'weight');
+    go(i, !r.name.trim() ? 'name' : !r.weight ? 'weight' : 'reps');
   };
 
   const updateRow = (i: number, patch: Partial<WorkoutRow>) =>
@@ -79,7 +79,7 @@ export default function WorkoutEditor({ workout, onClose }: Props) {
       rows.splice(at, 0, { name, reps: '', partial: '', weight: '' });
       return { ...cur, rows };
     });
-    go(at, name ? 'reps' : 'name');
+    go(at, name ? 'weight' : 'name');
   };
 
   // Leaving a line with no exercise name removes it.
@@ -89,7 +89,7 @@ export default function WorkoutEditor({ workout, onClose }: Props) {
   };
 
   const nextLine = (i: number) => {
-    if (i + 1 < w.rows.length) go(i + 1, w.rows[i + 1].name ? 'reps' : 'name');
+    if (i + 1 < w.rows.length) go(i + 1, w.rows[i + 1].name ? 'weight' : 'name');
     else addRow(w.rows.length);
   };
 
@@ -103,27 +103,26 @@ export default function WorkoutEditor({ workout, onClose }: Props) {
       e.preventDefault();
       const f = FIELDS.indexOf(field);
       if (f > 0) go(i, FIELDS[f - 1]);
-      else if (i > 0) go(i - 1, 'weight');
+      else if (i > 0) go(i - 1, 'partial');
     } else if (field === 'name') {
       if (e.key === 'Enter' || (e.key === '-' && value.endsWith(' '))) {
         updateRow(i, { name: value.trim() });
-        move('reps');
+        move('weight');
       }
-    } else if (field === 'reps') {
+    } else if (field === 'weight') {
       if (isSeparator(e.key) || e.key === 'Enter') {
-        if (value) move('partial');
+        if (value) move('reps');
         else e.preventDefault(); // nothing typed yet: ignore
       }
-    } else if (field === 'partial') {
-      if (isSeparator(e.key) || e.key === 'Enter') move('weight'); // empty = skip partials
-    } else if (field === 'weight') {
-      if (isSeparator(e.key)) {
-        e.preventDefault();
-        if (value) nextLine(i);
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        addRow(i + 1, w.rows[i].name); // another set of the same exercise
-      }
+    } else if (e.key === 'Enter') {
+      // reps or partial: another set of the same exercise
+      e.preventDefault();
+      if (w.rows[i].reps) addRow(i + 1, w.rows[i].name);
+    } else if (isSeparator(e.key)) {
+      e.preventDefault();
+      if (field === 'reps') {
+        if (value) go(i, 'partial');
+      } else nextLine(i); // empty partial = skip partials
     }
   };
 
@@ -159,7 +158,7 @@ export default function WorkoutEditor({ workout, onClose }: Props) {
       </div>
 
       <div className="workout-lines">
-        <div className="workout-legend">exercise - reps - partial reps - weight</div>
+        <div className="workout-legend">exercise - weight - reps - partial reps</div>
         {w.rows.map((row, i) =>
           VARIANTS[row.name] ? (
             // Pick a kind first; the boxes appear once one is picked.
@@ -173,7 +172,7 @@ export default function WorkoutEditor({ workout, onClose }: Props) {
                       className="link-btn"
                       onClick={() => {
                         updateRow(i, { name: `${kind} ${row.name}` });
-                        go(i, 'reps');
+                        go(i, 'weight');
                       }}
                     >
                       {kind}
@@ -198,11 +197,21 @@ export default function WorkoutEditor({ workout, onClose }: Props) {
             />
             <span className="wl-dash">-</span>
             <input
+              className="wl-num wl-weight"
+              placeholder="kg"
+              inputMode="decimal"
+              value={row.weight}
+              autoFocus={!isCustom && i === 0 && !row.weight}
+              ref={boxRef(i, 'weight')}
+              onChange={(e) => updateRow(i, { weight: e.target.value.replace(/[^0-9.]/g, '') })}
+              onKeyDown={(e) => onKey(e, i, 'weight')}
+            />
+            <span className="wl-dash">-</span>
+            <input
               className="wl-num"
               placeholder="reps"
               inputMode="numeric"
               value={row.reps}
-              autoFocus={!isCustom && i === 0 && !row.reps}
               ref={boxRef(i, 'reps')}
               onChange={(e) => updateRow(i, { reps: digitsOnly(e.target.value) })}
               onKeyDown={(e) => onKey(e, i, 'reps')}
@@ -217,16 +226,6 @@ export default function WorkoutEditor({ workout, onClose }: Props) {
               onChange={(e) => updateRow(i, { partial: digitsOnly(e.target.value) })}
               onKeyDown={(e) => onKey(e, i, 'partial')}
             />
-            <span className="wl-dash">-</span>
-            <input
-              className="wl-num wl-weight"
-              placeholder="kg"
-              inputMode="decimal"
-              value={row.weight}
-              ref={boxRef(i, 'weight')}
-              onChange={(e) => updateRow(i, { weight: e.target.value.replace(/[^0-9.]/g, '') })}
-              onKeyDown={(e) => onKey(e, i, 'weight')}
-            />
           </div>
           ),
         )}
@@ -236,7 +235,7 @@ export default function WorkoutEditor({ workout, onClose }: Props) {
       </div>
 
       {showMissing && missing.includes(true) && (
-        <div className="workout-warning">Add reps and weight to the highlighted lines (partials can stay empty).</div>
+        <div className="workout-warning">Add weight and reps to the highlighted lines (partials can stay empty).</div>
       )}
 
       <div className="editor-footer">
