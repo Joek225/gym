@@ -1,7 +1,7 @@
 // The workout sheet (what opens from the red side of a day).
 // Each line reads:  exercise - weight - reps - partial reps
 //   • Upper/Lower days start with the template's exercise names already filled in.
-//   • Custom days (Wed/Sat/Sun) start empty and get a name of your choice.
+//   • Custom days (Wed/Sat/Sun, and every day under a blue holiday label) start empty and get a name of your choice.
 //   • Weight is in kg (numbers only). Partial reps are optional.
 // Typing shortcuts (you never need to type the dashes):
 //   exercise: Enter, or " -"      → weight

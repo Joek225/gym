@@ -10,7 +10,7 @@ import MiniMonth from '../calendar/MiniMonth';
 import WorkoutEditor from '../calendar/WorkoutEditor';
 import { MONTH_NAMES, addMonths, byDateAndTime, thisMonth } from '../calendar/dates';
 import { db, type Cardio, type EventRecord, type SpanRecord, type WorkoutRecord } from '../db';
-import { hasLifts, newWorkout, saveWorkout } from '../gym/workouts';
+import { hasLifts, isStandardWorkout, newWorkout, saveWorkout, workoutToEdit } from '../gym/workouts';
 
 // What's open on top of the calendar right now.
 type Popup =
@@ -78,14 +78,17 @@ export default function CalendarTab() {
 
   const openWorkout = async () => {
     const date = day!.date;
-    const workout = workoutsByDate.get(date) ?? (await db.workouts.get(date)) ?? (await newWorkout(date));
+    const workout = await workoutToEdit(date, workoutsByDate.get(date) ?? (await db.workouts.get(date)));
     setPopup({ kind: 'workout', workout });
   };
 
   // The 3 months before the big one, oldest first (left → right).
   const previous = [3, 2, 1].map((n) => addMonths(shown, -n));
-  // Small calendars: red only for days with lifts (cardio alone doesn't count).
-  const workoutDates = new Set([...workoutsByDate.values()].filter(hasLifts).map((w) => w.date));
+  // Small calendars: red only for normal Mon/Tue/Thu/Fri Upper/Lower days with lifts
+  // (cardio alone, Custom and holiday workouts don't count).
+  const workoutDates = new Set(
+    [...workoutsByDate.values()].filter((w) => hasLifts(w) && isStandardWorkout(w)).map((w) => w.date),
+  );
 
   return (
     <div className="calendar">
