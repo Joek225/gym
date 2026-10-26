@@ -76,10 +76,21 @@ export const VARIANTS: Record<string, string[]> = {
   'Lateral Raise': ['Cable', 'Dumbbell'],
 };
 
+// True if a blue multi-day label (e.g. a holiday) covers this date.
+// On those days you're at a different gym, so every day gets a Custom workout.
+export async function isHoliday(date: string): Promise<boolean> {
+  return (await db.spans.where('start').belowOrEqual(date).filter((sp) => sp.end >= date).count()) > 0;
+}
+
+// True if this is a normal Mon/Tue/Thu/Fri Upper/Lower workout (what the small calendars show).
+export function isStandardWorkout(w: WorkoutRecord): boolean {
+  return w.type !== 'custom' && w.type === workoutTypeFor(w.date);
+}
+
 // A new workout for a date. Upper/Lower days start with the template's exercise names
-// (copied, so later template changes don't touch this workout).
+// (copied, so later template changes don't touch this workout). Holiday days are Custom.
 export async function newWorkout(date: string): Promise<WorkoutRecord> {
-  const type = workoutTypeFor(date);
+  const type = (await isHoliday(date)) ? 'custom' : workoutTypeFor(date);
   const names = type === 'custom' ? [''] : TEMPLATES[type];
   return {
     date,
@@ -88,6 +99,14 @@ export async function newWorkout(date: string): Promise<WorkoutRecord> {
     rows: names.map((name) => ({ name, reps: '', partial: '', weight: '' })),
     updatedAt: Date.now(),
   };
+}
+
+// The workout to open for a date: the saved one, or a new one. A saved workout with lifts is
+// never changed. One with only cardio is switched to Custom if the day is now a holiday.
+export async function workoutToEdit(date: string, saved?: WorkoutRecord): Promise<WorkoutRecord> {
+  if (!saved) return newWorkout(date);
+  if (hasLifts(saved) || saved.type === 'custom' || !(await isHoliday(date))) return saved;
+  return { ...(await newWorkout(date)), cardio: saved.cardio };
 }
 
 // True if a line has any numbers/weight filled in.
