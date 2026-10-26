@@ -1179,6 +1179,28 @@ input[type='time']::-webkit-calendar-picker-indicator {
   opacity: 0.85;
 }
 
+.workout-location-input {
+  margin-top: 4px;
+  padding: 2px 0;
+  font-size: 14px;
+  color: #fff !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.35) !important;
+}
+
+.workout-location-input::placeholder {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.workout-location-input:focus {
+  border-bottom-color: #fff !important;
+}
+
+.zoom-location {
+  margin: -4px 0 8px;
+  font-size: 15px;
+  opacity: 0.85;
+}
+
 .workout-lines {
   padding: 12px 20px 4px;
 }
