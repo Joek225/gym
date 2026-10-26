@@ -50,6 +50,7 @@ export interface WorkoutRecord {
   customName: string; // only used for custom days, e.g. "Push" or "Cardio"
   rows: WorkoutRow[];
   cardio?: Cardio; // older workouts don't have this
+  location?: string; // where you trained, e.g. "Hotel gym" (optional)
   updatedAt: number;
 }
 

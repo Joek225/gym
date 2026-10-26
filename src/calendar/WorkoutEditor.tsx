@@ -16,7 +16,7 @@
 // You can't close the sheet while a line is half done: once a line is started it needs
 // reps AND weight (partial reps can stay empty). Untouched template lines are fine.
 import { useEffect, useRef, useState, type FocusEvent, type KeyboardEvent } from 'react';
-import type { WorkoutRecord, WorkoutRow } from '../db';
+import { db, type WorkoutRecord, type WorkoutRow } from '../db';
 import { GYM_COLOR, VARIANTS, saveWorkout, workoutLabel } from '../gym/workouts';
 import { formatLongDate } from './dates';
 import Modal from './Modal';
@@ -35,6 +35,15 @@ export default function WorkoutEditor({ workout, onClose }: Props) {
   const inputs = useRef(new Map<string, HTMLInputElement>()); // "row:field" → input box
   const [focusNext, setFocusNext] = useState<string | null>(null);
   const isCustom = w.type === 'custom';
+
+  // Places you've trained before, offered as suggestions in the location box.
+  const [places, setPlaces] = useState<string[]>([]);
+  useEffect(() => {
+    db.workouts.toArray().then((all) => {
+      const seen = new Set(all.map((x) => x.location?.trim()).filter((x): x is string => !!x));
+      setPlaces([...seen].sort());
+    });
+  }, []);
 
   // Save every change right away (an empty workout is not kept).
   useEffect(() => {
@@ -155,6 +164,18 @@ export default function WorkoutEditor({ workout, onClose }: Props) {
           <span className="workout-type">{workoutLabel(w)}</span>
         )}
         <span className="workout-date">{formatLongDate(w.date)}</span>
+        <input
+          className="workout-location-input"
+          placeholder="Add location"
+          list="workout-places"
+          value={w.location ?? ''}
+          onChange={(e) => setW({ ...w, location: e.target.value })}
+        />
+        <datalist id="workout-places">
+          {places.map((place) => (
+            <option key={place} value={place} />
+          ))}
+        </datalist>
       </div>
 
       <div className="workout-lines">

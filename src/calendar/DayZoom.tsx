@@ -109,6 +109,7 @@ export default function DayZoom(props: Props) {
           <div className="zoom-right">
             <div className="zoom-half" style={{ background: GYM_COLOR_DARK }} onClick={props.onWorkout}>
               <div className="zoom-half-title">{workout && lines.length ? workoutLabel(workout) : 'Workout'}</div>
+              {workout?.location?.trim() && <div className="zoom-location">at {workout.location.trim()}</div>}
               {lines.map((r, i) => (
                 <div key={i} className="zoom-lift">
                   {formatLine(r)}

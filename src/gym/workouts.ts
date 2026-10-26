@@ -34,10 +34,10 @@ export function workoutTypeFor(date: string): WorkoutType {
   return TYPE_BY_WEEKDAY[new Date(y, m - 1, d).getDay()];
 }
 
-// The calendar banner color: normal red for Upper/Lower, darker red for Custom days.
-// (Only the banners in the big month; everything else uses the normal red.)
+// The calendar banner color: normal red on Mon/Tue/Thu/Fri (even a Custom holiday workout),
+// darker red on Wed/Sat/Sun. (Only the banners in the big month; everything else uses the normal red.)
 export function workoutColor(w: WorkoutRecord): string {
-  return w.type === 'custom' ? CUSTOM_GYM_COLOR : GYM_COLOR;
+  return workoutTypeFor(w.date) === 'custom' ? CUSTOM_GYM_COLOR : GYM_COLOR;
 }
 
 // The label shown on the red banner: UPPER, LOWER, or the custom name.
@@ -143,7 +143,7 @@ export function saveWorkout(w: WorkoutRecord) {
   return db.workouts.put({ ...clean, updatedAt: Date.now() });
 }
 
-// One line as text: "Lat Pulldown - 10 - 2 - 60kg" (partial reps left out if empty).
+// One line as text: "Lat Pulldown - 60kg - 10 - 2" (partial reps left out if empty).
 export function formatLine(r: WorkoutRow): string {
   const weight = r.weight ? `${r.weight}kg` : '';
   return [r.name, weight, r.reps, r.partial].filter((x) => x && x.trim()).join(' - ');
