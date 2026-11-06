@@ -77,6 +77,11 @@ final class ToolbarView: NSView {
         right.spacing = 6
         right.setCustomSpacing(10, after: puzzleButton)
         right.setCustomSpacing(10, after: divider)
+        // The icon group never stretches: it stays packed at the far right, and the
+        // address bar grows to meet it.
+        right.setHuggingPriority(.required, for: .horizontal)
+        right.setContentCompressionResistancePriority(.required, for: .horizontal)
+        extensionStack.setHuggingPriority(.required, for: .horizontal)
 
         // Memory use, just left of the address bar.
         memoryLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)

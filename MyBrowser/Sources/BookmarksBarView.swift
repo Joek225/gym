@@ -21,7 +21,7 @@ final class BookmarksBarView: NSView {
     private let background = SolidView(color: Theme.chromeFill)
     private var entries: [(button: NSButton, entry: Entry)] = []
     private let overflowButton = NSButton()
-    private let emptyHint = NSTextField(labelWithString: "Bookmark pages with ⌘D or the ☆ star. To bring over Chrome's, use the link on the new tab page (⌘T).")
+    private let emptyHint = NSTextField(labelWithString: "Bookmark pages with ⌘D or the ☆ star. To bring over Chrome's, choose Import from Chrome in the ⋮ menu.")
 
     init() {
         super.init(frame: .zero)
