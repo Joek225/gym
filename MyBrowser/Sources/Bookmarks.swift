@@ -191,7 +191,7 @@ enum BookmarkMenus {
             item.toolTip = node.url?.absoluteString
             if node.isFolder {
                 item.image = Icons.folder
-                item.submenu = menu(for: node)
+                item.submenu = BookmarkMenus.menu(for: node)
             } else {
                 item.image = Favicons.cached(for: node.url) ?? Icons.globe
             }
