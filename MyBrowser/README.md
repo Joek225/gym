@@ -41,22 +41,36 @@ To stop it, press **⌘Q** in the browser, or click ■ Stop in Xcode.
 - Right-click a tab: **Add Tab to New Group**, **Add Tab to Group**, **Remove from Group**, or **Unload Tab**.
 - Right-click a group's header to open the group editor (like Chrome): name, color, new tab in group, move group to a new window, close, ungroup or delete. Click the header to collapse or expand it.
 - **Close group** keeps it as an outlined chip on the bookmarks bar so you can reopen it. **Delete group** forgets it.
-- Right-click a tab and choose **Pin Tab**. Pinned tabs stay at the top of their group (or of the sidebar) and show a 📌.
+- Right-click a tab and choose **Pin Tab**. Pinned tabs become square tiles at the top of their group (or of the sidebar). Click a tile to open it, middle-click to close it, right-click for options.
+- At the top of the sidebar: **⫷** hides the sidebar (⌃⌘S; a button in the toolbar brings it back), **▦** lists all tab groups (open and closed), **🔍** searches your tabs in every window (⇧⌘A).
 - Groups also appear as colored chips on the left of the bookmarks bar. Click one to jump to any of its tabs.
 - Tabs and groups are kept when you quit and reopen the browser.
 - Tabs you haven't looked at for 5 minutes are **unloaded** to free memory. Their title shows slightly dimmer. Clicking one reloads it, and its back/forward history is kept. Tabs playing audio or video, or using the camera or microphone, are never unloaded.
 
 ## Tools
 
-The **Tools** button under **+** opens:
+The **Tools** button under **+** opens a panel over the blurred browser (Esc or click outside to close):
 - **File Converter**: turn any image (PNG, JPEG, HEIC, WebP, TIFF, GIF, BMP, RAW…) into PNG, JPEG, HEIC, TIFF, GIF, BMP or PDF, optionally smaller.
 - **Background Remover**: cuts out the person, pet or object using Apple's on-device AI. Nothing is uploaded. Saves a transparent PNG.
 
-The window uses no memory until you open it and frees it when you close it.
+It uses no memory until you open it and frees it when you close it.
+
+## Passwords
+
+- When you sign in on a website, the browser offers to **save** the password (Save / Not Now / Never for This Site).
+- Saved passwords are **filled in automatically** next time, but only on the same website.
+- **MyBrowser → Passwords…** (⌥⌘P) lists them. **Show** and **Copy** ask for your Mac password or Touch ID first.
+- Passwords are stored in your Mac's **Keychain** (encrypted, like Safari's), not in a plain file.
+- **Import from Chrome…** reads the file Chrome makes with “Export passwords”.
+- After you rebuild the app in Xcode, macOS may ask once whether MyBrowser can use its Keychain items. Click **Always Allow**.
+
+## Passkeys
+
+Passkeys can't work in a home-made browser. macOS only lets apps use passkeys for other websites if Apple grants them a special browser permission, and that needs a paid Apple Developer account plus Apple's approval. So this browser tells websites that passkeys aren't available. Google then asks for your password instead, and the browser can save that password for you.
 
 ## Extensions (macOS 15.4 or newer)
 
-- **Extensions menu → Import Extensions from Chrome…**: click "Use This Folder", then tick the extensions you want. They're copied into the browser.
+- Click the **puzzle piece** at the right end of the toolbar (or use the Extensions menu) → **Import Extensions from Chrome…**, click "Use This Folder", then tick the extensions you want. Extensions from all your Chrome profiles are listed. They're copied into the browser.
 - **Add Extension from Folder…**: for any unpacked extension (a folder with `manifest.json`).
 - Extension buttons appear at the right end of the toolbar.
 - Extensions → (name) → **Problems & Details…** lists anything WebKit couldn't support.
