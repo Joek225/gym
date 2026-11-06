@@ -7,7 +7,7 @@ The top priority is low memory use.
 
 1. Double-click **MyBrowser.xcodeproj**. Xcode opens.
 2. Press **⌘R** (or click the ▶ Play button at the top left).
-3. The browser window appears. Type an address or a search and press Return.
+3. The browser window appears with a search box in the middle. Type a search or address and press Return.
 
 To stop it, press **⌘Q** in the browser, or click ■ Stop in Xcode.
 
@@ -27,12 +27,30 @@ To stop it, press **⌘Q** in the browser, or click ■ Stop in Xcode.
 | ⌘N | New window |
 | ⌘D | Bookmark this page (or edit the bookmark) |
 | ⇧⌘B | Show / hide the bookmarks bar |
-| ⌘L | Jump to the address bar |
+| ⌘L | Search box (on a new tab) — or opens a new tab to search from |
 | ⌘R | Reload |
 | ⌘[ / ⌘] | Back / Forward |
 | ⌘= / ⌘- / ⌘0 | Zoom in / out / reset |
 | ⌘-click a link | Open it in a background tab (⇧⌘-click to switch to it) |
 | Middle-click a tab | Close it |
+
+## New tab page
+
+- Every new tab (⌘T) shows a **search box in the middle**. That's the only place you type.
+- As you type, a small box shows **Google suggestions** and matching bookmarks. Use ↑/↓ and Return, or click one.
+- The bar at the top only **shows** the page's address (you can still select and copy it).
+- To go somewhere else, open a new tab and search there. Links and Back/Forward work as usual.
+- Bookmarks open in a new tab (or in the current tab if it's a blank new tab).
+
+## Import from Chrome
+
+Open a new tab (⌘T) and click **“Import bookmarks, tab groups & extensions from Chrome”** at the bottom (also in the File, Bookmarks and Extensions menus). Pick your Chrome profile, untick anything you don't want, and click **Import**.
+- **Bookmarks**: added to your bookmarks bar.
+- **Tab groups**: groups that are open in Chrome's windows become chips on your bookmarks bar. Click one to open it. (Groups you've closed in Chrome are stored in Google's sync data and can't be read.)
+- **Extensions**: copied in; quit and reopen the browser afterwards.
+- **Passwords**: Chrome keeps them locked, so use **Import passwords…** and follow the steps (export from Chrome, then pick the file).
+
+The browser is allowed to *read* Chrome's folder, never change it.
 
 ## Tabs and groups
 
@@ -49,7 +67,7 @@ To stop it, press **⌘Q** in the browser, or click ■ Stop in Xcode.
 
 ## Tools
 
-The **Tools** button under **+** opens a panel over the blurred browser (Esc or click outside to close):
+The **Tools** button under **+** opens a panel over the lightly blurred browser (Esc or click outside to close):
 - **File Converter**: turn any image (PNG, JPEG, HEIC, WebP, TIFF, GIF, BMP, RAW…) into PNG, JPEG, HEIC, TIFF, GIF, BMP or PDF, optionally smaller.
 - **Background Remover**: cuts out the person, pet or object using Apple's on-device AI. Nothing is uploaded. Saves a transparent PNG.
 
@@ -70,7 +88,7 @@ Passkeys can't work in a home-made browser. macOS only lets apps use passkeys fo
 
 ## Extensions (macOS 15.4 or newer)
 
-- Click the **puzzle piece** at the right end of the toolbar (or use the Extensions menu) → **Import Extensions from Chrome…**, click "Use This Folder", then tick the extensions you want. Extensions from all your Chrome profiles are listed. They're copied into the browser.
+- Click the **puzzle piece** at the right end of the toolbar → **Import from Chrome…** (see “Import from Chrome” above).
 - **Add Extension from Folder…**: for any unpacked extension (a folder with `manifest.json`).
 - Extension buttons appear at the right end of the toolbar.
 - Extensions → (name) → **Problems & Details…** lists anything WebKit couldn't support.
