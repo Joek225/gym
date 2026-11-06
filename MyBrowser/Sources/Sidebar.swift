@@ -430,7 +430,8 @@ final class SidebarRowView: NSTableRowView {
         } else {
             pill.fillColor = isSelectedTab ? Theme.selectedTab : (isHovered ? Theme.hoverTab : .clear)
         }
-        (view(atColumn: 0) as? TabCellView)?.showsClose = isSelectedTab || isHovered
+        // Find our tab cell directly (asking the table for a column is unsafe while the row is being built).
+        for case let cell as TabCellView in subviews { cell.showsClose = isSelectedTab || isHovered }
     }
 }
 
