@@ -19,6 +19,33 @@ protocol SidebarDelegate: AnyObject {
     func sidebarToggleCollapse()
     func sidebarShowGroups(anchor: NSView)
     func sidebarSearchTabs()
+    /// Moves a tab (from this window or another one) to a place in this window.
+    func sidebarMoveTab(id: UUID, to group: TabGroup?, index: Int, pinned: Bool)
+    /// Moves a whole group (from this window or another one) to a position in this window.
+    func sidebarMoveGroup(id: UUID, to index: Int)
+    /// A tab was dragged out of every window: open it in a new window there.
+    func sidebarTearOff(id: UUID, at screenPoint: NSPoint)
+}
+
+/// What's being dragged, written on the drag pasteboard ("tab:<id>" or "group:<id>"),
+/// so tabs can also be dropped into other windows.
+enum DragPayload {
+    case tab(UUID)
+    case group(UUID)
+
+    var string: String {
+        switch self {
+        case .tab(let id): return "tab:" + id.uuidString
+        case .group(let id): return "group:" + id.uuidString
+        }
+    }
+
+    init?(_ info: NSDraggingInfo) {
+        guard let s = info.draggingPasteboard.string(forType: .sidebarItem) else { return nil }
+        if s.hasPrefix("tab:"), let id = UUID(uuidString: String(s.dropFirst(4))) { self = .tab(id) }
+        else if s.hasPrefix("group:"), let id = UUID(uuidString: String(s.dropFirst(6))) { self = .group(id) }
+        else { return nil }
+    }
 }
 
 /// A tab container's pinned tabs, shown as a row of square tiles (like Chrome).
@@ -55,6 +82,8 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
     private var draggedItem: NSObject?
     private var isReloading = false
     private var strips: [String: PinnedStrip] = [:]
+    /// Where among the pinned tiles a dragged tab would land.
+    private var pendingTileIndex = 0
 
     init(store: TabStore) {
         self.store = store
@@ -77,6 +106,7 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
         outline.action = #selector(rowClicked(_:))
         outline.registerForDraggedTypes([.sidebarItem])
         outline.setDraggingSourceOperationMask(.move, forLocal: true)
+        outline.setDraggingSourceOperationMask([], forLocal: false)   // dragged outside the app = new window
         outline.draggingDestinationFeedbackStyle = .regular
         outline.onGroupRightClick = { [weak self] row in
             guard let self, let group = self.outline.item(atRow: row) as? TabGroup else { return }
@@ -347,6 +377,7 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
         PinnedTile.Actions(
             select: { [weak self] tab in self?.delegate?.sidebarSelect(tab) },
             close: { [weak self] tab in self?.delegate?.sidebarClose(tab) },
+            tearOff: { [weak self] tab, point in self?.delegate?.sidebarTearOff(id: tab.id, at: point) },
             menu: { [weak self] tab in
                 let menu = NSMenu()
                 self?.fillTabMenu(menu, for: tab)
@@ -369,9 +400,10 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
     // MARK: Drag and drop
 
     func outlineView(_ outlineView: NSOutlineView, pasteboardWriterForItem item: Any) -> NSPasteboardWriting? {
-        if item is PinnedStrip { return nil }   // unpin a tab to drag it
         let p = NSPasteboardItem()
-        p.setString("item", forType: .sidebarItem)
+        if let tab = item as? Tab { p.setString(DragPayload.tab(tab.id).string, forType: .sidebarItem) }
+        else if let group = item as? TabGroup { p.setString(DragPayload.group(group.id).string, forType: .sidebarItem) }
+        else { return nil }   // pinned tiles start their own drags
         return p
     }
 
@@ -382,15 +414,16 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
 
     func outlineView(_ outlineView: NSOutlineView, draggingSession session: NSDraggingSession,
                      endedAt screenPoint: NSPoint, operation: NSDragOperation) {
+        if operation == [], let tab = draggedItem as? Tab { delegate?.sidebarTearOff(id: tab.id, at: screenPoint) }
         draggedItem = nil
     }
 
     func outlineView(_ outlineView: NSOutlineView, validateDrop info: NSDraggingInfo,
                      proposedItem item: Any?, proposedChildIndex index: Int) -> NSDragOperation {
-        guard let dragged = draggedItem else { return [] }
+        guard let payload = DragPayload(info) else { return [] }
         let afterTiles = 1   // list position just below a row of pinned tiles
 
-        if dragged is TabGroup {
+        if case .group = payload {
             // Groups can only be moved between other top-level entries.
             if let strip = item as? PinnedStrip, strip.isTopLevel {
                 outlineView.setDropItem(nil, dropChildIndex: afterTiles)
@@ -406,7 +439,12 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
             return .move
         }
 
-        guard dragged is Tab else { return [] }
+        // A tab.
+        if let strip = item as? PinnedStrip {   // over the pinned tiles: pin it at that spot
+            pendingTileIndex = tileIndex(in: strip, at: info.draggingLocation)
+            outlineView.setDropItem(strip, dropChildIndex: NSOutlineViewDropOnItemIndex)
+            return .move
+        }
         if item == nil {
             if index == NSOutlineViewDropOnItemIndex {
                 outlineView.setDropItem(nil, dropChildIndex: children(of: nil).count)
@@ -423,10 +461,6 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
             }
             return .move
         }
-        if let strip = item as? PinnedStrip {   // dropped on pinned tiles: go just below them
-            outlineView.setDropItem(strip.isTopLevel ? nil : strip.group, dropChildIndex: afterTiles)
-            return .move
-        }
         if let tab = item as? Tab, let loc = store.location(of: tab) {   // dropped on a tab: go before it
             outlineView.setDropItem(loc.group, dropChildIndex: listIndex(loc.index, in: loc.group))
             return .move
@@ -434,15 +468,34 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
         return []
     }
 
+    /// Which tile position (0 = first) a point over a row of pinned tiles is closest to.
+    private func tileIndex(in strip: PinnedStrip, at windowPoint: NSPoint) -> Int {
+        let row = outline.row(forItem: strip)
+        guard row >= 0 else { return strip.tabs.count }
+        let rect = outline.rect(ofRow: row)
+        let p = outline.convert(windowPoint, from: nil)
+        let columns = PinnedStrip.columns
+        let tileWidth = (rect.width - 16) / CGFloat(columns)
+        let column = min(columns - 1, max(0, Int((p.x - rect.minX - 8 + tileWidth / 2) / tileWidth)))
+        // the outline is flipped: y grows downward
+        let line = max(0, Int((p.y - rect.minY - 4) / (PinnedStrip.tileHeight + PinnedStrip.gap)))
+        return min(strip.tabs.count, line * columns + column)
+    }
+
     func outlineView(_ outlineView: NSOutlineView, acceptDrop info: NSDraggingInfo,
                      item: Any?, childIndex index: Int) -> Bool {
-        guard let dragged = draggedItem else { return false }
-        if let group = dragged as? TabGroup {
-            store.move(group, to: index < 0 ? store.items.count : storeIndex(index, in: nil))
-        } else if let tab = dragged as? Tab {
-            let group = item as? TabGroup
-            let end = group?.tabs.count ?? store.items.count
-            store.move(tab, to: group, index: index < 0 ? end : storeIndex(index, in: group))
+        guard let payload = DragPayload(info) else { return false }
+        switch payload {
+        case .group(let id):
+            delegate?.sidebarMoveGroup(id: id, to: index < 0 ? store.items.count : storeIndex(index, in: nil))
+        case .tab(let id):
+            if let strip = item as? PinnedStrip {
+                delegate?.sidebarMoveTab(id: id, to: strip.isTopLevel ? nil : strip.group, index: pendingTileIndex, pinned: true)
+            } else {
+                let group = item as? TabGroup
+                let end = group?.tabs.count ?? store.items.count
+                delegate?.sidebarMoveTab(id: id, to: group, index: index < 0 ? end : storeIndex(index, in: group), pinned: false)
+            }
         }
         return true
     }
@@ -464,6 +517,7 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
         do {
             add(menu, tab.pinned ? "Unpin Tab" : "Pin Tab", #selector(menuTogglePin(_:)), tab)
             add(menu, "Reload", #selector(menuReload(_:)), tab)
+            add(menu, "Duplicate", #selector(menuDuplicate(_:)), tab)
             add(menu, "Unload Tab (Free Memory)", #selector(menuUnload(_:)), tab).isEnabled = tab.isLoaded
             menu.addItem(.separator())
             add(menu, "Add Tab to New Group", #selector(menuNewGroup(_:)), tab)
@@ -498,6 +552,11 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
 
     @objc private func menuNewTab(_ sender: NSMenuItem) { delegate?.sidebarNewTab(in: nil) }
     @objc private func menuTogglePin(_ sender: NSMenuItem) { if let v = sender.representedObject as? Tab { delegate?.sidebarTogglePin(v) } }
+    @objc private func menuDuplicate(_ sender: NSMenuItem) {
+        guard let tab = sender.representedObject as? Tab else { return }
+        delegate?.sidebarSelect(tab)
+        NSApp.sendAction(#selector(BrowserWindowController.duplicateTab(_:)), to: nil, from: nil)
+    }
     @objc private func menuReload(_ sender: NSMenuItem) { if let v = sender.representedObject as? Tab { delegate?.sidebarReload(v) } }
     @objc private func menuUnload(_ sender: NSMenuItem) { if let v = sender.representedObject as? Tab { delegate?.sidebarUnload(v) } }
     @objc private func menuClose(_ sender: NSMenuItem) { if let v = sender.representedObject as? Tab { delegate?.sidebarClose(v) } }
@@ -798,12 +857,15 @@ final class PinnedStripCellView: NSTableCellView {
 
 /// One pinned tab: a rounded tile with the site's icon. Click to open,
 /// right-click for options, middle-click to close.
-final class PinnedTile: SolidView {
+final class PinnedTile: SolidView, NSDraggingSource {
     struct Actions {
         let select: (Tab) -> Void
         let close: (Tab) -> Void
+        let tearOff: (Tab, NSPoint) -> Void
         let menu: (Tab) -> NSMenu
     }
+    private var mouseDownAt: NSPoint?
+    private var isDragging = false
 
     private let tab: Tab
     private let actions: Actions
@@ -843,10 +905,44 @@ final class PinnedTile: SolidView {
 
     override func mouseEntered(with event: NSEvent) { if !isSelected { fillColor = Theme.hoverTab } }
     override func mouseExited(with event: NSEvent) { if !isSelected { fillColor = Theme.sidebar } }
-    override func mouseDown(with event: NSEvent) {}
-    override func mouseUp(with event: NSEvent) {
-        if bounds.contains(convert(event.locationInWindow, from: nil)) { actions.select(tab) }
+    override func mouseDown(with event: NSEvent) {
+        mouseDownAt = event.locationInWindow
+        isDragging = false
     }
+
+    /// Dragging a tile moves the tab: within the tiles, into the list (unpins it),
+    /// into another window, or out of every window (opens a new window).
+    override func mouseDragged(with event: NSEvent) {
+        guard let start = mouseDownAt, !isDragging,
+              hypot(event.locationInWindow.x - start.x, event.locationInWindow.y - start.y) > 4 else { return }
+        isDragging = true
+        let item = NSPasteboardItem()
+        item.setString(DragPayload.tab(tab.id).string, forType: .sidebarItem)
+        let dragItem = NSDraggingItem(pasteboardWriter: item)
+        var picture = NSImage(size: bounds.size)
+        if let rep = bitmapImageRepForCachingDisplay(in: bounds) {
+            cacheDisplay(in: bounds, to: rep)
+            picture = NSImage(size: bounds.size)
+            picture.addRepresentation(rep)
+        }
+        dragItem.setDraggingFrame(bounds, contents: picture)
+        beginDraggingSession(with: [dragItem], event: event, source: self)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        if !isDragging, bounds.contains(convert(event.locationInWindow, from: nil)) { actions.select(tab) }
+        mouseDownAt = nil
+    }
+
+    func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
+        context == .withinApplication ? .move : []
+    }
+
+    func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
+        if operation == [] { actions.tearOff(tab, screenPoint) }
+        isDragging = false
+    }
+
     override func otherMouseDown(with event: NSEvent) {}
     override func otherMouseUp(with event: NSEvent) { actions.close(tab) }
     override func menu(for event: NSEvent) -> NSMenu? { actions.menu(tab) }

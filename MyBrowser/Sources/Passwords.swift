@@ -110,6 +110,8 @@ final class PasswordAgent: NSObject, WKScriptMessageHandler {
         let origin = message.frameInfo.securityOrigin
         guard origin.protocol == "https" || origin.host == "localhost", !origin.host.isEmpty else { return }
         let site = origin.host
+        // Private windows never save or fill passwords.
+        guard webView.configuration.websiteDataStore.isPersistent else { return }
 
         switch type {
         case "username":
@@ -142,7 +144,7 @@ final class PasswordAgent: NSObject, WKScriptMessageHandler {
 
         let alert = NSAlert()
         alert.messageText = existing == nil ? "Save password for \(site)?" : "Update password for \(site)?"
-        alert.informativeText = "It's stored in your Mac's Keychain. See all saved passwords in MyBrowser → Passwords."
+        alert.informativeText = "It's stored in your Mac's Keychain. See all saved passwords in beababrowser → Passwords."
         let userField = NSTextField(string: username)
         userField.placeholderString = "Username or email"
         let passField = NSSecureTextField(string: password)

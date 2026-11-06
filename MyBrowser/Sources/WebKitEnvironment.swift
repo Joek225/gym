@@ -13,9 +13,10 @@ import WebKit
 enum WebKitEnvironment {
     static let dataStore = WKWebsiteDataStore.default()
 
-    static func makeConfiguration() -> WKWebViewConfiguration {
+    /// `store` is a private window's own throwaway storage (nil = normal browsing).
+    static func makeConfiguration(store: WKWebsiteDataStore? = nil) -> WKWebViewConfiguration {
         let config = WKWebViewConfiguration()
-        config.websiteDataStore = dataStore
+        config.websiteDataStore = store ?? dataStore
         config.mediaTypesRequiringUserActionForPlayback = .all
         config.allowsAirPlayForMediaPlayback = false
         config.preferences.isElementFullscreenEnabled = true
@@ -25,6 +26,7 @@ enum WebKitEnvironment {
         // Saving and filling passwords, and skipping passkey screens that can't work here.
         config.userContentController.addUserScript(PasskeyFallback.script)
         PasswordAgent.shared.install(in: config.userContentController)
+        ContentBlocker.apply(to: config.userContentController)
         // Lets installed extensions see and change pages (only when any are installed).
         if #available(macOS 15.4, *), let extensions = ExtensionManager.active {
             config.webExtensionController = extensions.controller
@@ -33,16 +35,14 @@ enum WebKitEnvironment {
     }
 
     /// Pass `configuration` only when WebKit hands us one (pop-up windows).
-    static func makeWebView(configuration: WKWebViewConfiguration? = nil) -> WKWebView {
-        let webView = WKWebView(frame: .zero, configuration: configuration ?? makeConfiguration())
+    static func makeWebView(configuration: WKWebViewConfiguration? = nil, store: WKWebsiteDataStore? = nil) -> WKWebView {
+        let webView = WKWebView(frame: .zero, configuration: configuration ?? makeConfiguration(store: store))
         webView.allowsMagnification = true          // pinch to zoom
         // Swipe-to-go-back keeps screenshots of previous pages in memory,
         // so it's off. Use Cmd+[ / Cmd+] or the toolbar buttons instead.
         webView.allowsBackForwardNavigationGestures = false
         webView.underPageBackgroundColor = Theme.background
-        #if DEBUG
-        webView.isInspectable = true                // right-click > Inspect Element
-        #endif
+        webView.isInspectable = true                // right-click → Inspect Element (Chrome's DevTools)
         return webView
     }
 }

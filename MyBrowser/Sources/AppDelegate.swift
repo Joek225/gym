@@ -7,6 +7,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     static var shared: AppDelegate { NSApp.delegate as! AppDelegate }
 
     private(set) var controllers: [BrowserWindowController] = []
+    private var windowsOpen = false
+    private var pendingURLs: [URL] = []
 
     static func main() {
         let app = NSApplication.shared
@@ -18,7 +20,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = MainMenu.build()
-        SessionSaver.shared.windowsProvider = { [weak self] in self?.controllers.map(\.store) ?? [] }
+        // Private windows are never saved.
+        SessionSaver.shared.windowsProvider = { [weak self] in self?.controllers.filter { !$0.isPrivate }.map(\.store) ?? [] }
+        ContentBlocker.prepare()
 
         // Used by the automatic test: can we read Chrome's folder by ourselves?
         if CommandLine.arguments.contains("--test-chrome-access") {
@@ -64,6 +68,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             for session in sessions { open(BrowserWindowController(session: session)) }
         }
+
+        windowsOpen = true
+        pendingURLs.forEach { frontController?.openFromLaunch($0) }
+        pendingURLs = []
 
         // Optional: `MyBrowser --open https://example.com` opens a page at launch.
         if let address = Self.argument(after: "--open"), let url = AddressParser.url(from: address) {
@@ -122,7 +130,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controllers.first { $0.store.allTabs.contains(tab) }
     }
 
+    @objc func makeDefaultBrowser(_ sender: Any?) {
+        let app = Bundle.main.bundleURL
+        NSWorkspace.shared.setDefaultApplication(at: app, toOpenURLsWithScheme: "http") { _ in
+            NSWorkspace.shared.setDefaultApplication(at: app, toOpenURLsWithScheme: "https") { _ in }
+        }
+    }
+
+    func findTab(_ id: UUID) -> (Tab, BrowserWindowController)? {
+        for c in controllers { if let t = c.store.allTabs.first(where: { $0.id == id }) { return (t, c) } }
+        return nil
+    }
+
+    func findGroup(_ id: UUID) -> (TabGroup, BrowserWindowController)? {
+        for c in controllers { if let g = c.store.groups.first(where: { $0.id == id }) { return (g, c) } }
+        return nil
+    }
+
     @objc func newWindow(_ sender: Any?) {
         open(BrowserWindowController(session: nil))
+    }
+
+    /// Like Chrome's Incognito: nothing from this window is saved (history, cookies,
+    /// passwords, tabs). Everything is forgotten when you close it.
+    @objc func newPrivateWindow(_ sender: Any?) {
+        open(BrowserWindowController(session: nil, isPrivate: true))
+    }
+
+    /// Links opened from other apps (when MyBrowser is your default browser).
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard windowsOpen else { pendingURLs += urls; return }   // still starting up
+        let target = frontController ?? controllers.first
+        for url in urls {
+            if let target { target.openFromLaunch(url) } else {
+                let c = open(BrowserWindowController(session: nil))
+                c.openFromLaunch(url)
+            }
+        }
     }
 }

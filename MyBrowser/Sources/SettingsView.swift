@@ -1,0 +1,215 @@
+import AppKit
+import WebKit
+
+/// Settings (⌘,): colors and themes, search engine, memory options, default browser.
+@MainActor
+enum SettingsOverlay {
+    static func show(in window: NSWindow) {
+        Overlay.show(title: "Settings", content: SettingsView(), size: NSSize(width: 600, height: 640), in: window)
+    }
+}
+
+final class SettingsView: NSView {
+    private var colors = ThemeColors.load()
+    private let presetPopup = NSPopUpButton()
+    private let sidebarWell = NSColorWell()
+    private let toolbarWell = NSColorWell()
+    private let backgroundWell = NSColorWell()
+    private let accentWell = NSColorWell()
+    private let restartNote = NSTextField(labelWithString: "")
+    private let searchPopup = NSPopUpButton()
+    private let unloadPopup = NSPopUpButton()
+    private let adsBox = NSButton(checkboxWithTitle: "Block ads and trackers (makes pages lighter)", target: nil, action: nil)
+    private let memoryBox = NSButton(checkboxWithTitle: "Show memory use in the toolbar", target: nil, action: nil)
+    private let unloadChoices: [(String, Int)] = [("1 minute", 1), ("3 minutes", 3), ("5 minutes", 5),
+                                                  ("10 minutes", 10), ("30 minutes", 30), ("Never", 0)]
+
+    init() {
+        super.init(frame: .zero)
+
+        // Colors
+        presetPopup.addItem(withTitle: "Choose a preset theme…")
+        ThemeColors.presets.forEach { presetPopup.addItem(withTitle: $0.name) }
+        presetPopup.target = self
+        presetPopup.action = #selector(presetChosen(_:))
+        for (well, color) in [(sidebarWell, colors.sidebar), (toolbarWell, colors.toolbar),
+                              (backgroundWell, colors.background), (accentWell, colors.accent)] {
+            well.color = color
+            well.target = self
+            well.action = #selector(colorChanged(_:))
+            well.widthAnchor.constraint(equalToConstant: 54).isActive = true
+            well.heightAnchor.constraint(equalToConstant: 26).isActive = true
+        }
+        let colorGrid = NSGridView(views: [
+            [label("Sidebar"), sidebarWell, label("Toolbar"), toolbarWell],
+            [label("Background"), backgroundWell, label("Accent"), accentWell],
+        ])
+        colorGrid.columnSpacing = 10
+        colorGrid.rowSpacing = 10
+        restartNote.textColor = Theme.accent
+        restartNote.font = .systemFont(ofSize: 12)
+        let restart = button("Restart Now to Apply", #selector(restartClicked(_:)))
+
+        // Browsing
+        Preferences.SearchEngine.allCases.forEach { searchPopup.addItem(withTitle: $0.rawValue) }
+        searchPopup.selectItem(withTitle: Preferences.searchEngine.rawValue)
+        searchPopup.target = self
+        searchPopup.action = #selector(searchChanged(_:))
+
+        // Memory
+        unloadChoices.forEach { unloadPopup.addItem(withTitle: $0.0) }
+        unloadPopup.selectItem(at: unloadChoices.firstIndex { $0.1 == Preferences.unloadMinutes } ?? 2)
+        unloadPopup.target = self
+        unloadPopup.action = #selector(unloadChanged(_:))
+        adsBox.state = Preferences.blocksAds ? .on : .off
+        adsBox.target = self
+        adsBox.action = #selector(adsChanged(_:))
+        memoryBox.state = Preferences.showsMemory ? .on : .off
+        memoryBox.target = self
+        memoryBox.action = #selector(memoryChanged(_:))
+
+        let defaultButton = button("Make beababrowser Your Default Browser", #selector(defaultClicked(_:)))
+
+        let stack = NSStackView(views: [
+            heading("Colors"), presetPopup, colorGrid, NSStackView(views: [restart, restartNote]),
+            heading("Search"), row("Search with", searchPopup),
+            heading("Memory"), row("Unload tabs I haven't used for", unloadPopup), adsBox, memoryBox,
+            heading("Default browser"), defaultButton,
+        ])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 10
+        for h in stack.arrangedSubviews where (h as? NSTextField)?.font?.pointSize == 15 {
+            stack.setCustomSpacing(6, after: h)
+        }
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: topAnchor),
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
+            stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    private func label(_ text: String) -> NSTextField {
+        let l = NSTextField(labelWithString: text)
+        l.textColor = Theme.text
+        return l
+    }
+
+    private func heading(_ text: String) -> NSTextField {
+        let l = NSTextField(labelWithString: text)
+        l.font = .systemFont(ofSize: 15, weight: .semibold)
+        l.textColor = Theme.text
+        return l
+    }
+
+    private func row(_ text: String, _ control: NSView) -> NSStackView {
+        let r = NSStackView(views: [label(text), control])
+        r.spacing = 8
+        return r
+    }
+
+    private func button(_ title: String, _ action: Selector) -> NSButton {
+        let b = NSButton(title: title, target: self, action: action)
+        b.bezelStyle = .rounded
+        return b
+    }
+
+    private func colorsEdited() {
+        colors.save()
+        restartNote.stringValue = "Saved. New colors show after a restart."
+    }
+
+    @objc private func presetChosen(_ sender: NSPopUpButton) {
+        guard sender.indexOfSelectedItem > 0 else { return }
+        colors = ThemeColors.presets[sender.indexOfSelectedItem - 1].colors
+        sidebarWell.color = colors.sidebar
+        toolbarWell.color = colors.toolbar
+        backgroundWell.color = colors.background
+        accentWell.color = colors.accent
+        colorsEdited()
+    }
+
+    @objc private func colorChanged(_ sender: NSColorWell) {
+        colors = ThemeColors(sidebar: sidebarWell.color, toolbar: toolbarWell.color,
+                             background: backgroundWell.color, accent: accentWell.color)
+        colorsEdited()
+    }
+
+    @objc private func restartClicked(_ sender: Any?) {
+        SessionSaver.shared.saveNow()
+        let config = NSWorkspace.OpenConfiguration()
+        config.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: config) { _, _ in
+            DispatchQueue.main.async { NSApp.terminate(nil) }
+        }
+    }
+
+    @objc private func searchChanged(_ sender: NSPopUpButton) {
+        if let engine = Preferences.SearchEngine(rawValue: sender.titleOfSelectedItem ?? "") { Preferences.searchEngine = engine }
+    }
+
+    @objc private func unloadChanged(_ sender: NSPopUpButton) {
+        Preferences.unloadMinutes = unloadChoices[max(0, sender.indexOfSelectedItem)].1
+    }
+
+    @objc private func adsChanged(_ sender: NSButton) {
+        Preferences.blocksAds = sender.state == .on
+        restartNote.stringValue = "Ad blocking changes apply to new tabs (or after a restart)."
+        if Preferences.blocksAds { ContentBlocker.prepare() }
+    }
+
+    @objc private func memoryChanged(_ sender: NSButton) {
+        Preferences.showsMemory = sender.state == .on
+        NotificationCenter.default.post(name: MemoryReadout.didToggle, object: nil)
+    }
+
+    @objc private func defaultClicked(_ sender: Any?) {
+        let app = Bundle.main.bundleURL
+        NSWorkspace.shared.setDefaultApplication(at: app, toOpenURLsWithScheme: "http") { _ in
+            NSWorkspace.shared.setDefaultApplication(at: app, toOpenURLsWithScheme: "https") { _ in }
+        }
+    }
+}
+
+/// Keeps the toolbar's memory label up to date (only while it's switched on).
+@MainActor
+final class MemoryReadout {
+    static let didToggle = Notification.Name("MyBrowserMemoryReadoutToggled")
+    private var timer: Timer?
+    private let label: NSTextField
+    private let pages: () -> [WKWebView]
+
+    init(label: NSTextField, pages: @escaping () -> [WKWebView]) {
+        self.label = label
+        self.pages = pages
+    }
+
+    func update() {
+        timer?.invalidate()
+        timer = nil
+        label.isHidden = !Preferences.showsMemory
+        guard Preferences.showsMemory else { return }
+        refresh()
+        timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refresh() }
+        }
+        timer?.tolerance = 2
+    }
+
+    private func refresh() {
+        let app = MemoryUse.appMegabytes()
+        let views = pages()
+        let pageSizes = views.compactMap(MemoryUse.pageMegabytes)
+        if pageSizes.count == views.count, !views.isEmpty {
+            label.stringValue = "\(app + pageSizes.reduce(0, +)) MB"
+            label.toolTip = "Browser: \(app) MB + \(views.count) open page\(views.count == 1 ? "" : "s"): \(pageSizes.reduce(0, +)) MB (unloaded tabs use none)"
+        } else {
+            label.stringValue = "\(app) MB · \(views.count) loaded"
+            label.toolTip = "Memory used by the browser app itself, and how many tabs are loaded (unloaded tabs use none). macOS doesn't let the app measure each page's own WebKit process."
+        }
+    }
+}

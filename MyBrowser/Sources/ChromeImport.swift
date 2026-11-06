@@ -196,7 +196,7 @@ final class ChromeImportView: NSView {
 
     init() {
         super.init(frame: .zero)
-        let intro = NSTextField(wrappingLabelWithString: "Brings your Chrome bookmarks, tab groups and extensions into MyBrowser. Chrome itself isn't changed.")
+        let intro = NSTextField(wrappingLabelWithString: "Brings your Chrome bookmarks, tab groups and extensions into beababrowser. Chrome itself isn't changed.")
         intro.textColor = Theme.mutedText
 
         status.textColor = Theme.mutedText

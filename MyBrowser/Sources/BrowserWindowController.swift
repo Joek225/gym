@@ -7,8 +7,12 @@ import WebKit
 final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTextFieldDelegate,
                                      NSMenuItemValidation, WKNavigationDelegate, WKUIDelegate,
                                      SidebarDelegate, GroupEditorActions, NewTabDelegate {
-    /// Tabs you haven't looked at for this long are unloaded to free memory.
-    static let unloadAfter: TimeInterval = 5 * 60
+    /// A private window (like Chrome's Incognito) keeps nothing after it closes.
+    let isPrivate: Bool
+    /// A private window's own throwaway cookie and cache storage.
+    private let privateStore: WKWebsiteDataStore?
+    private let findBar = FindBar()
+    private var memoryReadout: MemoryReadout?
 
     let store: TabStore
     private let sidebar: SidebarController
@@ -30,7 +34,9 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
 
     /// Opens a window with saved tabs, or a fresh one. `adopting` moves an
     /// existing group (with its open pages) into the new window.
-    init(session: SavedSession?, adopting group: TabGroup? = nil) {
+    init(session: SavedSession?, adopting group: TabGroup? = nil, adoptingTab: Tab? = nil, isPrivate: Bool = false) {
+        self.isPrivate = isPrivate
+        self.privateStore = isPrivate ? WKWebsiteDataStore.nonPersistent() : nil
         let store = TabStore()
         self.store = store
         self.sidebar = SidebarController(store: store)
@@ -44,6 +50,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         window.isOpaque = true
         window.appearance = Theme.appearance
         window.backgroundColor = Theme.toolbar
+        window.title = isPrivate ? "Private Window" : "beababrowser"
         window.tabbingMode = .disallowed        // tabs live in our sidebar instead
         window.minSize = NSSize(width: 600, height: 360)
         window.center()
@@ -59,10 +66,15 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
             store.adopt(group)
             for tab in group.tabs { if let webView = tab.webView { install(webView, for: tab) } }
         }
+        if let adoptingTab {
+            store.insert(adoptingTab, at: 0, in: nil)
+            if let webView = adoptingTab.webView { install(webView, for: adoptingTab) }
+        }
         if store.allTabs.isEmpty { store.insert(Tab(url: nil), at: 0, in: nil) }
         sidebar.reload()
         bookmarksBar.reload()
-        select(store.selected ?? group?.tabs.first ?? store.allTabs[0])
+        select(store.selected ?? group?.tabs.first ?? adoptingTab ?? store.allTabs[0])
+        if isPrivate { newTabPage.showPrivateNote() }
         startUnloadTimer()
         refreshExtensionButtons()
     }
@@ -76,7 +88,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         window.contentView = content
         let side = sidebar.view
 
-        for v in [toolbar, bookmarksBar, side, webContainer, errorView, newTabPage, resizeHandle] as [NSView] {
+        for v in [toolbar, bookmarksBar, side, webContainer, errorView, newTabPage, findBar, resizeHandle] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             content.addSubview(v)
         }
@@ -113,6 +125,10 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
             errorView.trailingAnchor.constraint(equalTo: webContainer.trailingAnchor),
             errorView.bottomAnchor.constraint(equalTo: webContainer.bottomAnchor),
 
+            findBar.topAnchor.constraint(equalTo: webContainer.topAnchor, constant: 8),
+            findBar.trailingAnchor.constraint(equalTo: webContainer.trailingAnchor, constant: -16),
+            findBar.heightAnchor.constraint(equalToConstant: 40),
+
             newTabPage.topAnchor.constraint(equalTo: webContainer.topAnchor),
             newTabPage.leadingAnchor.constraint(equalTo: webContainer.leadingAnchor),
             newTabPage.trailingAnchor.constraint(equalTo: webContainer.trailingAnchor),
@@ -135,6 +151,25 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         toolbar.starButton.target = self
         toolbar.starButton.action = #selector(bookmarkThisPage(_:))
         newTabPage.delegate = self
+        findBar.isHidden = true
+        findBar.webView = { [weak self] in self?.store.selected?.webView }
+        findBar.onClose = { [weak self] in self?.window?.makeFirstResponder(self?.store.selected?.webView) }
+        toolbar.downloadsButton.target = self
+        toolbar.downloadsButton.action = #selector(showDownloads(_:))
+        toolbar.downloadsButton.isHidden = DownloadManager.shared.items.isEmpty
+        if isPrivate {
+            toolbar.addressField.placeholderString = "Private Window"
+        }
+        memoryReadout = MemoryReadout(label: toolbar.memoryLabel) {
+            AppDelegate.shared.controllers.flatMap { $0.store.allTabs.compactMap(\.webView) }
+        }
+        memoryReadout?.update()
+        NotificationCenter.default.addObserver(forName: MemoryReadout.didToggle, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.memoryReadout?.update() }
+        }
+        NotificationCenter.default.addObserver(forName: DownloadManager.didChange, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.toolbar.downloadsButton.isHidden = DownloadManager.shared.items.isEmpty }
+        }
 
         sidebar.delegate = self
         store.onChange = { [weak self] in
@@ -214,7 +249,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
 
     /// Re-creates an unloaded tab's page (restoring its back/forward history).
     private func wake(_ tab: Tab) {
-        let webView = WebKitEnvironment.makeWebView()
+        let webView = WebKitEnvironment.makeWebView(store: privateStore)
         install(webView, for: tab)
         if let state = tab.savedState {
             webView.interactionState = state
@@ -308,7 +343,8 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     private func unloadIdleTabs() {
         let now = Date()
         for tab in store.allTabs where tab !== store.selected && tab.isLoaded
-            && now.timeIntervalSince(tab.lastActive) > Self.unloadAfter {
+            && Preferences.unloadMinutes > 0
+            && now.timeIntervalSince(tab.lastActive) > TimeInterval(Preferences.unloadMinutes * 60) {
             guard let webView = tab.webView,
                   webView.cameraCaptureState == .none, webView.microphoneCaptureState == .none else { continue }
             // Never unload a tab that's playing sound or video.
@@ -354,7 +390,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         tab.errorMessage = nil
         tab.failedURL = nil
         tab.savedState = nil
-        if tab.webView == nil { install(WebKitEnvironment.makeWebView(), for: tab) }
+        if tab.webView == nil { install(WebKitEnvironment.makeWebView(store: privateStore), for: tab) }
         tab.url = url
         if tab === store.selected { show(tab) }
         if url.isFileURL {
@@ -458,6 +494,123 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
 
     @objc func openTools(_ sender: Any?) {
         if let window { ToolsOverlay.show(in: window) }
+    }
+
+    @objc func openSettings(_ sender: Any?) {
+        if let window { SettingsOverlay.show(in: window) }
+    }
+
+    @objc func showHistory(_ sender: Any?) {
+        guard let window else { return }
+        HistoryOverlay.show(in: window) { [weak self] url in self?.openInNewTab(url, background: false) }
+    }
+
+    @objc func showDownloads(_ sender: Any?) {
+        if let window { DownloadsOverlay.show(in: window) }
+    }
+
+    @objc func findInPage(_ sender: Any?) {
+        guard store.selected?.webView != nil else { NSSound.beep(); return }
+        findBar.open()
+    }
+
+    @objc func findNext(_ sender: Any?) {
+        if findBar.isHidden { findInPage(sender) } else { findBar.find() }
+    }
+
+    @objc func findPrevious(_ sender: Any?) {
+        if findBar.isHidden { findInPage(sender) } else { findBar.find(backwards: true) }
+    }
+
+    @objc func printPage(_ sender: Any?) {
+        guard let webView = store.selected?.webView, let window else { NSSound.beep(); return }
+        let operation = webView.printOperation(with: NSPrintInfo.shared)
+        operation.view?.frame = webView.bounds
+        operation.runModal(for: window, delegate: nil, didRun: nil, contextInfo: nil)
+    }
+
+    @objc func duplicateTab(_ sender: Any?) {
+        guard let tab = store.selected, let url = tab.webView?.url ?? tab.url else { return }
+        let copy = Tab(url: url, title: tab.title)
+        copy.favicon = tab.favicon
+        copy.faviconPNG = tab.faviconPNG
+        copy.savedState = tab.webView?.interactionState ?? tab.savedState
+        store.insert(copy, after: tab)
+        select(copy)
+    }
+
+    @objc func copyPageAddress(_ sender: Any?) {
+        guard let url = store.selected?.displayURL else { NSSound.beep(); return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(url.absoluteString, forType: .string)
+    }
+
+    // MARK: Moving tabs between windows
+
+    /// Hands a tab over to another window (keeping its page open).
+    func giveAway(_ tab: Tab) {
+        let wasSelected = tab === store.selected
+        let index = store.allTabs.firstIndex(of: tab) ?? 0
+        tab.webView?.removeFromSuperview()
+        store.remove(tab)
+        let remaining = store.allTabs
+        if remaining.isEmpty {
+            window?.performClose(nil)
+        } else if wasSelected {
+            select(remaining[min(index, remaining.count - 1)])
+        }
+    }
+
+    func sidebarMoveTab(id: UUID, to group: TabGroup?, index: Int, pinned: Bool) {
+        guard let found = AppDelegate.shared.findTab(id) else { return }
+        let (tab, source) = found
+        if source === self {
+            tab.pinned = pinned
+            store.move(tab, to: group, index: index)
+            return
+        }
+        guard source.isPrivate == isPrivate else { NSSound.beep(); return }   // private tabs stay private
+        source.giveAway(tab)
+        tab.pinned = pinned
+        store.insert(tab, at: index, in: group)
+        if let webView = tab.webView { install(webView, for: tab) }
+        window?.makeKeyAndOrderFront(nil)
+        select(tab)
+    }
+
+    func sidebarMoveGroup(id: UUID, to index: Int) {
+        guard let found = AppDelegate.shared.findGroup(id) else { return }
+        let (group, source) = found
+        if source === self {
+            store.move(group, to: index)
+            return
+        }
+        guard source.isPrivate == isPrivate else { NSSound.beep(); return }
+        let wasShowing = source.store.selected?.group === group
+        source.store.take(group)
+        group.tabs.forEach { $0.webView?.removeFromSuperview() }
+        if source.store.allTabs.isEmpty {
+            source.window?.performClose(nil)
+        } else if wasShowing, let next = source.store.allTabs.first {
+            source.select(next)
+        }
+        store.adopt(group, at: index)
+        group.tabs.forEach { if let webView = $0.webView { install(webView, for: $0) } }
+        window?.makeKeyAndOrderFront(nil)
+        if let first = group.tabs.first { select(first) }
+    }
+
+    /// Dragging a tab out of every window opens it in a new window there, like Chrome.
+    func sidebarTearOff(id: UUID, at screenPoint: NSPoint) {
+        let overAWindow = NSApp.windows.contains { $0.isVisible && $0.frame.contains(screenPoint) }
+        guard !overAWindow, let found = AppDelegate.shared.findTab(id), found.1 === self,
+              store.allTabs.count > 1 else { return }
+        let tab = found.0
+        giveAway(tab)
+        tab.pinned = false
+        let controller = BrowserWindowController(session: nil, adoptingTab: tab, isPrivate: isPrivate)
+        AppDelegate.shared.open(controller)
+        controller.window?.setFrameTopLeftPoint(NSPoint(x: screenPoint.x - 120, y: screenPoint.y + 20))
     }
 
     @objc func openPasswords(_ sender: Any?) {
@@ -571,6 +724,10 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         case #selector(goBack(_:)): return store.selected?.webView?.canGoBack ?? false
         case #selector(goForward(_:)): return store.selected?.webView?.canGoForward ?? false
         case #selector(reopenClosedTab(_:)): return !store.recentlyClosed.isEmpty
+        case #selector(printPage(_:)), #selector(findInPage(_:)), #selector(copyPageAddress(_:)):
+            return store.selected?.webView != nil
+        case #selector(duplicateTab(_:)):
+            return store.selected?.url != nil
         case #selector(togglePinCurrentTab(_:)):
             item.title = store.selected?.pinned == true ? "Unpin Tab" : "Pin Tab"
             return store.selected != nil
@@ -823,15 +980,39 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-        // ⌘-click a link: open it in a new tab (⇧⌘-click switches to it).
+        if navigationAction.shouldPerformDownload {
+            decisionHandler(.download)
+            return
+        }
+        // ⌘-click or middle-click a link: open it in a new tab (⇧⌘-click switches to it).
         if navigationAction.navigationType == .linkActivated,
-           navigationAction.modifierFlags.contains(.command),
+           navigationAction.modifierFlags.contains(.command) || navigationAction.buttonNumber == 2,
            let url = navigationAction.request.url {
             openInNewTab(url, background: !navigationAction.modifierFlags.contains(.shift), after: store.tab(for: webView))
             decisionHandler(.cancel)
             return
         }
         decisionHandler(.allow)
+    }
+
+    /// Files the browser can't show (zips, installers, "download" links) are saved to Downloads.
+    func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
+                 decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+        let disposition = (navigationResponse.response as? HTTPURLResponse)?
+            .value(forHTTPHeaderField: "Content-Disposition")?.lowercased() ?? ""
+        if !navigationResponse.canShowMIMEType || (navigationResponse.isForMainFrame && disposition.hasPrefix("attachment")) {
+            decisionHandler(.download)
+        } else {
+            decisionHandler(.allow)
+        }
+    }
+
+    func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) {
+        DownloadManager.shared.track(download)
+    }
+
+    func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
+        DownloadManager.shared.track(download)
     }
 
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
@@ -863,6 +1044,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
             }
         }
         if tab === store.selected { refreshExtensionButtons() }
+        if !isPrivate, let url = webView.url { HistoryStore.shared.record(url, title: webView.title ?? "") }
         Favicons.fetch(for: tab, in: webView) { [weak self, weak tab] in
             guard let self, let tab else { return }
             self.sidebar.refresh(tab)

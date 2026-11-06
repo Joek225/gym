@@ -10,22 +10,27 @@ enum MainMenu {
     static func build() -> NSMenu {
         let main = NSMenu()
 
-        let app = submenu(in: main, title: "MyBrowser")
-        app.addItem(withTitle: "About MyBrowser", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        let app = submenu(in: main, title: "beababrowser")
+        app.addItem(withTitle: "About beababrowser", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        app.addItem(.separator())
+        app.addItem(withTitle: "Settings…", action: #selector(W.openSettings(_:)), keyEquivalent: ",")
+        app.addItem(withTitle: "Make Default Browser…", action: #selector(AppDelegate.makeDefaultBrowser(_:)), keyEquivalent: "")
         app.addItem(.separator())
         app.addItem(withTitle: "Passwords…", action: #selector(W.openPasswords(_:)), keyEquivalent: "p")
             .keyEquivalentModifierMask = [.command, .option]
         app.addItem(.separator())
-        app.addItem(withTitle: "Hide MyBrowser", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        app.addItem(withTitle: "Hide beababrowser", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         app.addItem(withTitle: "Hide Others", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
             .keyEquivalentModifierMask = [.command, .option]
         app.addItem(withTitle: "Show All", action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: "")
         app.addItem(.separator())
-        app.addItem(withTitle: "Quit MyBrowser", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        app.addItem(withTitle: "Quit beababrowser", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 
         let file = submenu(in: main, title: "File")
         file.addItem(withTitle: "New Tab", action: #selector(W.newTab(_:)), keyEquivalent: "t")
         file.addItem(withTitle: "New Window", action: #selector(AppDelegate.newWindow(_:)), keyEquivalent: "n")
+        file.addItem(withTitle: "New Private Window", action: #selector(AppDelegate.newPrivateWindow(_:)), keyEquivalent: "n")
+            .keyEquivalentModifierMask = [.command, .shift]
         file.addItem(withTitle: "Reopen Closed Tab", action: #selector(W.reopenClosedTab(_:)), keyEquivalent: "t")
             .keyEquivalentModifierMask = [.command, .shift]
         file.addItem(withTitle: "Search or Go to Address…", action: #selector(W.focusAddressBar(_:)), keyEquivalent: "l")
@@ -34,6 +39,8 @@ enum MainMenu {
         file.addItem(withTitle: "Close Tab", action: #selector(W.closeTab(_:)), keyEquivalent: "w")
         file.addItem(withTitle: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
             .keyEquivalentModifierMask = [.command, .shift]
+        file.addItem(.separator())
+        file.addItem(withTitle: "Print…", action: #selector(W.printPage(_:)), keyEquivalent: "p")
         file.addItem(.separator())
         file.addItem(withTitle: "Tools (Converter & Background Remover)…", action: #selector(W.openTools(_:)), keyEquivalent: "")
         file.addItem(withTitle: "Passwords…", action: #selector(W.openPasswords(_:)), keyEquivalent: "")
@@ -47,6 +54,13 @@ enum MainMenu {
         edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        edit.addItem(.separator())
+        edit.addItem(withTitle: "Copy Page Address", action: #selector(W.copyPageAddress(_:)), keyEquivalent: "")
+        edit.addItem(.separator())
+        edit.addItem(withTitle: "Find…", action: #selector(W.findInPage(_:)), keyEquivalent: "f")
+        edit.addItem(withTitle: "Find Next", action: #selector(W.findNext(_:)), keyEquivalent: "g")
+        edit.addItem(withTitle: "Find Previous", action: #selector(W.findPrevious(_:)), keyEquivalent: "g")
+            .keyEquivalentModifierMask = [.command, .shift]
 
         let view = submenu(in: main, title: "View")
         view.addItem(withTitle: "Hide Bookmarks Bar", action: #selector(W.toggleBookmarksBar(_:)), keyEquivalent: "b")
@@ -64,6 +78,8 @@ enum MainMenu {
             .keyEquivalentModifierMask = [.command, .control]
 
         let history = submenu(in: main, title: "History")
+        history.addItem(withTitle: "Show All History", action: #selector(W.showHistory(_:)), keyEquivalent: "y")
+        history.addItem(.separator())
         history.addItem(withTitle: "Back", action: #selector(W.goBack(_:)), keyEquivalent: "[")
         history.addItem(withTitle: "Forward", action: #selector(W.goForward(_:)), keyEquivalent: "]")
         history.addItem(.separator())
@@ -107,6 +123,7 @@ enum MainMenu {
         tab.addItem(inGroupItem)
         tab.addItem(.separator())
         tab.addItem(withTitle: "Pin Tab", action: #selector(W.togglePinCurrentTab(_:)), keyEquivalent: "")
+        tab.addItem(withTitle: "Duplicate Tab", action: #selector(W.duplicateTab(_:)), keyEquivalent: "")
         tab.addItem(withTitle: "Add Tab to New Group", action: #selector(W.addTabToNewGroup(_:)), keyEquivalent: "g")
             .keyEquivalentModifierMask = [.command, .shift]
         tab.addItem(withTitle: "New Tab in Group", action: #selector(W.newTabInCurrentGroup(_:)), keyEquivalent: "c")
@@ -124,6 +141,9 @@ enum MainMenu {
         let window = submenu(in: main, title: "Window")
         window.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
         window.addItem(withTitle: "Zoom", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
+        window.addItem(.separator())
+        window.addItem(withTitle: "Downloads", action: #selector(W.showDownloads(_:)), keyEquivalent: "j")
+            .keyEquivalentModifierMask = [.command, .shift]
         NSApp.windowsMenu = window
 
         return main

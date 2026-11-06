@@ -25,8 +25,6 @@ enum AddressParser {
         }
 
         // Otherwise, search for it.
-        var search = URLComponents(string: "https://www.google.com/search")!
-        search.queryItems = [URLQueryItem(name: "q", value: text)]
-        return search.url
+        return Preferences.searchEngine.url(for: text)
     }
 }

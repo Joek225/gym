@@ -14,7 +14,7 @@ final class NewTabView: SolidView, NSTextFieldDelegate {
     weak var delegate: NewTabDelegate?
 
     private struct Suggestion {
-        enum Kind { case address, search, bookmark }
+        enum Kind { case address, search, bookmark, history }
         let kind: Kind
         let text: String
         let detail: String
@@ -110,6 +110,21 @@ final class NewTabView: SolidView, NSTextFieldDelegate {
 
     func focus() { window?.makeFirstResponder(field) }
 
+    /// Private windows say so on their new tab page.
+    func showPrivateNote() {
+        let note = NSTextField(wrappingLabelWithString: "Private window — pages you visit, cookies, passwords and tabs here aren't saved. Everything is forgotten when you close this window.")
+        note.alignment = .center
+        note.textColor = Theme.mutedText
+        note.font = .systemFont(ofSize: 13)
+        note.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(note)
+        NSLayoutConstraint.activate([
+            note.bottomAnchor.constraint(equalTo: box.topAnchor, constant: -24),
+            note.centerXAnchor.constraint(equalTo: centerXAnchor),
+            note.widthAnchor.constraint(lessThanOrEqualToConstant: 520),
+        ])
+    }
+
     @objc private func importClicked(_ sender: Any?) { delegate?.newTabImportFromChrome() }
 
     // MARK: Typing
@@ -149,15 +164,19 @@ final class NewTabView: SolidView, NSTextFieldDelegate {
 
         var local: [Suggestion] = []
         if let url = AddressParser.url(from: text) {
-            let isSearch = url.host == "www.google.com" && url.path == "/search"
+            let isSearch = Preferences.searchEngine.isResultsPage(url)
             local.append(Suggestion(kind: isSearch ? .search : .address, text: text,
-                                    detail: isSearch ? "Google Search" : "Go to site", url: url))
+                                    detail: isSearch ? "\(Preferences.searchEngine.rawValue) Search" : "Go to site", url: url))
         }
         let lower = text.lowercased()
+        for entry in HistoryStore.shared.matches(text, limit: 3) where !local.contains(where: { $0.url == entry.url }) {
+            local.append(Suggestion(kind: .history, text: entry.title.isEmpty ? entry.url.absoluteString : entry.title,
+                                    detail: entry.url.host ?? "", url: entry.url))
+        }
         let bookmarks = BookmarkMenus.allBookmarks().filter {
             $0.title.lowercased().contains(lower) || ($0.url?.absoluteString.lowercased().contains(lower) ?? false)
         }
-        for node in bookmarks.prefix(3) {
+        for node in bookmarks.prefix(3) where !local.contains(where: { $0.url == node.url }) {
             if let url = node.url { local.append(Suggestion(kind: .bookmark, text: node.displayTitle, detail: url.host ?? "", url: url)) }
         }
         show(local)
@@ -190,7 +209,13 @@ final class NewTabView: SolidView, NSTextFieldDelegate {
         selected = 0
         rows.arrangedSubviews.forEach { $0.removeFromSuperview() }
         for (i, item) in suggestions.enumerated() {
-            let symbol = item.kind == .bookmark ? "star" : (item.kind == .address ? "globe" : "magnifyingglass")
+            let symbol: String
+            switch item.kind {
+            case .bookmark: symbol = "star"
+            case .address: symbol = "globe"
+            case .history: symbol = "clock.arrow.circlepath"
+            case .search: symbol = "magnifyingglass"
+            }
             let row = SuggestionRow(icon: symbol, text: item.text, detail: item.detail) { [weak self] in
                 self?.selected = i
                 self?.go()

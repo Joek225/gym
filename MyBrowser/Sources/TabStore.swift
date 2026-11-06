@@ -155,8 +155,8 @@ final class TabStore: NSObject {
     }
 
     /// Adds a whole group at the end of this window.
-    func adopt(_ group: TabGroup) {
-        items.append(group)
+    func adopt(_ group: TabGroup, at index: Int? = nil) {
+        items.insert(group, at: min(max(0, index ?? items.count), items.count))
         group.tabs.forEach { $0.group = group }
         changed()
     }

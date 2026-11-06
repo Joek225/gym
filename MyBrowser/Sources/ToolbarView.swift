@@ -9,6 +9,10 @@ final class ToolbarView: NSView {
     let sidebarButton = ToolbarView.makeButton("sidebar.leading", "Show the tab sidebar (⌃⌘S)")
     /// Opens the extensions menu (like Chrome's puzzle-piece button).
     let puzzleButton = ToolbarView.makeButton("puzzlepiece.extension", "Extensions")
+    /// Appears after your first download (⇧⌘J).
+    let downloadsButton = ToolbarView.makeButton("arrow.down.circle", "Downloads (⇧⌘J)")
+    /// The optional memory readout (Settings → Show memory use).
+    let memoryLabel = NSTextField(labelWithString: "")
     let backButton = ToolbarView.makeButton("chevron.left", "Back")
     let forwardButton = ToolbarView.makeButton("chevron.right", "Forward")
     let reloadButton = ToolbarView.makeButton("arrow.clockwise", "Reload")
@@ -62,14 +66,20 @@ final class ToolbarView: NSView {
 
         extensionStack.orientation = .horizontal
         extensionStack.spacing = 2
+        downloadsButton.isHidden = true
+        memoryLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+        memoryLabel.textColor = Theme.mutedText
+        memoryLabel.isHidden = true
+        let right = NSStackView(views: [memoryLabel, downloadsButton, extensionStack, puzzleButton])
+        right.spacing = 4
+        right.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(right)
         for v in [background, buttons, fieldBox, addressField, starButton, extensionStack, puzzleButton] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
         }
         addSubview(background)
         addSubview(buttons)
         addSubview(fieldBox)
-        addSubview(extensionStack)
-        addSubview(puzzleButton)
         fieldBox.addSubview(addressField)
         fieldBox.addSubview(starButton)
 
@@ -83,12 +93,13 @@ final class ToolbarView: NSView {
             leadingConstraint,
             buttons.centerYAnchor.constraint(equalTo: centerYAnchor),
 
-            fieldBox.leadingAnchor.constraint(equalTo: buttons.trailingAnchor, constant: 8),
-            fieldBox.trailingAnchor.constraint(equalTo: extensionStack.leadingAnchor, constant: -6),
-            extensionStack.trailingAnchor.constraint(equalTo: puzzleButton.leadingAnchor, constant: -2),
-            puzzleButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
-            puzzleButton.centerYAnchor.constraint(equalTo: centerYAnchor),
-            extensionStack.centerYAnchor.constraint(equalTo: centerYAnchor),
+            // The address bar is always the same width, centered — it only shrinks
+            // if the window is too narrow to fit it next to the buttons.
+            fieldBox.centerXAnchor.constraint(equalTo: centerXAnchor),
+            fieldBox.leadingAnchor.constraint(greaterThanOrEqualTo: buttons.trailingAnchor, constant: 12),
+            fieldBox.trailingAnchor.constraint(lessThanOrEqualTo: right.leadingAnchor, constant: -12),
+            right.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            right.centerYAnchor.constraint(equalTo: centerYAnchor),
             fieldBox.centerYAnchor.constraint(equalTo: centerYAnchor),
             fieldBox.heightAnchor.constraint(equalToConstant: 28),
 
@@ -99,6 +110,9 @@ final class ToolbarView: NSView {
             starButton.trailingAnchor.constraint(equalTo: fieldBox.trailingAnchor, constant: -2),
             starButton.centerYAnchor.constraint(equalTo: fieldBox.centerYAnchor),
         ])
+        let preferredWidth = fieldBox.widthAnchor.constraint(equalToConstant: 620)
+        preferredWidth.priority = .defaultHigh
+        preferredWidth.isActive = true
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
