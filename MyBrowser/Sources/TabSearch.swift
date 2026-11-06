@@ -2,7 +2,7 @@ import AppKit
 
 /// Chrome's "Search tabs": type to find any open tab in any window, then press Return.
 @MainActor
-final class TabSearch: NSObject, NSWindowDelegate, NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate {
+final class TabSearch: NSObject, NSWindowDelegate, NSSearchFieldDelegate, NSTableViewDataSource, NSTableViewDelegate {
     private static var current: TabSearch?
 
     private struct Result {
