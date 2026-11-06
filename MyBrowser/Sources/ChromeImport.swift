@@ -13,12 +13,24 @@ enum ChromeData {
         return NSHomeDirectory()
     }
 
-    static var folder: URL {
-        URL(fileURLWithPath: realHome).appendingPathComponent("Library/Application Support/Google/Chrome", isDirectory: true)
+    static let defaultFolder = URL(fileURLWithPath: realHome)
+        .appendingPathComponent("Library/Application Support/Google/Chrome", isDirectory: true)
+
+    /// Chrome's folder (or the one you picked, if macOS wouldn't let us read it directly).
+    @MainActor static var folder = defaultFolder
+
+    /// Why Chrome's folder couldn't be read (empty if it could).
+    @MainActor static func problem() -> String {
+        do {
+            _ = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
+            return profiles().isEmpty ? "No Chrome profiles were found in that folder." : ""
+        } catch {
+            return (error as NSError).localizedDescription
+        }
     }
 
     /// Chrome's profiles, with the names you gave them ("Person 1", "School", …).
-    static func profiles() -> [Profile] {
+    @MainActor static func profiles() -> [Profile] {
         let fm = FileManager.default
         var names: [String: String] = [:]
         if let data = try? Data(contentsOf: folder.appendingPathComponent("Local State")),
@@ -195,12 +207,21 @@ final class ChromeImportView: NSView {
         importButton.action = #selector(importClicked(_:))
 
         guard !profiles.isEmpty else {
-            let missing = NSTextField(wrappingLabelWithString: "Chrome wasn't found on this Mac (looked in ~/Library/Application Support/Google/Chrome).")
+            // macOS didn't let us read Chrome's folder by ourselves: ask you to point at it once.
+            let missing = NSTextField(wrappingLabelWithString: "To read your Chrome data, macOS needs you to point to Chrome's folder once. Click the button below; a window opens already showing Chrome's folder. Just click “Use This Folder”.\n\n(Details: \(ChromeData.problem()))")
             missing.textColor = Theme.text
-            let stack = NSStackView(views: [intro, missing])
+            let choose = NSButton(title: "Choose Chrome's Folder…", target: self, action: #selector(chooseFolder(_:)))
+            choose.bezelStyle = .rounded
+            choose.keyEquivalent = "\r"
+            let stack = NSStackView(views: [intro, missing, choose])
             stack.orientation = .vertical
             stack.alignment = .leading
+            stack.spacing = 14
             place(stack)
+            NSLayoutConstraint.activate([
+                missing.widthAnchor.constraint(equalTo: stack.widthAnchor),
+                intro.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            ])
             return
         }
 
@@ -337,6 +358,26 @@ final class ChromeImportView: NSView {
             lines.append("\nQuit (⌘Q) and reopen the browser so the extensions work on every tab.")
             status.stringValue = lines.joined(separator: "\n")
             importButton.isEnabled = true
+        }
+    }
+
+    @objc private func chooseFolder(_ sender: Any?) {
+        guard let window else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.showsHiddenFiles = true
+        panel.prompt = "Use This Folder"
+        panel.message = "This is Chrome's folder (Library → Application Support → Google → Chrome). Just click “Use This Folder”."
+        panel.directoryURL = ChromeData.defaultFolder
+        panel.beginSheetModal(for: window) { response in
+            guard response == .OK, var url = panel.url else { return }
+            // If you picked a folder inside Chrome's (like "Default"), use Chrome's folder itself.
+            if url.lastPathComponent != "Chrome", url.deletingLastPathComponent().lastPathComponent == "Chrome" {
+                url = url.deletingLastPathComponent()
+            }
+            ChromeData.folder = url
+            ChromeImportOverlay.show(in: window)   // reopen with your Chrome data
         }
     }
 

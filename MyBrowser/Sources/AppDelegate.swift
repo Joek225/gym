@@ -20,6 +20,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.mainMenu = MainMenu.build()
         SessionSaver.shared.windowsProvider = { [weak self] in self?.controllers.map(\.store) ?? [] }
 
+        // Used by the automatic test: can we read Chrome's folder by ourselves?
+        if CommandLine.arguments.contains("--test-chrome-access") {
+            let profiles = ChromeData.profiles()
+            let bookmarks = profiles.first.flatMap { ChromeBookmarks.read($0.folder.appendingPathComponent("Bookmarks")) }
+            NSLog("MyBrowser chrome access: %ld profiles (%@), %ld bookmarks, problem: %@",
+                  profiles.count, profiles.map(\.name).joined(separator: ","),
+                  bookmarks.map { $0.bar.count + $0.other.count } ?? -1, ChromeData.problem())
+            NSApp.terminate(nil)
+            return
+        }
+
         Task { @MainActor in
             // Extensions only start (and use memory) if you've installed any.
             if #available(macOS 15.4, *) {
