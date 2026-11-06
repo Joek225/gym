@@ -11,8 +11,16 @@ enum Theme {
     static let background  = saved.background
     static let accent      = saved.accent
     static let field       = mix(saved.sidebar, saved.toolbar, 0.15)
-    static let selectedTab = saved.toolbar
-    static let hoverTab    = mix(saved.sidebar, saved.toolbar, 0.45)
+    /// Arc style: the window is a see-through tinted gradient and pages sit on a rounded card.
+    static let arcStyle    = Preferences.arcStyle
+    static let selectedTab = arcStyle ? NSColor(white: isDark ? 1 : 0, alpha: 0.16) : saved.toolbar
+    static let hoverTab    = arcStyle ? NSColor(white: isDark ? 1 : 0, alpha: 0.08) : mix(saved.sidebar, saved.toolbar, 0.45)
+    /// Background of the toolbar, bookmarks bar and sidebar (clear in Arc style, so the tint shows).
+    static let chromeFill  = arcStyle ? NSColor.clear : saved.toolbar
+    static let sidebarFill = arcStyle ? NSColor.clear : saved.sidebar
+    /// Small surfaces in the sidebar (pinned tiles, the Tools button).
+    static let tileFill    = arcStyle ? NSColor(white: isDark ? 1 : 0, alpha: 0.07) : saved.sidebar
+    static let buttonFill  = arcStyle ? NSColor(white: isDark ? 1 : 0, alpha: 0.12) : saved.toolbar
     static let isDark      = (saved.sidebar.usingColorSpace(.sRGB)?.brightnessComponent ?? 0) < 0.55
     static let text        = isDark ? NSColor(hex: 0xE3E4EE) : NSColor(hex: 0x1F1F1F)
     static let mutedText   = isDark ? NSColor(hex: 0x9C9EB2) : NSColor(hex: 0x5F6368)

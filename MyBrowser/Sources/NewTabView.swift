@@ -54,19 +54,12 @@ final class NewTabView: SolidView, NSTextFieldDelegate {
         rows.spacing = 0
         rows.alignment = .leading
 
-        let importButton = NSButton(title: "Import bookmarks, tab groups & extensions from Chrome",
-                                    target: self, action: #selector(importClicked(_:)))
-        importButton.isBordered = false
-        importButton.attributedTitle = NSAttributedString(string: importButton.title, attributes: [
-            .foregroundColor: Theme.accent, .font: NSFont.systemFont(ofSize: 13)])
-
-        for v in [box, glass, field, list, rows, importButton] as [NSView] { v.translatesAutoresizingMaskIntoConstraints = false }
+        for v in [box, glass, field, list, rows] as [NSView] { v.translatesAutoresizingMaskIntoConstraints = false }
         addSubview(box)
         box.addSubview(glass)
         box.addSubview(field)
         addSubview(list)
         list.addSubview(rows)
-        addSubview(importButton)
 
         listHeight = list.heightAnchor.constraint(equalToConstant: 0)
         NSLayoutConstraint.activate([
@@ -91,8 +84,6 @@ final class NewTabView: SolidView, NSTextFieldDelegate {
             rows.leadingAnchor.constraint(equalTo: list.leadingAnchor, constant: 6),
             rows.trailingAnchor.constraint(equalTo: list.trailingAnchor, constant: -6),
 
-            importButton.centerXAnchor.constraint(equalTo: centerXAnchor),
-            importButton.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -28),
         ])
         let wide = box.widthAnchor.constraint(equalToConstant: 620)
         wide.priority = .defaultHigh
@@ -125,7 +116,6 @@ final class NewTabView: SolidView, NSTextFieldDelegate {
         ])
     }
 
-    @objc private func importClicked(_ sender: Any?) { delegate?.newTabImportFromChrome() }
 
     // MARK: Typing
 

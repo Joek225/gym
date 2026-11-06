@@ -6,6 +6,8 @@ final class BookmarkNode: Codable {
     var title: String
     var url: URL?
     var children: [BookmarkNode]?
+    /// The site's small icon, saved with the bookmark.
+    var icon: Data?
 
     var isFolder: Bool { children != nil }
 
@@ -245,6 +247,7 @@ enum BookmarkEditor {
         alert.messageText = node.isFolder ? "Edit Folder" : (isNew ? "Bookmark Added" : "Edit Bookmark")
 
         let nameField = NSTextField(string: node.title)
+        nameField.placeholderString = node.isFolder ? "Folder name" : "No name (shows just the icon)"
         let urlField = NSTextField(string: node.url?.absoluteString ?? "")
         let folderPopup = NSPopUpButton()
         let currentParent = store.parent(of: node)

@@ -216,7 +216,8 @@ final class TabStore: NSObject {
     }
 
     static func savedGroup(_ g: TabGroup) -> SavedGroup {
-        SavedGroup(id: g.id, name: g.name, color: g.color, collapsed: g.isCollapsed, tabs: g.tabs.compactMap(savedTab))
+        SavedGroup(id: g.id, name: g.name, color: g.color, collapsed: g.isCollapsed, tabs: g.tabs.compactMap(savedTab),
+                   disabled: g.isDisabled ? true : nil, lastTab: g.lastTabID)
     }
 
     static func makeTab(_ s: SavedTab) -> Tab {
@@ -232,6 +233,8 @@ final class TabStore: NSObject {
 
     static func makeGroup(_ sg: SavedGroup) -> TabGroup {
         let group = TabGroup(id: sg.id, name: sg.name, color: sg.color, isCollapsed: sg.collapsed)
+        group.isDisabled = sg.disabled ?? false
+        group.lastTabID = sg.lastTab
         group.tabs = sg.tabs.map(makeTab)
         group.tabs.forEach { $0.group = group }
         return group
@@ -252,6 +255,8 @@ struct SavedGroup: Codable {
     var color: GroupColor
     var collapsed: Bool
     var tabs: [SavedTab]
+    var disabled: Bool? = nil
+    var lastTab: UUID? = nil
 }
 
 struct SavedItem: Codable {

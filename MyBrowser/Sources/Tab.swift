@@ -9,6 +9,12 @@ final class TabGroup: NSObject {
     var color: GroupColor
     var isCollapsed: Bool
     var tabs: [Tab] = []
+    /// A turned-off group: all its pages are closed (no memory) and its color is greyed.
+    var isDisabled = false
+    /// When you last used a tab in this group (for turning unused groups off).
+    var lastActive = Date()
+    /// The tab you were last on in this group (opened when you turn the group back on).
+    var lastTabID: UUID?
 
     init(id: UUID = UUID(), name: String, color: GroupColor, isCollapsed: Bool = false) {
         self.id = id

@@ -25,6 +25,8 @@ protocol SidebarDelegate: AnyObject {
     func sidebarMoveGroup(id: UUID, to index: Int)
     /// A tab was dragged out of every window: open it in a new window there.
     func sidebarTearOff(id: UUID, at screenPoint: NSPoint)
+    /// Clicking a turned-off group turns it back on.
+    func sidebarEnableGroup(_ group: TabGroup)
 }
 
 /// What's being dragged, written on the drag pasteboard ("tab:<id>" or "group:<id>"),
@@ -73,7 +75,7 @@ final class PinnedStrip: NSObject {
 /// The vertical tab list on the left, with groups that collapse and tabs you can drag.
 @MainActor
 final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegate, NSMenuDelegate {
-    let view = SolidView(color: Theme.sidebar)
+    let view = SolidView(color: Theme.sidebarFill)
     weak var delegate: SidebarDelegate?
 
     private let store: TabStore
@@ -95,7 +97,7 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
         outline.outlineTableColumn = column
         outline.headerView = nil
         outline.style = .plain
-        outline.backgroundColor = Theme.sidebar
+        outline.backgroundColor = Theme.arcStyle ? .clear : Theme.sidebar
         outline.selectionHighlightStyle = .none
         outline.intercellSpacing = NSSize(width: 0, height: 2)
         outline.indentationPerLevel = 0
@@ -123,21 +125,16 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
         scroll.documentView = outline
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
-        scroll.drawsBackground = true
+        scroll.drawsBackground = !Theme.arcStyle
         scroll.backgroundColor = Theme.sidebar
         scroll.borderType = .noBorder
         scroll.contentInsets = NSEdgeInsets(top: 6, left: 0, bottom: 6, right: 0)
 
-        let newTab = SolidView(color: Theme.toolbar)
-        newTab.cornerRadius = 8
-        let plus = NSButton(image: Icons.symbol("plus", size: 14, weight: .medium) ?? NSImage(),
-                            target: self, action: #selector(newTabClicked(_:)))
-        plus.isBordered = false
-        plus.contentTintColor = Theme.text
-        plus.toolTip = "New Tab (⌘T)"
+        // An invisible guide for the width of the bottom row (there's no + button: use ⌘T).
+        let newTab = NSView()
 
-        // Under the + button: Tools (left half) and a placeholder (right half).
-        let tools = SolidView(color: Theme.toolbar)
+        // Bottom row: Tools (left half) and a placeholder (right half).
+        let tools = SolidView(color: Theme.buttonFill)
         tools.cornerRadius = 8
         let toolsButton = NSButton(title: "Tools", target: self, action: #selector(toolsClicked(_:)))
         toolsButton.isBordered = false
@@ -152,16 +149,16 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
 
         // Top: hide-sidebar button on the left; tab groups and tab search on the right (like Chrome).
         let collapse = headerButton("sidebar.leading", "Hide the tab sidebar (⌃⌘S)", #selector(collapseClicked(_:)))
-        let groupsPill = SolidView(color: Theme.toolbar)
+        let groupsPill = SolidView(color: Theme.buttonFill)
         groupsPill.cornerRadius = 9
-        let searchPill = SolidView(color: Theme.toolbar)
+        let searchPill = SolidView(color: Theme.buttonFill)
         searchPill.cornerRadius = 9
         let groupsButton = headerButton("square.grid.2x2", "Tab groups", #selector(groupsClicked(_:)))
         let searchButton = headerButton("text.magnifyingglass", "Search tabs (⇧⌘A)", #selector(searchClicked(_:)))
-        let headerLine = SolidView(color: Theme.toolbar)
+        let headerLine = SolidView(color: Theme.buttonFill)
 
         for v in [collapse, groupsPill, searchPill, groupsButton, searchButton, headerLine,
-                  scroll, newTab, plus, tools, toolsButton, placeholder, placeholderLabel] as [NSView] {
+                  scroll, newTab, tools, toolsButton, placeholder, placeholderLabel] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(v)
         }
@@ -192,8 +189,8 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
 
             newTab.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
             newTab.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -8),
-            newTab.bottomAnchor.constraint(equalTo: tools.topAnchor, constant: -6),
-            newTab.heightAnchor.constraint(equalToConstant: 30),
+            newTab.bottomAnchor.constraint(equalTo: tools.topAnchor),
+            newTab.heightAnchor.constraint(equalToConstant: 0),
 
             tools.leadingAnchor.constraint(equalTo: newTab.leadingAnchor),
             tools.widthAnchor.constraint(equalTo: newTab.widthAnchor, multiplier: 0.5, constant: -3),
@@ -211,10 +208,6 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
             placeholderLabel.centerXAnchor.constraint(equalTo: placeholder.centerXAnchor),
             placeholderLabel.centerYAnchor.constraint(equalTo: placeholder.centerYAnchor),
 
-            plus.leadingAnchor.constraint(equalTo: newTab.leadingAnchor),
-            plus.trailingAnchor.constraint(equalTo: newTab.trailingAnchor),
-            plus.topAnchor.constraint(equalTo: newTab.topAnchor),
-            plus.bottomAnchor.constraint(equalTo: newTab.bottomAnchor),
         ])
     }
 
@@ -272,7 +265,9 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
     @objc private func rowClicked(_ sender: Any?) {
         let row = outline.clickedRow
         guard row >= 0, let item = outline.item(atRow: row) else { return }
-        if let group = item as? TabGroup {
+        if let group = item as? TabGroup, group.isDisabled {
+            delegate?.sidebarEnableGroup(group)
+        } else if let group = item as? TabGroup {
             group.isCollapsed.toggle()
             if group.isCollapsed { outline.collapseItem(group) } else { outline.expandItem(group) }
             if let cell = outline.view(atColumn: 0, row: outline.row(forItem: group), makeIfNecessary: false) as? GroupCellView {
@@ -788,16 +783,20 @@ final class GroupCellView: NSTableCellView {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     func configure(_ group: TabGroup) {
-        chip.fillColor = group.color.color
+        // A turned-off group is grey until you click it.
+        chip.fillColor = group.isDisabled ? NSColor(white: 0.45, alpha: 1) : group.color.color
         let count = group.tabs.count
         let countText = "\(count) tab\(count == 1 ? "" : "s")"
-        if group.name.isEmpty {
+        if group.isDisabled {
+            label.stringValue = (group.name.isEmpty ? countText : group.name) + "  ·  off"
+        } else if group.name.isEmpty {
             label.stringValue = group.isCollapsed ? countText : ""
         } else {
             label.stringValue = group.isCollapsed ? "\(group.name)  ·  \(countText)" : group.name
         }
         chevron.image = Icons.symbol(group.isCollapsed ? "chevron.down" : "chevron.up", size: 11, weight: .semibold)
-        toolTip = "Click to \(group.isCollapsed ? "expand" : "collapse"). Right-click to edit the group."
+        toolTip = group.isDisabled ? "Turned off to save memory. Click to turn it back on."
+            : "Click to \(group.isCollapsed ? "expand" : "collapse"). Right-click to edit or turn off the group."
     }
 }
 
@@ -875,7 +874,7 @@ final class PinnedTile: SolidView, NSDraggingSource {
         self.tab = tab
         self.actions = actions
         self.isSelected = selected
-        super.init(color: selected ? Theme.selectedTab : Theme.sidebar)
+        super.init(color: selected ? Theme.selectedTab : Theme.tileFill)
         cornerRadius = 10
         borderWidth = 1.5
         borderColor = groupColor?.blended(withFraction: 0.45, of: Theme.sidebar) ?? NSColor(hex: 0x4A4C62)
@@ -904,7 +903,7 @@ final class PinnedTile: SolidView, NSDraggingSource {
     }
 
     override func mouseEntered(with event: NSEvent) { if !isSelected { fillColor = Theme.hoverTab } }
-    override func mouseExited(with event: NSEvent) { if !isSelected { fillColor = Theme.sidebar } }
+    override func mouseExited(with event: NSEvent) { if !isSelected { fillColor = Theme.tileFill } }
     override func mouseDown(with event: NSEvent) {
         mouseDownAt = event.locationInWindow
         isDragging = false

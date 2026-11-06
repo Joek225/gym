@@ -12,6 +12,9 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     /// A private window's own throwaway cookie and cache storage.
     private let privateStore: WKWebsiteDataStore?
     private let findBar = FindBar()
+    /// Covers the whole window in black after 5 idle minutes on a new tab.
+    private let dimmer = SolidView(color: .black)
+    private var lastActivity = Date()
     private var memoryReadout: MemoryReadout?
 
     let store: TabStore
@@ -47,9 +50,10 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
             backing: .buffered, defer: true)
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
-        window.isOpaque = true
+        window.isOpaque = !Theme.arcStyle
         window.appearance = Theme.appearance
-        window.backgroundColor = Theme.toolbar
+        window.backgroundColor = Theme.arcStyle ? .clear : Theme.toolbar
+        window.acceptsMouseMovedEvents = true
         window.title = isPrivate ? "Private Window" : "beababrowser"
         window.tabbingMode = .disallowed        // tabs live in our sidebar instead
         window.minSize = NSSize(width: 600, height: 360)
@@ -84,11 +88,19 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     // MARK: Layout
 
     private func buildLayout(in window: NSWindow) {
-        let content = SolidView(color: Theme.toolbar)
+        let content: NSView = Theme.arcStyle ? ArcBackgroundView() : SolidView(color: Theme.toolbar)
         window.contentView = content
         let side = sidebar.view
+        // Arc style: the page sits on a rounded card with a small margin.
+        let margin: CGFloat = Theme.arcStyle ? 8 : 0
+        if Theme.arcStyle {
+            for card in [webContainer, newTabPage] { card.cornerRadius = 10 }
+            errorView.wantsLayer = true
+            errorView.layer?.cornerRadius = 10
+            errorView.layer?.masksToBounds = true
+        }
 
-        for v in [toolbar, bookmarksBar, side, webContainer, errorView, newTabPage, findBar, resizeHandle] as [NSView] {
+        for v in [toolbar, bookmarksBar, side, webContainer, errorView, newTabPage, findBar, resizeHandle, dimmer] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             content.addSubview(v)
         }
@@ -117,8 +129,13 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
 
             webContainer.topAnchor.constraint(equalTo: bookmarksBar.bottomAnchor),
             webContainer.leadingAnchor.constraint(equalTo: side.trailingAnchor),
-            webContainer.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-            webContainer.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+            webContainer.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -margin),
+            webContainer.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -margin),
+
+            dimmer.topAnchor.constraint(equalTo: content.topAnchor),
+            dimmer.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            dimmer.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            dimmer.bottomAnchor.constraint(equalTo: content.bottomAnchor),
 
             errorView.topAnchor.constraint(equalTo: webContainer.topAnchor),
             errorView.leadingAnchor.constraint(equalTo: webContainer.leadingAnchor),
@@ -151,15 +168,14 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         toolbar.starButton.target = self
         toolbar.starButton.action = #selector(bookmarkThisPage(_:))
         newTabPage.delegate = self
+        dimmer.isHidden = true
         findBar.isHidden = true
         findBar.webView = { [weak self] in self?.store.selected?.webView }
         findBar.onClose = { [weak self] in self?.window?.makeFirstResponder(self?.store.selected?.webView) }
         toolbar.downloadsButton.target = self
         toolbar.downloadsButton.action = #selector(showDownloads(_:))
-        toolbar.downloadsButton.isHidden = DownloadManager.shared.items.isEmpty
-        if isPrivate {
-            toolbar.addressField.placeholderString = "Private Window"
-        }
+        toolbar.menuButton.target = self
+        toolbar.menuButton.action = #selector(showMainMenu(_:))
         memoryReadout = MemoryReadout(label: toolbar.memoryLabel) {
             AppDelegate.shared.controllers.flatMap { $0.store.allTabs.compactMap(\.webView) }
         }
@@ -168,7 +184,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
             MainActor.assumeIsolated { self?.memoryReadout?.update() }
         }
         NotificationCenter.default.addObserver(forName: DownloadManager.didChange, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.toolbar.downloadsButton.isHidden = DownloadManager.shared.items.isEmpty }
+            MainActor.assumeIsolated { _ = self }
         }
 
         sidebar.delegate = self
@@ -215,7 +231,12 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
 
     func select(_ tab: Tab) {
         let previous = store.selected
-        if let old = previous, old !== tab { old.lastActive = Date() }
+        if let old = previous, old !== tab { old.lastActive = Date(); old.group?.lastActive = Date() }
+        if let group = tab.group {
+            group.isDisabled = false      // opening a tab turns its group back on
+            group.lastActive = Date()
+            group.lastTabID = tab.id
+        }
         store.selected = tab
         tab.lastActive = Date()
         if let group = tab.group, group.isCollapsed { group.isCollapsed = false }   // like Chrome
@@ -334,14 +355,67 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     // MARK: Unloading idle tabs
 
     private func startUnloadTimer() {
-        unloadTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+        unloadTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.unloadIdleTabs() }
         }
         unloadTimer?.tolerance = 10
     }
 
+    /// Any mouse movement, click or key press (called for every window).
+    func userActed() {
+        lastActivity = Date()
+        if !dimmer.isHidden { setDimmed(false) }
+    }
+
+    private func setDimmed(_ dimmed: Bool) {
+        dimmer.isHidden = !dimmed
+        for kind in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
+            window?.standardWindowButton(kind)?.isHidden = dimmed
+        }
+    }
+
+    /// Turns a group off: closes all its pages (freeing their memory), greys it out
+    /// and folds it up. Its tabs stay listed; click the group to turn it back on.
+    func disableGroup(_ group: TabGroup) {
+        if store.selected?.group === group {
+            if let other = store.allTabs.first(where: { $0.group !== group }) {
+                select(other)
+            } else {
+                let blank = Tab(url: nil)
+                store.insert(blank, at: store.items.count, in: nil)
+                select(blank)
+            }
+        }
+        group.tabs.forEach { $0.unload() }
+        group.isDisabled = true
+        group.isCollapsed = true
+        store.changed()
+    }
+
+    /// Turns a group back on and opens only the tab you were last on in it.
+    func sidebarEnableGroup(_ group: TabGroup) {
+        group.isDisabled = false
+        group.isCollapsed = false
+        let tab = group.tabs.first { $0.id == group.lastTabID } ?? group.tabs.first
+        store.changed()
+        if let tab { select(tab) }
+    }
+
     private func unloadIdleTabs() {
         let now = Date()
+        // Turn off groups you haven't used for a while (Settings).
+        let minutes = Preferences.disableGroupsMinutes
+        if minutes > 0 {
+            for group in store.groups where !group.isDisabled && store.selected?.group !== group
+                && now.timeIntervalSince(group.lastActive) > TimeInterval(minutes * 60) {
+                disableGroup(group)
+            }
+        }
+        // Sitting on a blank new tab for 5 minutes: black out the window until the mouse moves.
+        if dimmer.isHidden, let tab = store.selected, isBlank(tab), now.timeIntervalSince(lastActivity) > 300,
+           window?.isVisible == true {
+            setDimmed(true)
+        }
         for tab in store.allTabs where tab !== store.selected && tab.isLoaded
             && Preferences.unloadMinutes > 0
             && now.timeIntervalSince(tab.lastActive) > TimeInterval(Preferences.unloadMinutes * 60) {
@@ -494,6 +568,35 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
 
     @objc func openTools(_ sender: Any?) {
         if let window { ToolsOverlay.show(in: window) }
+    }
+
+    /// Chrome's ⋮ menu.
+    @objc func showMainMenu(_ sender: NSButton) {
+        let menu = NSMenu()
+        func add(_ title: String, _ action: Selector, _ key: String = "", _ mods: NSEvent.ModifierFlags = [.command]) {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+            item.keyEquivalentModifierMask = mods
+            menu.addItem(item)
+        }
+        add("New Tab", #selector(newTab(_:)), "t")
+        add("New Window", #selector(AppDelegate.newWindow(_:)), "n")
+        add("New Private Window", #selector(AppDelegate.newPrivateWindow(_:)), "n", [.command, .shift])
+        menu.addItem(.separator())
+        add("History", #selector(showHistory(_:)), "y")
+        add("Downloads", #selector(showDownloads(_:)), "j", [.command, .shift])
+        add("Passwords", #selector(openPasswords(_:)), "p", [.command, .option])
+        add("Bookmark This Page…", #selector(bookmarkThisPage(_:)), "d")
+        add("Extensions…", #selector(importFromChrome(_:)))
+        add("Import from Chrome…", #selector(importFromChrome(_:)))
+        menu.addItem(.separator())
+        add("Find…", #selector(findInPage(_:)), "f")
+        add("Print…", #selector(printPage(_:)), "p")
+        add("Zoom In", #selector(zoomInPage(_:)), "=")
+        add("Zoom Out", #selector(zoomOutPage(_:)), "-")
+        add("Tools", #selector(openTools(_:)))
+        menu.addItem(.separator())
+        add("Settings", #selector(openSettings(_:)), ",")
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
     }
 
     @objc func openSettings(_ sender: Any?) {
@@ -663,6 +766,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
             BookmarkEditor.edit(existing, in: window, isNew: false)
         } else {
             let node = BookmarkNode(title: tab.displayTitle, url: url)
+            node.icon = tab.faviconPNG
             bookmarks.add(node, to: bookmarks.bar)
             BookmarkEditor.edit(node, in: window, isNew: true)
         }

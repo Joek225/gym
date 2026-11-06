@@ -18,7 +18,7 @@ final class BookmarksBarView: NSView {
         case node(BookmarkNode)
     }
 
-    private let background = SolidView(color: Theme.toolbar)
+    private let background = SolidView(color: Theme.chromeFill)
     private var entries: [(button: NSButton, entry: Entry)] = []
     private let overflowButton = NSButton()
     private let emptyHint = NSTextField(labelWithString: "Bookmark pages with ⌘D or the ☆ star. To bring over Chrome's, use the link on the new tab page (⌘T).")
@@ -83,10 +83,13 @@ final class BookmarksBarView: NSView {
     private func makeButton(_ node: BookmarkNode) -> NSButton {
         let button = NSButton(title: "", target: self, action: #selector(clicked(_:)))
         button.isBordered = false
-        button.attributedTitle = NSAttributedString(string: node.displayTitle, attributes: [
+        // A bookmark with no name shows just its icon (like Chrome).
+        let title = node.isFolder ? node.displayTitle : node.title
+        button.attributedTitle = NSAttributedString(string: title, attributes: [
             .foregroundColor: Theme.text, .font: NSFont.systemFont(ofSize: 12)])
-        button.image = node.isFolder ? Icons.folder : (Favicons.cached(for: node.url) ?? Icons.globe)
-        button.imagePosition = .imageLeading
+        button.image = node.isFolder ? Icons.folder
+            : (node.icon.flatMap(Favicons.image(fromPNG:)) ?? Favicons.cached(for: node.url) ?? Icons.globe)
+        button.imagePosition = title.isEmpty ? .imageOnly : .imageLeading
         button.imageHugsTitle = true
         button.contentTintColor = Theme.icon
         button.lineBreakMode = .byTruncatingTail
@@ -98,10 +101,11 @@ final class BookmarksBarView: NSView {
         let title = group.name.isEmpty ? "\(group.tabs.count) tabs" : group.name
         let button = NSButton(title: "", target: self, action: #selector(clicked(_:)))
         button.isBordered = false
+        let color = group.isDisabled ? NSColor.gray : group.color.color
         button.attributedTitle = NSAttributedString(string: title, attributes: [
-            .foregroundColor: group.color.color, .font: NSFont.systemFont(ofSize: 12, weight: .medium)])
+            .foregroundColor: color, .font: NSFont.systemFont(ofSize: 12, weight: .medium)])
         button.wantsLayer = true
-        button.layer?.backgroundColor = group.color.dimColor.cgColor
+        button.layer?.backgroundColor = (group.isDisabled ? NSColor.gray.withAlphaComponent(0.25) : group.color.dimColor).cgColor
         button.layer?.cornerRadius = 6
         button.toolTip = "Tab group: click to see its tabs"
         return button

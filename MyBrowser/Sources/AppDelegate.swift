@@ -20,6 +20,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = MainMenu.build()
+        // Notice any activity (used to wake windows that blacked out on an idle new tab).
+        NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDown, .rightMouseDown, .keyDown, .scrollWheel]) { event in
+            MainActor.assumeIsolated {
+                (event.window?.windowController as? BrowserWindowController)?.userActed()
+                if event.type != .mouseMoved { AppDelegate.shared.controllers.forEach { $0.userActed() } }
+            }
+            return event
+        }
         // Private windows are never saved.
         SessionSaver.shared.windowsProvider = { [weak self] in self?.controllers.filter { !$0.isPrivate }.map(\.store) ?? [] }
         ContentBlocker.prepare()

@@ -44,7 +44,19 @@ enum Preferences {
     }
 
     static var showsMemory: Bool {
-        get { d.bool(forKey: "showMemory") }
-        set { d.set(newValue, forKey: "showMemory") }
+        get { d.object(forKey: "showMemory2") as? Bool ?? true }
+        set { d.set(newValue, forKey: "showMemory2") }
+    }
+
+    /// Arc-style see-through tinted window (false = solid colors). Applies after a restart.
+    static var arcStyle: Bool {
+        get { d.object(forKey: "arcStyle") as? Bool ?? true }
+        set { d.set(newValue, forKey: "arcStyle") }
+    }
+
+    /// Minutes before a group you're not using is turned off (0 = never).
+    static var disableGroupsMinutes: Int {
+        get { d.object(forKey: "disableGroupsMinutes") as? Int ?? 30 }
+        set { d.set(newValue, forKey: "disableGroupsMinutes") }
     }
 }

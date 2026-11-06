@@ -5,7 +5,7 @@ import WebKit
 @MainActor
 enum SettingsOverlay {
     static func show(in window: NSWindow) {
-        Overlay.show(title: "Settings", content: SettingsView(), size: NSSize(width: 600, height: 640), in: window)
+        Overlay.show(title: "Settings", content: SettingsView(), size: NSSize(width: 620, height: 700), in: window)
     }
 }
 
@@ -21,6 +21,10 @@ final class SettingsView: NSView {
     private let unloadPopup = NSPopUpButton()
     private let adsBox = NSButton(checkboxWithTitle: "Block ads and trackers (makes pages lighter)", target: nil, action: nil)
     private let memoryBox = NSButton(checkboxWithTitle: "Show memory use in the toolbar", target: nil, action: nil)
+    private let arcBox = NSButton(checkboxWithTitle: "Arc-style see-through background (off = solid colors)", target: nil, action: nil)
+    private let groupsPopup = NSPopUpButton()
+    private let groupChoices: [(String, Int)] = [("10 minutes", 10), ("30 minutes", 30), ("1 hour", 60),
+                                                 ("3 hours", 180), ("Never", 0)]
     private let unloadChoices: [(String, Int)] = [("1 minute", 1), ("3 minutes", 3), ("5 minutes", 5),
                                                   ("10 minutes", 10), ("30 minutes", 30), ("Never", 0)]
 
@@ -68,12 +72,21 @@ final class SettingsView: NSView {
         memoryBox.target = self
         memoryBox.action = #selector(memoryChanged(_:))
 
+        arcBox.state = Preferences.arcStyle ? .on : .off
+        arcBox.target = self
+        arcBox.action = #selector(arcChanged(_:))
+        groupChoices.forEach { groupsPopup.addItem(withTitle: $0.0) }
+        groupsPopup.selectItem(at: groupChoices.firstIndex { $0.1 == Preferences.disableGroupsMinutes } ?? 1)
+        groupsPopup.target = self
+        groupsPopup.action = #selector(groupsChanged(_:))
+
         let defaultButton = button("Make beababrowser Your Default Browser", #selector(defaultClicked(_:)))
 
         let stack = NSStackView(views: [
-            heading("Colors"), presetPopup, colorGrid, NSStackView(views: [restart, restartNote]),
+            heading("Colors"), presetPopup, colorGrid, arcBox, NSStackView(views: [restart, restartNote]),
             heading("Search"), row("Search with", searchPopup),
-            heading("Memory"), row("Unload tabs I haven't used for", unloadPopup), adsBox, memoryBox,
+            heading("Memory"), row("Unload tabs I haven't used for", unloadPopup),
+            row("Turn off groups I haven't used for", groupsPopup), adsBox, memoryBox,
             heading("Default browser"), defaultButton,
         ])
         stack.orientation = .vertical
@@ -146,6 +159,15 @@ final class SettingsView: NSView {
         NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: config) { _, _ in
             DispatchQueue.main.async { NSApp.terminate(nil) }
         }
+    }
+
+    @objc private func arcChanged(_ sender: NSButton) {
+        Preferences.arcStyle = sender.state == .on
+        restartNote.stringValue = "Saved. Click Restart Now to see it."
+    }
+
+    @objc private func groupsChanged(_ sender: NSPopUpButton) {
+        Preferences.disableGroupsMinutes = groupChoices[max(0, sender.indexOfSelectedItem)].1
     }
 
     @objc private func searchChanged(_ sender: NSPopUpButton) {

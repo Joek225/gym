@@ -9,8 +9,9 @@ final class ToolbarView: NSView {
     let sidebarButton = ToolbarView.makeButton("sidebar.leading", "Show the tab sidebar (⌃⌘S)")
     /// Opens the extensions menu (like Chrome's puzzle-piece button).
     let puzzleButton = ToolbarView.makeButton("puzzlepiece.extension", "Extensions")
-    /// Appears after your first download (⇧⌘J).
-    let downloadsButton = ToolbarView.makeButton("arrow.down.circle", "Downloads (⇧⌘J)")
+    let downloadsButton = ToolbarView.makeButton("arrow.down.to.line", "Downloads (⇧⌘J)")
+    /// Chrome's "⋮" menu: settings and everything else.
+    let menuButton = ToolbarView.makeButton("ellipsis", "Settings and more")
     /// The optional memory readout (Settings → Show memory use).
     let memoryLabel = NSTextField(labelWithString: "")
     let backButton = ToolbarView.makeButton("chevron.left", "Back")
@@ -31,7 +32,7 @@ final class ToolbarView: NSView {
     private let extensionStack = NSStackView()
     private var extensionButtons: [String: NSButton] = [:]
 
-    private let background = SolidView(color: Theme.toolbar)
+    private let background = SolidView(color: Theme.chromeFill)
     private let fieldBox = SolidView(color: Theme.field)
     private var leadingConstraint: NSLayoutConstraint!
 
@@ -50,7 +51,7 @@ final class ToolbarView: NSView {
         addressField.focusRingType = .none
         addressField.font = .systemFont(ofSize: 13)
         addressField.textColor = Theme.text
-        addressField.placeholderString = "New Tab"
+        addressField.placeholderString = ""   // blank on new tabs
         // Display only: you type on the new tab page, never up here.
         addressField.isEditable = false
         addressField.isSelectable = true
@@ -64,26 +65,40 @@ final class ToolbarView: NSView {
         buttons.orientation = .horizontal
         buttons.spacing = 2
 
+        // Right side, always at the far right: extensions │ downloads ⋮
         extensionStack.orientation = .horizontal
         extensionStack.spacing = 2
-        downloadsButton.isHidden = true
+        let divider = SolidView(color: Theme.mutedText.withAlphaComponent(0.35))
+        divider.translatesAutoresizingMaskIntoConstraints = false
+        divider.widthAnchor.constraint(equalToConstant: 1).isActive = true
+        divider.heightAnchor.constraint(equalToConstant: 18).isActive = true
+        menuButton.frameCenterRotation = 90   // "⋮" like Chrome
+        let right = NSStackView(views: [extensionStack, puzzleButton, divider, downloadsButton, menuButton])
+        right.spacing = 6
+        right.setCustomSpacing(10, after: puzzleButton)
+        right.setCustomSpacing(10, after: divider)
+
+        // Memory use, just left of the address bar.
         memoryLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
         memoryLabel.textColor = Theme.mutedText
+        memoryLabel.alignment = .right
         memoryLabel.isHidden = true
-        let right = NSStackView(views: [memoryLabel, downloadsButton, extensionStack, puzzleButton])
-        right.spacing = 4
-        right.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(right)
-        for v in [background, buttons, fieldBox, addressField, starButton, extensionStack, puzzleButton] as [NSView] {
+
+        for v in [background, buttons, fieldBox, addressField, starButton, right, memoryLabel] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
         }
         addSubview(background)
         addSubview(buttons)
         addSubview(fieldBox)
+        addSubview(right)
+        addSubview(memoryLabel)
         fieldBox.addSubview(addressField)
         fieldBox.addSubview(starButton)
 
         leadingConstraint = buttons.leadingAnchor.constraint(equalTo: leadingAnchor, constant: leadingInset)
+        // The bar stays centered and stretches until it meets the icons on the right.
+        let reachRight = fieldBox.trailingAnchor.constraint(equalTo: right.leadingAnchor, constant: -14)
+        reachRight.priority = .defaultHigh
         NSLayoutConstraint.activate([
             background.topAnchor.constraint(equalTo: topAnchor),
             background.bottomAnchor.constraint(equalTo: bottomAnchor),
@@ -93,15 +108,19 @@ final class ToolbarView: NSView {
             leadingConstraint,
             buttons.centerYAnchor.constraint(equalTo: centerYAnchor),
 
-            // The address bar is always the same width, centered — it only shrinks
-            // if the window is too narrow to fit it next to the buttons.
-            fieldBox.centerXAnchor.constraint(equalTo: centerXAnchor),
-            fieldBox.leadingAnchor.constraint(greaterThanOrEqualTo: buttons.trailingAnchor, constant: 12),
-            fieldBox.trailingAnchor.constraint(lessThanOrEqualTo: right.leadingAnchor, constant: -12),
             right.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
             right.centerYAnchor.constraint(equalTo: centerYAnchor),
+
+            fieldBox.centerXAnchor.constraint(equalTo: centerXAnchor),
+            fieldBox.trailingAnchor.constraint(lessThanOrEqualTo: right.leadingAnchor, constant: -14),
+            reachRight,
             fieldBox.centerYAnchor.constraint(equalTo: centerYAnchor),
             fieldBox.heightAnchor.constraint(equalToConstant: 28),
+
+            memoryLabel.trailingAnchor.constraint(equalTo: fieldBox.leadingAnchor, constant: -10),
+            memoryLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+            memoryLabel.leadingAnchor.constraint(greaterThanOrEqualTo: buttons.trailingAnchor, constant: 10),
+            fieldBox.leadingAnchor.constraint(greaterThanOrEqualTo: buttons.trailingAnchor, constant: 12),
 
             addressField.leadingAnchor.constraint(equalTo: fieldBox.leadingAnchor, constant: 14),
             addressField.trailingAnchor.constraint(equalTo: starButton.leadingAnchor, constant: -4),
@@ -110,9 +129,6 @@ final class ToolbarView: NSView {
             starButton.trailingAnchor.constraint(equalTo: fieldBox.trailingAnchor, constant: -2),
             starButton.centerYAnchor.constraint(equalTo: fieldBox.centerYAnchor),
         ])
-        let preferredWidth = fieldBox.widthAnchor.constraint(equalToConstant: 620)
-        preferredWidth.priority = .defaultHigh
-        preferredWidth.isActive = true
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
