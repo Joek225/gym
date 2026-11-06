@@ -135,9 +135,35 @@ final class ExtensionsMenuDelegate: NSObject, NSMenuDelegate {
             note.isEnabled = false
             menu.addItem(note)
         }
+        // Click an extension to use it (like Chrome's puzzle menu). 📌 = shown in the toolbar.
+        for context in contexts {
+            let run = NSMenuItem(title: ExtensionManager.name(of: context),
+                                 action: #selector(BrowserWindowController.runExtension(_:)), keyEquivalent: "")
+            run.representedObject = context
+            run.image = Self.icon(context)
+            if ExtensionPins.isPinned(context.uniqueIdentifier) { run.title += "  📌" }
+            menu.addItem(run)
+        }
+        guard !contexts.isEmpty else { return }
+        menu.addItem(.separator())
+
+        let pins = NSMenu()
+        for context in contexts {
+            let pin = NSMenuItem(title: ExtensionManager.name(of: context),
+                                 action: #selector(BrowserWindowController.togglePinExtension(_:)), keyEquivalent: "")
+            pin.representedObject = context
+            pin.image = Self.icon(context)
+            pin.state = ExtensionPins.isPinned(context.uniqueIdentifier) ? .on : .off
+            pins.addItem(pin)
+        }
+        let pinItem = NSMenuItem(title: "Pin to Toolbar", action: nil, keyEquivalent: "")
+        pinItem.submenu = pins
+        menu.addItem(pinItem)
+
+        let manage = NSMenu()
         for context in contexts {
             let item = NSMenuItem(title: ExtensionManager.name(of: context), action: nil, keyEquivalent: "")
-            item.image = context.webExtension.icon(for: CGSize(width: 16, height: 16))
+            item.image = Self.icon(context)
             let sub = NSMenu()
             let options = NSMenuItem(title: "Options…", action: #selector(BrowserWindowController.openExtensionOptions(_:)), keyEquivalent: "")
             options.representedObject = context
@@ -151,7 +177,28 @@ final class ExtensionsMenuDelegate: NSObject, NSMenuDelegate {
             remove.representedObject = context
             sub.addItem(remove)
             item.submenu = sub
-            menu.addItem(item)
+            manage.addItem(item)
         }
+        let manageItem = NSMenuItem(title: "Manage Extensions", action: nil, keyEquivalent: "")
+        manageItem.submenu = manage
+        menu.addItem(manageItem)
+    }
+
+    @available(macOS 15.4, *)
+    private static func icon(_ context: WKWebExtensionContext) -> NSImage? {
+        let image = context.webExtension.icon(for: CGSize(width: 16, height: 16))?.copy() as? NSImage
+        image?.size = NSSize(width: 16, height: 16)
+        return image
+    }
+}
+
+/// Which extensions you've pinned to the toolbar (the rest live in the puzzle-piece menu).
+enum ExtensionPins {
+    private static let key = "pinnedExtensions"
+    static func isPinned(_ id: String) -> Bool { (UserDefaults.standard.stringArray(forKey: key) ?? []).contains(id) }
+    static func toggle(_ id: String) {
+        var list = UserDefaults.standard.stringArray(forKey: key) ?? []
+        if let i = list.firstIndex(of: id) { list.remove(at: i) } else { list.append(id) }
+        UserDefaults.standard.set(list, forKey: key)
     }
 }

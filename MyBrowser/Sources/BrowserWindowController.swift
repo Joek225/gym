@@ -260,18 +260,28 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     /// Puts the tab's page in the content area.
     private func show(_ tab: Tab) {
         newTabPage.isHidden = !isBlank(tab)
-        for view in webContainer.subviews where view !== tab.webView { view.removeFromSuperview() }
-        if let webView = tab.webView, webView.superview !== webContainer {
-            webView.frame = webContainer.bounds
-            webView.autoresizingMask = [.width, .height]
-            webContainer.addSubview(webView)
-        }
+        if let webView = tab.webView { attach(webView) }
+        // Other loaded tabs stay in the window, just hidden, so pages keep drawing
+        // at your screen's sharpness (and WebKit pauses hidden pages by itself).
+        for view in webContainer.subviews { view.isHidden = view !== tab.webView }
+    }
+
+    /// Puts a page in the window (hidden) before it starts loading. Pages that start
+    /// loading off-screen think the screen is low-resolution, which makes canvas-drawn
+    /// text (like Google Docs) look grainy.
+    private func attach(_ webView: WKWebView) {
+        guard webView.superview !== webContainer else { return }
+        webView.frame = webContainer.bounds
+        webView.autoresizingMask = [.width, .height]
+        webView.isHidden = true
+        webContainer.addSubview(webView)
     }
 
     /// Re-creates an unloaded tab's page (restoring its back/forward history).
     private func wake(_ tab: Tab) {
         let webView = WebKitEnvironment.makeWebView(store: privateStore)
         install(webView, for: tab)
+        attach(webView)
         if let state = tab.savedState {
             webView.interactionState = state
             tab.savedState = nil
@@ -465,6 +475,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         tab.failedURL = nil
         tab.savedState = nil
         if tab.webView == nil { install(WebKitEnvironment.makeWebView(store: privateStore), for: tab) }
+        if let webView = tab.webView { attach(webView) }
         tab.url = url
         if tab === store.selected { show(tab) }
         if url.isFileURL {
@@ -985,7 +996,9 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
             return
         }
         let tab = store.selected
-        let buttons = manager.contexts.map { context -> ToolbarView.ExtensionButton in
+        // Only pinned extensions get a toolbar button; the rest are in the puzzle-piece menu.
+        let pinned = manager.contexts.filter { ExtensionPins.isPinned($0.uniqueIdentifier) }
+        let buttons = pinned.map { context -> ToolbarView.ExtensionButton in
             let action = context.action(for: tab)
             let size = CGSize(width: 16, height: 16)
             return ToolbarView.ExtensionButton(
@@ -1007,7 +1020,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     @available(macOS 15.4, *)
     func showExtensionPopover(_ popover: NSPopover, for context: WKWebExtensionContext) {
         popover.appearance = Theme.appearance
-        let anchor = toolbar.extensionButton(id: context.uniqueIdentifier) ?? toolbar.addressField
+        let anchor = toolbar.extensionButton(id: context.uniqueIdentifier) ?? toolbar.puzzleButton
         popover.show(relativeTo: anchor.bounds, of: anchor, preferredEdge: .minY)
     }
 
@@ -1035,6 +1048,19 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         guard #available(macOS 15.4, *) else { showNeedsNewerMac(); return }
         ExtensionInstaller.addFolder(window: window)
     }
+
+    @objc func runExtension(_ sender: NSMenuItem) {
+        guard #available(macOS 15.4, *), let context = sender.representedObject as? WKWebExtensionContext else { return }
+        context.performAction(for: store.selected)
+    }
+
+    @objc func togglePinExtension(_ sender: NSMenuItem) {
+        guard #available(macOS 15.4, *), let context = sender.representedObject as? WKWebExtensionContext else { return }
+        ExtensionPins.toggle(context.uniqueIdentifier)
+        for controller in AppDelegate.shared.controllers { controller.refreshExtensionButtonsNow() }
+    }
+
+    func refreshExtensionButtonsNow() { refreshExtensionButtons() }
 
     @objc func openExtensionOptions(_ sender: NSMenuItem) {
         guard #available(macOS 15.4, *), let context = sender.representedObject as? WKWebExtensionContext,
