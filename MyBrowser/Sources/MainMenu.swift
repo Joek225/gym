@@ -22,6 +22,7 @@ enum MainMenu {
 
         let file = submenu(in: main, title: "File")
         file.addItem(withTitle: "New Tab", action: #selector(W.newTab(_:)), keyEquivalent: "t")
+        file.addItem(withTitle: "New Window", action: #selector(AppDelegate.newWindow(_:)), keyEquivalent: "n")
         file.addItem(withTitle: "Reopen Closed Tab", action: #selector(W.reopenClosedTab(_:)), keyEquivalent: "t")
             .keyEquivalentModifierMask = [.command, .shift]
         file.addItem(withTitle: "Open Location…", action: #selector(W.focusAddressBar(_:)), keyEquivalent: "l")
@@ -29,6 +30,8 @@ enum MainMenu {
         file.addItem(withTitle: "Close Tab", action: #selector(W.closeTab(_:)), keyEquivalent: "w")
         file.addItem(withTitle: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
             .keyEquivalentModifierMask = [.command, .shift]
+        file.addItem(.separator())
+        file.addItem(withTitle: "Tools (Converter & Background Remover)…", action: #selector(W.openTools(_:)), keyEquivalent: "")
 
         let edit = submenu(in: main, title: "Edit")
         edit.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
@@ -82,9 +85,31 @@ enum MainMenu {
                                    action: #selector(W.selectTabNumber(_:)), keyEquivalent: "\(n)")
             item.tag = n
         }
+        let inGroup = NSMenu(title: "Select Tab in Current Group")
+        for n in 1...9 {
+            let item = inGroup.addItem(withTitle: n == 9 ? "Last Tab in Group" : "Tab \(n) in Group",
+                                       action: #selector(W.selectGroupTabNumber(_:)), keyEquivalent: "\(n)")
+            item.keyEquivalentModifierMask = [.option]
+            item.tag = n
+        }
+        let inGroupItem = NSMenuItem(title: "Select Tab in Current Group", action: nil, keyEquivalent: "")
+        inGroupItem.submenu = inGroup
+        tab.addItem(inGroupItem)
         tab.addItem(.separator())
+        tab.addItem(withTitle: "Pin Tab", action: #selector(W.togglePinCurrentTab(_:)), keyEquivalent: "")
         tab.addItem(withTitle: "Add Tab to New Group", action: #selector(W.addTabToNewGroup(_:)), keyEquivalent: "g")
             .keyEquivalentModifierMask = [.command, .shift]
+        tab.addItem(withTitle: "New Tab in Group", action: #selector(W.newTabInCurrentGroup(_:)), keyEquivalent: "c")
+            .keyEquivalentModifierMask = [.command, .control]
+        tab.addItem(withTitle: "Close Group", action: #selector(W.closeCurrentGroup(_:)), keyEquivalent: "w")
+            .keyEquivalentModifierMask = [.command, .control]
+
+        let extensions = submenu(in: main, title: "Extensions")
+        extensions.addItem(withTitle: "Import Extensions from Chrome…", action: #selector(W.importChromeExtensions(_:)), keyEquivalent: "")
+        extensions.addItem(withTitle: "Add Extension from Folder…", action: #selector(W.addExtensionFolder(_:)), keyEquivalent: "")
+        extensions.addItem(.separator())
+        ExtensionsMenuDelegate.shared.fixedItemCount = extensions.items.count
+        extensions.delegate = ExtensionsMenuDelegate.shared
 
         let window = submenu(in: main, title: "Window")
         window.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")

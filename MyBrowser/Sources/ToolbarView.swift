@@ -11,6 +11,18 @@ final class ToolbarView: NSView {
     let addressField = NSTextField()
     let starButton = ToolbarView.makeButton("star", "Bookmark This Page (⌘D)")
 
+    /// One extension's button (its icon from the extension's toolbar action).
+    struct ExtensionButton {
+        let id: String
+        let icon: NSImage?
+        let label: String
+        let badge: String
+    }
+
+    var onExtensionClicked: ((String) -> Void)?
+    private let extensionStack = NSStackView()
+    private var extensionButtons: [String: NSButton] = [:]
+
     private let background = SolidView(color: Theme.toolbar)
     private let fieldBox = SolidView(color: Theme.field)
     private var leadingConstraint: NSLayoutConstraint!
@@ -40,12 +52,15 @@ final class ToolbarView: NSView {
         buttons.orientation = .horizontal
         buttons.spacing = 2
 
-        for v in [background, buttons, fieldBox, addressField, starButton] as [NSView] {
+        extensionStack.orientation = .horizontal
+        extensionStack.spacing = 2
+        for v in [background, buttons, fieldBox, addressField, starButton, extensionStack] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
         }
         addSubview(background)
         addSubview(buttons)
         addSubview(fieldBox)
+        addSubview(extensionStack)
         fieldBox.addSubview(addressField)
         fieldBox.addSubview(starButton)
 
@@ -60,7 +75,9 @@ final class ToolbarView: NSView {
             buttons.centerYAnchor.constraint(equalTo: centerYAnchor),
 
             fieldBox.leadingAnchor.constraint(equalTo: buttons.trailingAnchor, constant: 8),
-            fieldBox.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            fieldBox.trailingAnchor.constraint(equalTo: extensionStack.leadingAnchor, constant: -6),
+            extensionStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            extensionStack.centerYAnchor.constraint(equalTo: centerYAnchor),
             fieldBox.centerYAnchor.constraint(equalTo: centerYAnchor),
             fieldBox.heightAnchor.constraint(equalToConstant: 28),
 
@@ -79,6 +96,27 @@ final class ToolbarView: NSView {
         starButton.image = ToolbarView.symbol(starred ? "star.fill" : "star", starred ? "Edit Bookmark" : "Bookmark This Page")
         starButton.contentTintColor = starred ? Theme.accent : Theme.icon
         starButton.toolTip = starred ? "Edit Bookmark (⌘D)" : "Bookmark This Page (⌘D)"
+    }
+
+    func setExtensionButtons(_ items: [ExtensionButton]) {
+        extensionStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        extensionButtons = [:]
+        for item in items {
+            let button = ToolbarView.makeButton("puzzlepiece.extension", item.label)
+            if let icon = item.icon { button.image = icon }
+            button.toolTip = item.badge.isEmpty ? item.label : "\(item.label) (\(item.badge))"
+            button.target = self
+            button.action = #selector(extensionClicked(_:))
+            button.identifier = NSUserInterfaceItemIdentifier(item.id)
+            extensionStack.addArrangedSubview(button)
+            extensionButtons[item.id] = button
+        }
+    }
+
+    func extensionButton(id: String) -> NSView? { extensionButtons[id] }
+
+    @objc private func extensionClicked(_ sender: NSButton) {
+        if let id = sender.identifier?.rawValue { onExtensionClicked?(id) }
     }
 
     func setLoading(_ loading: Bool) {

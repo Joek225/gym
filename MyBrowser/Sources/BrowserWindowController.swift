@@ -6,11 +6,11 @@ import WebKit
 @MainActor
 final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTextFieldDelegate,
                                      NSMenuItemValidation, WKNavigationDelegate, WKUIDelegate,
-                                     SidebarDelegate {
+                                     SidebarDelegate, GroupEditorActions {
     /// Tabs you haven't looked at for this long are unloaded to free memory.
     static let unloadAfter: TimeInterval = 5 * 60
 
-    private let store: TabStore
+    let store: TabStore
     private let sidebar: SidebarController
     private let toolbar = ToolbarView()
     private let bookmarksBar = BookmarksBarView()
@@ -27,7 +27,9 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         set { UserDefaults.standard.set(newValue, forKey: "showBookmarksBar") }
     }
 
-    init() {
+    /// Opens a window with saved tabs, or a fresh one. `adopting` moves an
+    /// existing group (with its open pages) into the new window.
+    init(session: SavedSession?, adopting group: TabGroup? = nil) {
         let store = TabStore()
         self.store = store
         self.sidebar = SidebarController(store: store)
@@ -44,24 +46,27 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         window.tabbingMode = .disallowed        // tabs live in our sidebar instead
         window.minSize = NSSize(width: 600, height: 360)
         window.center()
-        window.setFrameAutosaveName("MainWindow")
+        if AppDelegate.shared.controllers.isEmpty { window.setFrameAutosaveName("MainWindow") }
         super.init(window: window)
         window.delegate = self
 
         buildLayout(in: window)
         wireUp()
 
-        store.restore()
+        if let session { store.restore(from: session) }
+        if let group {
+            store.adopt(group)
+            for tab in group.tabs { if let webView = tab.webView { install(webView, for: tab) } }
+        }
         if store.allTabs.isEmpty { store.insert(Tab(url: nil), at: 0, in: nil) }
         sidebar.reload()
         bookmarksBar.reload()
-        select(store.selected ?? store.allTabs[0])
+        select(store.selected ?? group?.tabs.first ?? store.allTabs[0])
         startUnloadTimer()
+        refreshExtensionButtons()
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
-
-    func saveSession() { store.saveNow() }
 
     // MARK: Layout
 
@@ -133,6 +138,8 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
             self?.bookmarksBar.reload()
         }
         bookmarksBar.groups = { [weak self] in self?.store.groups ?? [] }
+        bookmarksBar.closedGroups = { GroupLibrary.shared.closed }
+        toolbar.onExtensionClicked = { [weak self] id in self?.extensionButtonClicked(id) }
 
         resizeHandle.onDrag = { [weak self] x in
             self?.sidebarWidth.constant = min(max(x, 160), 480)
@@ -148,6 +155,14 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
                 self?.updateToolbar()
             }
         }
+        NotificationCenter.default.addObserver(forName: GroupLibrary.didChange, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.bookmarksBar.reload() }
+        }
+        if #available(macOS 15.4, *) {
+            NotificationCenter.default.addObserver(forName: ExtensionManager.didChange, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.refreshExtensionButtons() }
+            }
+        }
     }
 
     // MARK: Tabs
@@ -155,7 +170,8 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     var selectedTab: Tab? { store.selected }
 
     func select(_ tab: Tab) {
-        if let old = store.selected, old !== tab { old.lastActive = Date() }
+        let previous = store.selected
+        if let old = previous, old !== tab { old.lastActive = Date() }
         store.selected = tab
         tab.lastActive = Date()
         if let group = tab.group, group.isCollapsed { group.isCollapsed = false }   // like Chrome
@@ -164,6 +180,8 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         sidebar.reload()
         updateToolbar()
         store.scheduleSave()
+        if previous !== tab { ExtensionEvents.tabActivated(tab, previous: previous) }
+        refreshExtensionButtons()
         if tab.webView == nil {
             focusAddressBar(nil)
         } else {
@@ -222,6 +240,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
             },
         ]
         tab.attach(webView, observations: observations)
+        ExtensionEvents.tabOpened(tab)
     }
 
     private func tabDidChange(_ tab: Tab) {
@@ -252,6 +271,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
                                               icon: tab.faviconPNG, groupID: tab.group?.id))
             if store.recentlyClosed.count > 25 { store.recentlyClosed.removeFirst() }
         }
+        ExtensionEvents.tabClosed(tab)
         tab.unload()
         tab.savedState = nil
         store.remove(tab)
@@ -314,12 +334,16 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
 
     func load(_ url: URL) {
         guard let tab = store.selected else { openInNewTab(url, background: false); return }
+        load(url, in: tab)
+    }
+
+    func load(_ url: URL, in tab: Tab) {
         tab.errorMessage = nil
         tab.failedURL = nil
         tab.savedState = nil
         if tab.webView == nil {
             install(WebKitEnvironment.makeWebView(), for: tab)
-            show(tab)
+            if tab === store.selected { show(tab) }
         }
         tab.url = url
         if url.isFileURL {
@@ -388,8 +412,34 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
 
     @objc func addTabToNewGroup(_ sender: Any?) {
         guard let tab = store.selected else { return }
-        sidebarEditGroup(store.makeGroup(with: tab))
+        sidebarEditGroup(store.makeGroup(with: tab), anchor: nil)
     }
+
+    @objc func togglePinCurrentTab(_ sender: Any?) {
+        if let tab = store.selected { store.setPinned(tab, !tab.pinned) }
+    }
+
+    /// The group of the tab you're on (or the first group).
+    private var currentGroup: TabGroup? { store.selected?.group ?? store.groups.first }
+
+    @objc func newTabInCurrentGroup(_ sender: Any?) {
+        guard let group = store.selected?.group else { NSSound.beep(); return }
+        sidebarNewTab(in: group)
+    }
+
+    @objc func closeCurrentGroup(_ sender: Any?) {
+        guard let group = store.selected?.group else { NSSound.beep(); return }
+        closeGroup(group, keepSaved: true)
+    }
+
+    /// ⌥1–⌥8 pick that tab inside the current group; ⌥9 picks its last tab.
+    @objc func selectGroupTabNumber(_ sender: NSMenuItem) {
+        guard let tabs = currentGroup?.tabs, !tabs.isEmpty else { NSSound.beep(); return }
+        if sender.tag == 9, let last = tabs.last { select(last); return }
+        if sender.tag - 1 < tabs.count { select(tabs[sender.tag - 1]) } else { NSSound.beep() }
+    }
+
+    @objc func openTools(_ sender: Any?) { ToolsWindowController.show() }
 
     @objc func goBack(_ sender: Any?) { store.selected?.webView?.goBack() }
     @objc func goForward(_ sender: Any?) { store.selected?.webView?.goForward() }
@@ -478,6 +528,11 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         case #selector(goBack(_:)): return store.selected?.webView?.canGoBack ?? false
         case #selector(goForward(_:)): return store.selected?.webView?.canGoForward ?? false
         case #selector(reopenClosedTab(_:)): return !store.recentlyClosed.isEmpty
+        case #selector(togglePinCurrentTab(_:)):
+            item.title = store.selected?.pinned == true ? "Unpin Tab" : "Pin Tab"
+            return store.selected != nil
+        case #selector(newTabInCurrentGroup(_:)), #selector(closeCurrentGroup(_:)):
+            return store.selected?.group != nil
         case #selector(toggleBookmarksBar(_:)):
             item.title = showsBookmarksBar ? "Hide Bookmarks Bar" : "Show Bookmarks Bar"
             return true
@@ -501,9 +556,12 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     func sidebarClose(_ tab: Tab) { close(tab) }
 
     func sidebarCloseOthers(_ tab: Tab) {
-        for other in store.allTabs where other !== tab { close(other) }
+        for other in store.allTabs where other !== tab && !other.pinned { close(other) }
         select(tab)
     }
+
+    func sidebarTogglePin(_ tab: Tab) { store.setPinned(tab, !tab.pinned) }
+    func sidebarOpenTools() { ToolsWindowController.show() }
 
     func sidebarReload(_ tab: Tab) {
         if tab.webView == nil { select(tab) } else { tab.webView?.reload() }
@@ -521,45 +579,147 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         select(tab)
     }
 
-    func sidebarCloseGroup(_ group: TabGroup) {
+    /// Closes all of a group's tabs. With `keepSaved`, the group stays on the
+    /// bookmarks bar (like Chrome) so you can reopen it later.
+    func closeGroup(_ group: TabGroup, keepSaved: Bool) {
+        if keepSaved {
+            GroupLibrary.shared.add(TabStore.savedGroup(group))
+        } else {
+            GroupLibrary.shared.remove(id: group.id)
+        }
         for tab in group.tabs { close(tab) }
     }
 
-    /// Chrome-style box for naming a group and choosing its color.
-    func sidebarEditGroup(_ group: TabGroup) {
+    func moveGroupToNewWindow(_ group: TabGroup) {
+        guard store.allTabs.contains(where: { $0.group !== group }) else {
+            NSSound.beep()   // it's the only thing in this window already
+            return
+        }
+        let wasShowingGroup = store.selected?.group === group
+        store.take(group)
+        for tab in group.tabs { tab.webView?.removeFromSuperview() }
+        AppDelegate.shared.open(BrowserWindowController(session: nil, adopting: group))
+        if wasShowingGroup, let next = store.allTabs.first { select(next) }
+    }
+
+    /// Shows the Chrome-style group editor next to the group's header.
+    func sidebarEditGroup(_ group: TabGroup, anchor: NSView?) {
+        guard let window else { return }
+        sidebar.reload()
+        let anchorView = anchor ?? sidebar.rowView(for: group) ?? sidebar.view
+        let rect = anchorView.window == nil ? window.frame
+            : window.convertToScreen(anchorView.convert(anchorView.bounds, to: nil))
+        GroupEditor.show(for: group, actions: self, anchor: rect, in: window)
+    }
+
+    // MARK: Saved (closed) groups
+
+    @objc func reopenSavedGroup(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? UUID, let saved = GroupLibrary.shared.group(id: id) else { return }
+        GroupLibrary.shared.remove(id: id)
+        let group = TabStore.makeGroup(saved)
+        group.isCollapsed = false
+        store.adopt(group)
+        if let first = group.tabs.first { select(first) }
+    }
+
+    @objc func deleteSavedGroup(_ sender: NSMenuItem) {
+        if let id = sender.representedObject as? UUID { GroupLibrary.shared.remove(id: id) }
+    }
+
+    // MARK: Extensions
+
+    private func refreshExtensionButtons() {
+        guard #available(macOS 15.4, *), let manager = ExtensionManager.active else {
+            toolbar.setExtensionButtons([])
+            return
+        }
+        let tab = store.selected
+        let buttons = manager.contexts.map { context -> ToolbarView.ExtensionButton in
+            let action = context.action(for: tab)
+            let size = CGSize(width: 16, height: 16)
+            return ToolbarView.ExtensionButton(
+                id: context.uniqueIdentifier,
+                icon: action?.icon(for: size) ?? context.webExtension.icon(for: size),
+                label: action?.label.isEmpty == false ? action!.label : ExtensionManager.name(of: context),
+                badge: action?.badgeText ?? "")
+        }
+        toolbar.setExtensionButtons(buttons)
+    }
+
+    private func extensionButtonClicked(_ id: String) {
+        guard #available(macOS 15.4, *),
+              let context = ExtensionManager.active?.contexts.first(where: { $0.uniqueIdentifier == id }) else { return }
+        context.performAction(for: store.selected)
+        refreshExtensionButtons()
+    }
+
+    @available(macOS 15.4, *)
+    func showExtensionPopover(_ popover: NSPopover, for context: WKWebExtensionContext) {
+        popover.appearance = Theme.appearance
+        let anchor = toolbar.extensionButton(id: context.uniqueIdentifier) ?? toolbar.addressField
+        popover.show(relativeTo: anchor.bounds, of: anchor, preferredEdge: .minY)
+    }
+
+    /// Opens a tab when an extension asks for one.
+    func openTabForExtension(_ url: URL?, active: Bool) -> Tab {
+        let tab = Tab(url: url)
+        store.insert(tab, after: store.selected)
+        if active || url == nil { select(tab) } else if let url { load(url, in: tab) }
+        return tab
+    }
+
+    @objc func importChromeExtensions(_ sender: Any?) {
+        guard #available(macOS 15.4, *) else { showNeedsNewerMac(); return }
+        ExtensionInstaller.importFromChrome(window: window)
+    }
+
+    @objc func addExtensionFolder(_ sender: Any?) {
+        guard #available(macOS 15.4, *) else { showNeedsNewerMac(); return }
+        ExtensionInstaller.addFolder(window: window)
+    }
+
+    @objc func openExtensionOptions(_ sender: NSMenuItem) {
+        guard #available(macOS 15.4, *), let context = sender.representedObject as? WKWebExtensionContext,
+              let url = context.optionsPageURL else { NSSound.beep(); return }
+        openInNewTab(url, background: false)
+    }
+
+    @objc func showExtensionDetails(_ sender: NSMenuItem) {
+        guard #available(macOS 15.4, *), let context = sender.representedObject as? WKWebExtensionContext else { return }
         let alert = NSAlert()
-        alert.messageText = "Tab Group"
-        alert.informativeText = "Name the group and pick a color."
-        let field = NSTextField(string: group.name)
-        field.placeholderString = "Name this group"
-        let popup = NSPopUpButton()
-        for color in GroupColor.allCases {
-            popup.addItem(withTitle: color.name)
-            popup.lastItem?.image = color.swatch()
-        }
-        popup.selectItem(at: GroupColor.allCases.firstIndex(of: group.color) ?? 0)
-        let stack = NSStackView(views: [field, popup])
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 8
-        field.widthAnchor.constraint(equalToConstant: 240).isActive = true
-        stack.frame = NSRect(origin: .zero, size: stack.fittingSize)
-        alert.accessoryView = stack
-        alert.addButton(withTitle: "Done")
-        alert.addButton(withTitle: "Cancel")
-        alert.window.initialFirstResponder = field
-        present(alert) { [weak self] response in
-            guard response == .alertFirstButtonReturn else { return }
-            group.name = field.stringValue
-            group.color = GroupColor.allCases[max(0, popup.indexOfSelectedItem)]
-            self?.store.changed()
-        }
+        alert.messageText = ExtensionManager.name(of: context)
+        let warnings = ExtensionManager.warnings(of: context)
+        alert.informativeText = warnings.isEmpty
+            ? "Loaded with no problems reported."
+            : "Loaded, but WebKit reported these problems (the parts mentioned may not work):\n\n• " + warnings.joined(separator: "\n• ")
+        present(alert) { _ in }
+    }
+
+    @objc func removeExtension(_ sender: NSMenuItem) {
+        guard #available(macOS 15.4, *), let context = sender.representedObject as? WKWebExtensionContext else { return }
+        ExtensionManager.shared.remove(context)
+    }
+
+    private func showNeedsNewerMac() {
+        let alert = NSAlert()
+        alert.messageText = "Extensions need macOS 15.4 or newer"
+        alert.informativeText = "Update macOS in System Settings → General → Software Update to use extensions."
+        present(alert) { _ in }
     }
 
     // MARK: Window
 
     // In full screen the red/yellow/green buttons are hidden, so use that space.
     func windowWillEnterFullScreen(_ notification: Notification) { toolbar.leadingInset = 12 }
+
+    func windowDidBecomeKey(_ notification: Notification) { ExtensionEvents.windowFocused(self) }
+
+    func windowWillClose(_ notification: Notification) {
+        unloadTimer?.invalidate()
+        GroupEditor.closeAny()
+        AppDelegate.shared.windowDidClose(self)
+    }
     func windowWillExitFullScreen(_ notification: Notification) { toolbar.leadingInset = 78 }
 
     // MARK: Page loading
@@ -600,6 +760,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         if logLoads {
             NSLog("MyBrowser loaded: %@ — %@", webView.url?.absoluteString ?? "", webView.title ?? "")
         }
+        if tab === store.selected { refreshExtensionButtons() }
         Favicons.fetch(for: tab, in: webView) { [weak self, weak tab] in
             guard let self, let tab else { return }
             self.sidebar.refresh(tab)

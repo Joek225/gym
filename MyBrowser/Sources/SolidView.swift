@@ -2,10 +2,11 @@ import AppKit
 
 /// A plain opaque colored box. It's drawn as a single layer color, with no
 /// image buffer behind it, which is the cheapest way to paint a view.
-final class SolidView: NSView {
+class SolidView: NSView {
     var fillColor: NSColor = .black { didSet { needsDisplay = true } }
     var borderColor: NSColor? { didSet { needsDisplay = true } }
     var cornerRadius: CGFloat = 0 { didSet { needsDisplay = true } }
+    var borderWidth: CGFloat = 1 { didSet { needsDisplay = true } }
     /// When true, dragging this view moves the window (used for the toolbar).
     var movesWindow = false
 
@@ -26,7 +27,7 @@ final class SolidView: NSView {
             layer.backgroundColor = fillColor.cgColor
             layer.borderColor = borderColor?.cgColor
         }
-        layer.borderWidth = borderColor == nil ? 0 : 1
+        layer.borderWidth = borderColor == nil ? 0 : borderWidth
         layer.cornerRadius = cornerRadius
         layer.masksToBounds = cornerRadius > 0
     }

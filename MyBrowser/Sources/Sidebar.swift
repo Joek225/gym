@@ -13,8 +13,9 @@ protocol SidebarDelegate: AnyObject {
     func sidebarReload(_ tab: Tab)
     func sidebarUnload(_ tab: Tab)
     func sidebarNewTab(in group: TabGroup?)
-    func sidebarEditGroup(_ group: TabGroup)
-    func sidebarCloseGroup(_ group: TabGroup)
+    func sidebarEditGroup(_ group: TabGroup, anchor: NSView?)
+    func sidebarTogglePin(_ tab: Tab)
+    func sidebarOpenTools()
 }
 
 /// The vertical tab list on the left, with groups that collapse and tabs you can drag.
@@ -51,6 +52,10 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
         outline.registerForDraggedTypes([.sidebarItem])
         outline.setDraggingSourceOperationMask(.move, forLocal: true)
         outline.draggingDestinationFeedbackStyle = .regular
+        outline.onGroupRightClick = { [weak self] row in
+            guard let self, let group = self.outline.item(atRow: row) as? TabGroup else { return }
+            self.delegate?.sidebarEditGroup(group, anchor: self.outline.rowView(atRow: row, makeIfNecessary: false))
+        }
         outline.onMiddleClick = { [weak self] row in
             guard let self, let tab = self.outline.item(atRow: row) as? Tab else { return }
             self.delegate?.sidebarClose(tab)
@@ -75,7 +80,24 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
         plus.contentTintColor = Theme.text
         plus.toolTip = "New Tab (⌘T)"
 
-        for v in [scroll, newTab, plus] as [NSView] {
+        // Under the + button: Tools (left half) and a placeholder (right half).
+        let tools = SolidView(color: Theme.toolbar)
+        tools.cornerRadius = 8
+        let toolsButton = NSButton(title: " Tools", image: Icons.symbol("wand.and.stars", size: 12) ?? NSImage(),
+                                   target: self, action: #selector(toolsClicked(_:)))
+        toolsButton.isBordered = false
+        toolsButton.imagePosition = .imageLeading
+        toolsButton.contentTintColor = Theme.text
+        toolsButton.attributedTitle = NSAttributedString(string: " Tools", attributes: [
+            .foregroundColor: Theme.text, .font: NSFont.systemFont(ofSize: 12)])
+        toolsButton.toolTip = "File converter and background remover"
+        let placeholder = SolidView(color: Theme.hoverTab)
+        placeholder.cornerRadius = 8
+        let placeholderLabel = NSTextField(labelWithString: "Coming soon")
+        placeholderLabel.font = .systemFont(ofSize: 11)
+        placeholderLabel.textColor = Theme.mutedText
+
+        for v in [scroll, newTab, plus, tools, toolsButton, placeholder, placeholderLabel] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(v)
         }
@@ -87,8 +109,24 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
 
             newTab.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
             newTab.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -8),
-            newTab.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -8),
+            newTab.bottomAnchor.constraint(equalTo: tools.topAnchor, constant: -6),
             newTab.heightAnchor.constraint(equalToConstant: 30),
+
+            tools.leadingAnchor.constraint(equalTo: newTab.leadingAnchor),
+            tools.widthAnchor.constraint(equalTo: newTab.widthAnchor, multiplier: 0.5, constant: -3),
+            tools.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -8),
+            tools.heightAnchor.constraint(equalToConstant: 30),
+            toolsButton.leadingAnchor.constraint(equalTo: tools.leadingAnchor),
+            toolsButton.trailingAnchor.constraint(equalTo: tools.trailingAnchor),
+            toolsButton.topAnchor.constraint(equalTo: tools.topAnchor),
+            toolsButton.bottomAnchor.constraint(equalTo: tools.bottomAnchor),
+
+            placeholder.trailingAnchor.constraint(equalTo: newTab.trailingAnchor),
+            placeholder.widthAnchor.constraint(equalTo: tools.widthAnchor),
+            placeholder.topAnchor.constraint(equalTo: tools.topAnchor),
+            placeholder.bottomAnchor.constraint(equalTo: tools.bottomAnchor),
+            placeholderLabel.centerXAnchor.constraint(equalTo: placeholder.centerXAnchor),
+            placeholderLabel.centerYAnchor.constraint(equalTo: placeholder.centerYAnchor),
 
             plus.leadingAnchor.constraint(equalTo: newTab.leadingAnchor),
             plus.trailingAnchor.constraint(equalTo: newTab.trailingAnchor),
@@ -125,6 +163,13 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
     // MARK: Clicks
 
     @objc private func newTabClicked(_ sender: Any?) { delegate?.sidebarNewTab(in: nil) }
+    @objc private func toolsClicked(_ sender: Any?) { delegate?.sidebarOpenTools() }
+
+    /// The row showing a group's header (used to position the group editor).
+    func rowView(for group: TabGroup) -> NSView? {
+        let row = outline.row(forItem: group)
+        return row >= 0 ? outline.rowView(atRow: row, makeIfNecessary: false) : nil
+    }
 
     @objc private func rowClicked(_ sender: Any?) {
         let row = outline.clickedRow
@@ -273,6 +318,7 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
             return
         }
         if let tab = item as? Tab {
+            add(menu, tab.pinned ? "Unpin Tab" : "Pin Tab", #selector(menuTogglePin(_:)), tab)
             add(menu, "Reload", #selector(menuReload(_:)), tab)
             add(menu, "Unload Tab (Free Memory)", #selector(menuUnload(_:)), tab).isEnabled = tab.isLoaded
             menu.addItem(.separator())
@@ -294,21 +340,6 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
             menu.addItem(.separator())
             add(menu, "Close Tab", #selector(menuClose(_:)), tab)
             add(menu, "Close Other Tabs", #selector(menuCloseOthers(_:)), tab)
-        } else if let group = item as? TabGroup {
-            add(menu, "New Tab in Group", #selector(menuNewTabInGroup(_:)), group)
-            add(menu, "Name and Color…", #selector(menuEditGroup(_:)), group)
-            let colors = NSMenu()
-            for c in GroupColor.allCases {
-                let mi = add(colors, c.name, #selector(menuSetColor(_:)), [group, c.rawValue as NSString])
-                mi.image = c.swatch()
-                mi.state = c == group.color ? .on : .off
-            }
-            let colorItem = NSMenuItem(title: "Color", action: nil, keyEquivalent: "")
-            colorItem.submenu = colors
-            menu.addItem(colorItem)
-            menu.addItem(.separator())
-            add(menu, "Ungroup", #selector(menuUngroup(_:)), group)
-            add(menu, "Close Group", #selector(menuCloseGroup(_:)), group)
         }
     }
 
@@ -322,6 +353,7 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
     }
 
     @objc private func menuNewTab(_ sender: NSMenuItem) { delegate?.sidebarNewTab(in: nil) }
+    @objc private func menuTogglePin(_ sender: NSMenuItem) { if let v = sender.representedObject as? Tab { delegate?.sidebarTogglePin(v) } }
     @objc private func menuReload(_ sender: NSMenuItem) { if let v = sender.representedObject as? Tab { delegate?.sidebarReload(v) } }
     @objc private func menuUnload(_ sender: NSMenuItem) { if let v = sender.representedObject as? Tab { delegate?.sidebarUnload(v) } }
     @objc private func menuClose(_ sender: NSMenuItem) { if let v = sender.representedObject as? Tab { delegate?.sidebarClose(v) } }
@@ -330,7 +362,7 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
     @objc private func menuNewGroup(_ sender: NSMenuItem) {
         guard let tab = sender.representedObject as? Tab else { return }
         let group = store.makeGroup(with: tab)
-        delegate?.sidebarEditGroup(group)
+        delegate?.sidebarEditGroup(group, anchor: nil)
     }
 
     @objc private func menuAddToGroup(_ sender: NSMenuItem) {
@@ -343,28 +375,10 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
         if let v = sender.representedObject as? Tab { store.removeFromGroup(v) }
     }
 
-    @objc private func menuNewTabInGroup(_ sender: NSMenuItem) {
-        if let v = sender.representedObject as? TabGroup { delegate?.sidebarNewTab(in: v) }
-    }
 
-    @objc private func menuEditGroup(_ sender: NSMenuItem) {
-        if let v = sender.representedObject as? TabGroup { delegate?.sidebarEditGroup(v) }
-    }
 
-    @objc private func menuSetColor(_ sender: NSMenuItem) {
-        guard let pair = sender.representedObject as? [NSObject], let group = pair.first as? TabGroup,
-              let raw = pair.last as? String, let color = GroupColor(rawValue: raw) else { return }
-        group.color = color
-        store.changed()
-    }
 
-    @objc private func menuUngroup(_ sender: NSMenuItem) {
-        if let v = sender.representedObject as? TabGroup { store.ungroup(v) }
-    }
 
-    @objc private func menuCloseGroup(_ sender: NSMenuItem) {
-        if let v = sender.representedObject as? TabGroup { delegate?.sidebarCloseGroup(v) }
-    }
 }
 
 // MARK: - Views
@@ -372,6 +386,17 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
 /// The list itself, without the usual disclosure triangles and indentation.
 final class SidebarOutlineView: NSOutlineView {
     var onMiddleClick: ((Int) -> Void)?
+    var onGroupRightClick: ((Int) -> Void)?
+
+    /// Right-clicking a group header opens the group editor instead of a menu.
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let row = self.row(at: convert(event.locationInWindow, from: nil))
+        if row >= 0, item(atRow: row) is TabGroup {
+            onGroupRightClick?(row)
+            return nil
+        }
+        return super.menu(for: event)
+    }
 
     override func frameOfOutlineCell(atRow row: Int) -> NSRect { .zero }
 
@@ -442,8 +467,16 @@ final class TabCellView: NSTableCellView {
     private let label = NSTextField(labelWithString: "")
     private let closeButton = NSButton()
     private let groupLine = SolidView(color: .clear)
+    private let pinIcon = NSImageView()
+    private var isPinned = false
 
-    var showsClose = false { didSet { closeButton.isHidden = !showsClose } }
+    var showsClose = false { didSet { updateTrailing() } }
+
+    private func updateTrailing() {
+        // Pinned tabs show a pin; hovering shows the close button instead.
+        closeButton.isHidden = !showsClose
+        pinIcon.isHidden = !isPinned || showsClose
+    }
 
     init(target: AnyObject, closeAction: Selector) {
         super.init(frame: .zero)
@@ -463,7 +496,10 @@ final class TabCellView: NSTableCellView {
         closeButton.isHidden = true
         groupLine.cornerRadius = 1
 
-        for v in [groupLine, icon, label, closeButton] as [NSView] {
+        pinIcon.image = Icons.symbol("pin.fill", size: 10)
+        pinIcon.contentTintColor = Theme.mutedText
+        pinIcon.isHidden = true
+        for v in [groupLine, icon, label, closeButton, pinIcon] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             addSubview(v)
         }
@@ -486,6 +522,8 @@ final class TabCellView: NSTableCellView {
             closeButton.centerYAnchor.constraint(equalTo: centerYAnchor),
             closeButton.widthAnchor.constraint(equalToConstant: 16),
             closeButton.heightAnchor.constraint(equalToConstant: 16),
+            pinIcon.centerXAnchor.constraint(equalTo: closeButton.centerXAnchor),
+            pinIcon.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
         ])
     }
 
@@ -503,6 +541,8 @@ final class TabCellView: NSTableCellView {
         } else {
             groupLine.isHidden = true
         }
+        isPinned = tab.pinned
+        updateTrailing()
         let sleeping = tab.isLoaded ? "" : "\n(Unloaded to save memory — click to reload)"
         toolTip = "\(tab.displayTitle)\n\(tab.displayURL?.absoluteString ?? "")\(sleeping)"
     }
@@ -554,7 +594,7 @@ final class GroupCellView: NSTableCellView {
             label.stringValue = group.isCollapsed ? "\(group.name)  ·  \(countText)" : group.name
         }
         chevron.image = Icons.symbol(group.isCollapsed ? "chevron.down" : "chevron.up", size: 11, weight: .semibold)
-        toolTip = "Click to \(group.isCollapsed ? "expand" : "collapse"). Right-click to rename, recolor or ungroup."
+        toolTip = "Click to \(group.isCollapsed ? "expand" : "collapse"). Right-click to edit the group."
     }
 }
 

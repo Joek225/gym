@@ -140,79 +140,113 @@ final class TabStore: NSObject {
         changed()
     }
 
+    // MARK: Pinning and moving groups between windows
+
+    func setPinned(_ tab: Tab, _ pinned: Bool) {
+        tab.pinned = pinned
+        changed()
+    }
+
+    /// Removes a whole group from this window (to move it to another).
+    func take(_ group: TabGroup) {
+        items.removeAll { $0 === group }
+        if selected?.group === group { selected = nil }
+        changed()
+    }
+
+    /// Adds a whole group at the end of this window.
+    func adopt(_ group: TabGroup) {
+        items.append(group)
+        group.tabs.forEach { $0.group = group }
+        changed()
+    }
+
     private func removeEmptyGroups() {
         items.removeAll { ($0 as? TabGroup)?.tabs.isEmpty == true }
     }
 
+    /// Pinned tabs always sit at the top of their group (or of the sidebar).
+    private func keepPinnedFirst() {
+        func pinnedTab(_ item: NSObject) -> Bool { (item as? Tab)?.pinned == true }
+        items = items.filter(pinnedTab) + items.filter { !pinnedTab($0) }
+        for group in groups {
+            group.tabs = group.tabs.filter(\.pinned) + group.tabs.filter { !$0.pinned }
+        }
+    }
+
     func changed() {
+        keepPinnedFirst()
         onChange?()
         scheduleSave()
     }
 
     // MARK: Saving and restoring
 
-    func scheduleSave() {
-        NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(saveNow), object: nil)
-        perform(#selector(saveNow), with: nil, afterDelay: 1)
-    }
+    func scheduleSave() { SessionSaver.shared.scheduleSave() }
+    func saveNow() { SessionSaver.shared.saveNow() }
 
-    @objc func saveNow() {
-        func saved(_ t: Tab) -> SavedTab? {
-            guard let url = t.webView?.url ?? t.url, url.absoluteString != "about:blank" else { return nil }
-            return SavedTab(id: t.id, url: url, title: t.title, icon: t.faviconPNG)
-        }
+    /// This window's tabs and groups, ready to be written to disk.
+    func snapshot() -> SavedSession {
         let saveItems: [SavedItem] = items.compactMap { item in
             if let g = item as? TabGroup {
-                let tabs = g.tabs.compactMap(saved)
-                if tabs.isEmpty { return nil }
-                return SavedItem(tab: nil, group: SavedGroup(id: g.id, name: g.name, color: g.color,
-                                                             collapsed: g.isCollapsed, tabs: tabs))
+                let saved = Self.savedGroup(g)
+                return saved.tabs.isEmpty ? nil : SavedItem(tab: nil, group: saved)
             }
-            guard let tab = item as? Tab, let st = saved(tab) else { return nil }
+            guard let tab = item as? Tab, let st = Self.savedTab(tab) else { return nil }
             return SavedItem(tab: st, group: nil)
         }
-        let session = SavedSession(items: saveItems, selected: selected?.id)
-        if let data = try? JSONEncoder().encode(session) {
-            try? data.write(to: Storage.session, options: .atomic)
-        }
+        return SavedSession(items: saveItems, selected: selected?.id)
     }
 
-    /// Brings back last time's tabs and groups. Tabs come back unloaded
+    /// Brings back saved tabs and groups. Tabs come back unloaded
     /// (using no memory) and only load when you click them.
-    func restore() {
-        guard let data = try? Data(contentsOf: Storage.session),
-              let session = try? JSONDecoder().decode(SavedSession.self, from: data) else { return }
-        func make(_ s: SavedTab) -> Tab {
-            let tab = Tab(id: s.id, url: s.url, title: s.title)
-            if let icon = s.icon {
-                tab.faviconPNG = icon
-                tab.favicon = Favicons.image(fromPNG: icon)
-                tab.faviconHost = s.url?.host
-            }
-            return tab
-        }
+    func restore(from session: SavedSession) {
         items = session.items.compactMap { item in
-            if let sg = item.group {
-                let group = TabGroup(id: sg.id, name: sg.name, color: sg.color, isCollapsed: sg.collapsed)
-                group.tabs = sg.tabs.map(make)
-                group.tabs.forEach { $0.group = group }
-                return group
-            }
-            return item.tab.map(make)
+            if let sg = item.group { return Self.makeGroup(sg) }
+            return item.tab.map(Self.makeTab)
         }
         removeEmptyGroups()
+        keepPinnedFirst()
         selected = allTabs.first { $0.id == session.selected }
+    }
+
+    static func savedTab(_ t: Tab) -> SavedTab? {
+        guard let url = t.webView?.url ?? t.url, url.absoluteString != "about:blank" else { return nil }
+        return SavedTab(id: t.id, url: url, title: t.title, icon: t.faviconPNG, pinned: t.pinned ? true : nil)
+    }
+
+    static func savedGroup(_ g: TabGroup) -> SavedGroup {
+        SavedGroup(id: g.id, name: g.name, color: g.color, collapsed: g.isCollapsed, tabs: g.tabs.compactMap(savedTab))
+    }
+
+    static func makeTab(_ s: SavedTab) -> Tab {
+        let tab = Tab(id: s.id, url: s.url, title: s.title)
+        tab.pinned = s.pinned ?? false
+        if let icon = s.icon {
+            tab.faviconPNG = icon
+            tab.favicon = Favicons.image(fromPNG: icon)
+            tab.faviconHost = s.url?.host
+        }
+        return tab
+    }
+
+    static func makeGroup(_ sg: SavedGroup) -> TabGroup {
+        let group = TabGroup(id: sg.id, name: sg.name, color: sg.color, isCollapsed: sg.collapsed)
+        group.tabs = sg.tabs.map(makeTab)
+        group.tabs.forEach { $0.group = group }
+        return group
     }
 }
 
-private struct SavedTab: Codable {
+struct SavedTab: Codable {
     var id: UUID
     var url: URL?
     var title: String
     var icon: Data?
+    var pinned: Bool?
 }
 
-private struct SavedGroup: Codable {
+struct SavedGroup: Codable {
     var id: UUID
     var name: String
     var color: GroupColor
@@ -220,12 +254,12 @@ private struct SavedGroup: Codable {
     var tabs: [SavedTab]
 }
 
-private struct SavedItem: Codable {
+struct SavedItem: Codable {
     var tab: SavedTab?
     var group: SavedGroup?
 }
 
-private struct SavedSession: Codable {
+struct SavedSession: Codable {
     var items: [SavedItem]
     var selected: UUID?
 }

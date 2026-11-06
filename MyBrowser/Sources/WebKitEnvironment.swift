@@ -22,6 +22,10 @@ enum WebKitEnvironment {
         config.defaultWebpagePreferences.preferredContentMode = .desktop
         // Identify like Safari so sites (Google etc.) serve their full versions.
         config.applicationNameForUserAgent = "Version/18.5 Safari/605.1.15"
+        // Lets installed extensions see and change pages (only when any are installed).
+        if #available(macOS 15.4, *), let extensions = ExtensionManager.active {
+            config.webExtensionController = extensions.controller
+        }
         return config
     }
 

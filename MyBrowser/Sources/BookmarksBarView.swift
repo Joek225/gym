@@ -9,9 +9,12 @@ final class BookmarksBarView: NSView {
 
     /// Supplies the current tab groups.
     var groups: () -> [TabGroup] = { [] }
+    /// Supplies groups you've closed (kept so you can reopen them).
+    var closedGroups: () -> [SavedGroup] = { [] }
 
     private enum Entry {
         case group(TabGroup)
+        case closedGroup(SavedGroup)
         case node(BookmarkNode)
     }
 
@@ -41,6 +44,7 @@ final class BookmarksBarView: NSView {
         entries.forEach { $0.button.removeFromSuperview() }
         entries = []
         for group in groups() { entries.append((makeChip(group), .group(group))) }
+        for saved in closedGroups() { entries.append((makeClosedChip(saved), .closedGroup(saved))) }
         for node in BookmarkStore.shared.bar.children ?? [] { entries.append((makeButton(node), .node(node))) }
         entries.forEach { addSubview($0.button) }
         emptyHint.isHidden = !entries.isEmpty
@@ -58,7 +62,7 @@ final class BookmarksBarView: NSView {
         for (button, entry) in entries {
             button.sizeToFit()
             var w = min(button.frame.width, 180)
-            if case .group = entry { w += 14 } else { w += 8 }
+            if case .node = entry { w += 8 } else { w += 14 }
             if overflowing || x + w > limit {
                 overflowing = true
                 button.isHidden = true
@@ -103,6 +107,41 @@ final class BookmarksBarView: NSView {
         return button
     }
 
+    /// A closed group: same color, but dimmer and with an outline instead of a fill.
+    private func makeClosedChip(_ saved: SavedGroup) -> NSButton {
+        let title = saved.name.isEmpty ? "\(saved.tabs.count) tabs" : saved.name
+        let button = NSButton(title: "", target: self, action: #selector(clicked(_:)))
+        button.isBordered = false
+        button.attributedTitle = NSAttributedString(string: title, attributes: [
+            .foregroundColor: saved.color.color.withAlphaComponent(1).blended(withFraction: 0.35, of: Theme.toolbar) ?? saved.color.color,
+            .font: NSFont.systemFont(ofSize: 12, weight: .medium)])
+        button.wantsLayer = true
+        button.layer?.borderColor = saved.color.dimColor.cgColor
+        button.layer?.borderWidth = 1.5
+        button.layer?.cornerRadius = 6
+        button.toolTip = "Closed tab group: click to reopen"
+        return button
+    }
+
+    private func closedGroupMenu(_ saved: SavedGroup) -> NSMenu {
+        let menu = NSMenu()
+        let open = NSMenuItem(title: "Open Group", action: #selector(BrowserWindowController.reopenSavedGroup(_:)), keyEquivalent: "")
+        open.representedObject = saved.id
+        menu.addItem(open)
+        menu.addItem(.separator())
+        for tab in saved.tabs {
+            let item = NSMenuItem(title: tab.title.isEmpty ? (tab.url?.host ?? "Tab") : tab.title, action: nil, keyEquivalent: "")
+            item.image = tab.icon.flatMap(Favicons.image(fromPNG:)) ?? Icons.globe
+            item.isEnabled = false
+            menu.addItem(item)
+        }
+        menu.addItem(.separator())
+        let delete = NSMenuItem(title: "Delete Group", action: #selector(BrowserWindowController.deleteSavedGroup(_:)), keyEquivalent: "")
+        delete.representedObject = saved.id
+        menu.addItem(delete)
+        return menu
+    }
+
     private func entry(for button: NSButton) -> Entry? {
         entries.first { $0.button === button }?.entry
     }
@@ -118,6 +157,8 @@ final class BookmarksBarView: NSView {
             }
         case .group(let group):
             groupMenu(group).popUp(positioning: nil, at: NSPoint(x: 0, y: -4), in: sender)
+        case .closedGroup(let saved):
+            closedGroupMenu(saved).popUp(positioning: nil, at: NSPoint(x: 0, y: -4), in: sender)
         }
     }
 
@@ -148,6 +189,11 @@ final class BookmarksBarView: NSView {
                 let item = NSMenuItem(title: group.name.isEmpty ? "Tab group" : group.name, action: nil, keyEquivalent: "")
                 item.image = group.color.swatch()
                 item.submenu = groupMenu(group)
+                menu.addItem(item)
+            case .closedGroup(let saved):
+                let item = NSMenuItem(title: saved.name.isEmpty ? "Closed group" : saved.name, action: nil, keyEquivalent: "")
+                item.image = saved.color.swatch()
+                item.submenu = closedGroupMenu(saved)
                 menu.addItem(item)
             }
         }

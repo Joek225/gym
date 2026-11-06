@@ -10,4 +10,5 @@ enum Storage {
     }()
     static let session = folder.appendingPathComponent("session.json")
     static let bookmarks = folder.appendingPathComponent("bookmarks.json")
+    static let closedGroups = folder.appendingPathComponent("closed-groups.json")
 }

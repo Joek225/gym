@@ -30,6 +30,8 @@ final class Tab: NSObject {
     var faviconPNG: Data?
     var faviconHost: String?
     weak var group: TabGroup?
+    /// Pinned tabs stay at the top of their group (or of the sidebar).
+    var pinned = false
     /// When you last looked at this tab (used to decide when to unload it).
     var lastActive = Date()
     var errorMessage: String?
@@ -61,6 +63,7 @@ final class Tab: NSObject {
     }
 
     func attach(_ webView: WKWebView, observations: [NSKeyValueObservation]) {
+        self.observations.forEach { $0.invalidate() }
         self.webView = webView
         self.observations = observations
     }
