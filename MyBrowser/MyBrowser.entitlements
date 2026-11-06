@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- App Sandbox: the app can only touch what it needs (safer, like App Store apps). -->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<!-- Allowed to connect to the internet. -->
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<!-- Allowed to read/write files you pick yourself (e.g. uploading a photo to a website). -->
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+	<!-- Allowed to save into your Downloads folder (used in stage 5). -->
+	<key>com.apple.security.files.downloads.read-write</key>
+	<true/>
+</dict>
+</plist>

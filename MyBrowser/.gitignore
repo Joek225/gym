@@ -1,0 +1,5 @@
+# Xcode's personal/cache files — not part of the project
+xcuserdata/
+DerivedData/
+build/
+.DS_Store
