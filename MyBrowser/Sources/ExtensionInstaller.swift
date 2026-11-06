@@ -17,13 +17,13 @@ enum ExtensionInstaller {
         panel.canChooseFiles = false
         panel.showsHiddenFiles = true
         panel.prompt = "Use This Folder"
-        panel.message = "This is Chrome's “Extensions” folder. Just click “Use This Folder”. (If you use several Chrome profiles, go up and pick “Profile 1” → Extensions instead.)"
+        panel.message = "This is Chrome's settings folder. Just click “Use This Folder” — extensions from all your Chrome profiles will be listed."
         panel.directoryURL = URL(fileURLWithPath: realHome)
-            .appendingPathComponent("Library/Application Support/Google/Chrome/Default/Extensions", isDirectory: true)
+            .appendingPathComponent("Library/Application Support/Google/Chrome", isDirectory: true)
         run(panel, window: window) { url in
             let found = ExtensionManager.scanChrome(url)
             guard !found.isEmpty else {
-                tell("No extensions found", "That folder doesn't contain any Chrome extensions. Pick the folder called “Extensions” inside Chrome's “Default” folder.", window)
+                tell("No extensions found", "No Chrome extensions were found there. Pick the folder called “Chrome” (inside Library → Application Support → Google).", window)
                 return
             }
             choose(from: found, window: window)
@@ -38,7 +38,7 @@ enum ExtensionInstaller {
         panel.prompt = "Add Extension"
         panel.message = "Choose an extension's folder (the one containing “manifest.json”)."
         run(panel, window: window) { url in
-            install([ExtensionManager.ChromeExtension(name: url.lastPathComponent, version: "", folder: url)], window: window)
+            install([ExtensionManager.ChromeExtension(name: url.lastPathComponent, version: "", profile: "", folder: url)], window: window)
         }
     }
 
@@ -52,7 +52,8 @@ enum ExtensionInstaller {
         list.spacing = 6
         var boxes: [NSButton] = []
         for ext in found {
-            let box = NSButton(checkboxWithTitle: ext.version.isEmpty ? ext.name : "\(ext.name)  (\(ext.version))",
+            let profile = ext.profile.isEmpty ? "" : "  — \(ext.profile)"
+            let box = NSButton(checkboxWithTitle: ext.name + profile,
                                target: nil, action: nil)
             box.state = .off
             list.addArrangedSubview(box)
@@ -117,6 +118,11 @@ final class ExtensionsMenuDelegate: NSObject, NSMenuDelegate {
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         while menu.items.count > fixedItemCount { menu.removeItem(at: fixedItemCount) }
+        appendItems(to: menu)
+    }
+
+    /// Adds one line per installed extension (each with Options, Details and Remove).
+    func appendItems(to menu: NSMenu) {
         guard #available(macOS 15.4, *) else {
             let note = NSMenuItem(title: "Extensions need macOS 15.4 or newer", action: nil, keyEquivalent: "")
             note.isEnabled = false

@@ -13,6 +13,9 @@ enum MainMenu {
         let app = submenu(in: main, title: "MyBrowser")
         app.addItem(withTitle: "About MyBrowser", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         app.addItem(.separator())
+        app.addItem(withTitle: "Passwords…", action: #selector(W.openPasswords(_:)), keyEquivalent: "p")
+            .keyEquivalentModifierMask = [.command, .option]
+        app.addItem(.separator())
         app.addItem(withTitle: "Hide MyBrowser", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         app.addItem(withTitle: "Hide Others", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
             .keyEquivalentModifierMask = [.command, .option]
@@ -32,6 +35,7 @@ enum MainMenu {
             .keyEquivalentModifierMask = [.command, .shift]
         file.addItem(.separator())
         file.addItem(withTitle: "Tools (Converter & Background Remover)…", action: #selector(W.openTools(_:)), keyEquivalent: "")
+        file.addItem(withTitle: "Passwords…", action: #selector(W.openPasswords(_:)), keyEquivalent: "")
 
         let edit = submenu(in: main, title: "Edit")
         edit.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
@@ -46,6 +50,8 @@ enum MainMenu {
         let view = submenu(in: main, title: "View")
         view.addItem(withTitle: "Hide Bookmarks Bar", action: #selector(W.toggleBookmarksBar(_:)), keyEquivalent: "b")
             .keyEquivalentModifierMask = [.command, .shift]
+        view.addItem(withTitle: "Show/Hide Tab Sidebar", action: #selector(W.toggleSidebar(_:)), keyEquivalent: "s")
+            .keyEquivalentModifierMask = [.command, .control]
         view.addItem(.separator())
         view.addItem(withTitle: "Reload Page", action: #selector(W.reloadPage(_:)), keyEquivalent: "r")
         view.addItem(.separator())
@@ -71,6 +77,9 @@ enum MainMenu {
         bookmarks.delegate = BookmarksMenuDelegate.shared
 
         let tab = submenu(in: main, title: "Tab")
+        tab.addItem(withTitle: "Search Tabs…", action: #selector(W.searchTabs(_:)), keyEquivalent: "a")
+            .keyEquivalentModifierMask = [.command, .shift]
+        tab.addItem(.separator())
         tab.addItem(withTitle: "Select Next Tab", action: #selector(W.selectNextTab(_:)), keyEquivalent: "\t")
             .keyEquivalentModifierMask = [.control]
         hidden(tab, "Select Next Tab", #selector(W.selectNextTab(_:)), "}", [.command])

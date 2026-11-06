@@ -16,6 +16,31 @@ protocol SidebarDelegate: AnyObject {
     func sidebarEditGroup(_ group: TabGroup, anchor: NSView?)
     func sidebarTogglePin(_ tab: Tab)
     func sidebarOpenTools()
+    func sidebarToggleCollapse()
+    func sidebarShowGroups(anchor: NSView)
+    func sidebarSearchTabs()
+}
+
+/// A tab container's pinned tabs, shown as a row of square tiles (like Chrome).
+@MainActor
+final class PinnedStrip: NSObject {
+    static let columns = 4
+    static let tileHeight: CGFloat = 34
+    static let gap: CGFloat = 6
+
+    weak var group: TabGroup?
+    let isTopLevel: Bool
+    var tabs: [Tab] = []
+
+    init(group: TabGroup?) {
+        self.group = group
+        isTopLevel = group == nil
+    }
+
+    var height: CGFloat {
+        let rows = max(1, (tabs.count + Self.columns - 1) / Self.columns)
+        return CGFloat(rows) * Self.tileHeight + CGFloat(rows - 1) * Self.gap + 8
+    }
 }
 
 /// The vertical tab list on the left, with groups that collapse and tabs you can drag.
@@ -29,6 +54,7 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
     private let scroll = NSScrollView()
     private var draggedItem: NSObject?
     private var isReloading = false
+    private var strips: [String: PinnedStrip] = [:]
 
     init(store: TabStore) {
         self.store = store
@@ -97,12 +123,42 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
         placeholderLabel.font = .systemFont(ofSize: 11)
         placeholderLabel.textColor = Theme.mutedText
 
-        for v in [scroll, newTab, plus, tools, toolsButton, placeholder, placeholderLabel] as [NSView] {
+        // Top: hide-sidebar button on the left; tab groups and tab search on the right (like Chrome).
+        let collapse = headerButton("sidebar.leading", "Hide the tab sidebar (⌃⌘S)", #selector(collapseClicked(_:)))
+        let groupsPill = SolidView(color: Theme.toolbar)
+        groupsPill.cornerRadius = 9
+        let searchPill = SolidView(color: Theme.toolbar)
+        searchPill.cornerRadius = 9
+        let groupsButton = headerButton("square.grid.2x2", "Tab groups", #selector(groupsClicked(_:)))
+        let searchButton = headerButton("text.magnifyingglass", "Search tabs (⇧⌘A)", #selector(searchClicked(_:)))
+        let headerLine = SolidView(color: Theme.toolbar)
+
+        for v in [collapse, groupsPill, searchPill, groupsButton, searchButton, headerLine,
+                  scroll, newTab, plus, tools, toolsButton, placeholder, placeholderLabel] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(v)
         }
         NSLayoutConstraint.activate([
-            scroll.topAnchor.constraint(equalTo: view.topAnchor),
+            collapse.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12),
+            collapse.centerYAnchor.constraint(equalTo: view.topAnchor, constant: 22),
+            searchPill.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -10),
+            searchPill.centerYAnchor.constraint(equalTo: collapse.centerYAnchor),
+            searchPill.widthAnchor.constraint(equalToConstant: 34),
+            searchPill.heightAnchor.constraint(equalToConstant: 30),
+            groupsPill.trailingAnchor.constraint(equalTo: searchPill.leadingAnchor, constant: -2),
+            groupsPill.centerYAnchor.constraint(equalTo: collapse.centerYAnchor),
+            groupsPill.widthAnchor.constraint(equalToConstant: 34),
+            groupsPill.heightAnchor.constraint(equalToConstant: 30),
+            groupsButton.centerXAnchor.constraint(equalTo: groupsPill.centerXAnchor),
+            groupsButton.centerYAnchor.constraint(equalTo: groupsPill.centerYAnchor),
+            searchButton.centerXAnchor.constraint(equalTo: searchPill.centerXAnchor),
+            searchButton.centerYAnchor.constraint(equalTo: searchPill.centerYAnchor),
+            headerLine.topAnchor.constraint(equalTo: view.topAnchor, constant: 44),
+            headerLine.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 10),
+            headerLine.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -10),
+            headerLine.heightAnchor.constraint(equalToConstant: 1),
+
+            scroll.topAnchor.constraint(equalTo: headerLine.bottomAnchor, constant: 2),
             scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             scroll.bottomAnchor.constraint(equalTo: newTab.topAnchor, constant: -6),
@@ -153,6 +209,10 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
 
     /// Updates one tab's row (title, icon) without rebuilding the list.
     func refresh(_ tab: Tab) {
+        if tab.pinned {
+            if let strip = strips[tab.group?.id.uuidString ?? "top"] { outline.reloadItem(strip) }
+            return
+        }
         let row = outline.row(forItem: tab)
         guard row >= 0 else { return }
         if let cell = outline.view(atColumn: 0, row: row, makeIfNecessary: false) as? TabCellView {
@@ -164,6 +224,17 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
 
     @objc private func newTabClicked(_ sender: Any?) { delegate?.sidebarNewTab(in: nil) }
     @objc private func toolsClicked(_ sender: Any?) { delegate?.sidebarOpenTools() }
+    @objc private func collapseClicked(_ sender: Any?) { delegate?.sidebarToggleCollapse() }
+    @objc private func groupsClicked(_ sender: NSButton) { delegate?.sidebarShowGroups(anchor: sender) }
+    @objc private func searchClicked(_ sender: Any?) { delegate?.sidebarSearchTabs() }
+
+    private func headerButton(_ symbol: String, _ tip: String, _ action: Selector) -> NSButton {
+        let b = NSButton(image: Icons.symbol(symbol, size: 15) ?? NSImage(), target: self, action: action)
+        b.isBordered = false
+        b.contentTintColor = Theme.icon
+        b.toolTip = tip
+        return b
+    }
 
     /// The row showing a group's header (used to position the group editor).
     func rowView(for group: TabGroup) -> NSView? {
@@ -194,19 +265,63 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
 
     // MARK: Data
 
+    private func strip(for group: TabGroup?) -> PinnedStrip {
+        let key = group?.id.uuidString ?? "top"
+        if let existing = strips[key] { return existing }
+        let made = PinnedStrip(group: group)
+        strips[key] = made
+        return made
+    }
+
+    private func entries(of group: TabGroup?) -> [NSObject] {
+        group.map { $0.tabs as [NSObject] } ?? store.items
+    }
+
+    private func pinnedCount(_ group: TabGroup?) -> Int {
+        entries(of: group).filter { ($0 as? Tab)?.pinned == true }.count
+    }
+
+    /// What the list shows inside a container: one row of tiles for the pinned tabs, then the rest.
+    private func children(of group: TabGroup?) -> [NSObject] {
+        let all = entries(of: group)
+        let pinned = all.compactMap { $0 as? Tab }.filter(\.pinned)
+        let rest = all.filter { ($0 as? Tab)?.pinned != true }
+        guard !pinned.isEmpty else { return rest }
+        let row = strip(for: group)
+        row.tabs = pinned
+        return [row] + rest
+    }
+
+    /// The tile row takes one line in the list but stands for several tabs in the store.
+    private func storeIndex(_ listIndex: Int, in group: TabGroup?) -> Int {
+        let p = pinnedCount(group)
+        return p == 0 ? listIndex : max(listIndex - 1, 0) + p
+    }
+
+    private func listIndex(_ storeIndex: Int, in group: TabGroup?) -> Int {
+        let p = pinnedCount(group)
+        return p == 0 ? storeIndex : max(storeIndex - p, 0) + 1
+    }
+
     func outlineView(_ outlineView: NSOutlineView, numberOfChildrenOfItem item: Any?) -> Int {
-        if item == nil { return store.items.count }
-        return (item as? TabGroup)?.tabs.count ?? 0
+        if item == nil { return children(of: nil).count }
+        if let group = item as? TabGroup { return children(of: group).count }
+        return 0
     }
 
     func outlineView(_ outlineView: NSOutlineView, child index: Int, ofItem item: Any?) -> Any {
-        if let group = item as? TabGroup { return group.tabs[index] }
-        return store.items[index]
+        children(of: item as? TabGroup)[index]
     }
 
     func outlineView(_ outlineView: NSOutlineView, isItemExpandable item: Any) -> Bool { item is TabGroup }
 
     func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
+        if let strip = item as? PinnedStrip {
+            let cell = outlineView.makeView(withIdentifier: PinnedStripCellView.id, owner: nil) as? PinnedStripCellView
+                ?? PinnedStripCellView()
+            cell.configure(strip, selected: store.selected, actions: tileActions)
+            return cell
+        }
         if let group = item as? TabGroup {
             let cell = outlineView.makeView(withIdentifier: GroupCellView.id, owner: nil) as? GroupCellView ?? GroupCellView()
             cell.configure(group)
@@ -221,13 +336,25 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
 
     func outlineView(_ outlineView: NSOutlineView, rowViewForItem item: Any) -> NSTableRowView? {
         let row = SidebarRowView()
-        row.isGroupHeader = item is TabGroup
+        row.isGroupHeader = item is TabGroup || item is PinnedStrip
         row.isSelectedTab = (item as? Tab) === store.selected
         return row
     }
 
     func outlineView(_ outlineView: NSOutlineView, heightOfRowByItem item: Any) -> CGFloat {
-        item is TabGroup ? 28 : 30
+        if let strip = item as? PinnedStrip { return strip.height }
+        return item is TabGroup ? 28 : 30
+    }
+
+    private var tileActions: PinnedTile.Actions {
+        PinnedTile.Actions(
+            select: { [weak self] tab in self?.delegate?.sidebarSelect(tab) },
+            close: { [weak self] tab in self?.delegate?.sidebarClose(tab) },
+            menu: { [weak self] tab in
+                let menu = NSMenu()
+                self?.fillTabMenu(menu, for: tab)
+                return menu
+            })
     }
 
     func outlineView(_ outlineView: NSOutlineView, shouldSelectItem item: Any) -> Bool { false }
@@ -245,6 +372,7 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
     // MARK: Drag and drop
 
     func outlineView(_ outlineView: NSOutlineView, pasteboardWriterForItem item: Any) -> NSPasteboardWriting? {
+        if item is PinnedStrip { return nil }   // unpin a tab to drag it
         let p = NSPasteboardItem()
         p.setString("item", forType: .sidebarItem)
         return p
@@ -263,15 +391,20 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
     func outlineView(_ outlineView: NSOutlineView, validateDrop info: NSDraggingInfo,
                      proposedItem item: Any?, proposedChildIndex index: Int) -> NSDragOperation {
         guard let dragged = draggedItem else { return [] }
+        let afterTiles = 1   // list position just below a row of pinned tiles
 
         if dragged is TabGroup {
             // Groups can only be moved between other top-level entries.
-            if let target = item as? NSObject {
-                let top: NSObject = (target as? Tab)?.group ?? target
+            if let strip = item as? PinnedStrip, strip.isTopLevel {
+                outlineView.setDropItem(nil, dropChildIndex: afterTiles)
+            } else if let target = item as? NSObject {
+                let top: NSObject = (target as? Tab)?.group ?? (target as? PinnedStrip)?.group ?? target
                 guard let i = store.items.firstIndex(of: top) else { return [] }
-                outlineView.setDropItem(nil, dropChildIndex: i)
+                outlineView.setDropItem(nil, dropChildIndex: listIndex(i, in: nil))
             } else if index == NSOutlineViewDropOnItemIndex {
-                outlineView.setDropItem(nil, dropChildIndex: store.items.count)
+                outlineView.setDropItem(nil, dropChildIndex: children(of: nil).count)
+            } else if index == 0, pinnedCount(nil) > 0 {
+                outlineView.setDropItem(nil, dropChildIndex: afterTiles)
             }
             return .move
         }
@@ -279,18 +412,26 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
         guard dragged is Tab else { return [] }
         if item == nil {
             if index == NSOutlineViewDropOnItemIndex {
-                outlineView.setDropItem(nil, dropChildIndex: store.items.count)
+                outlineView.setDropItem(nil, dropChildIndex: children(of: nil).count)
+            } else if index == 0, pinnedCount(nil) > 0 {
+                outlineView.setDropItem(nil, dropChildIndex: afterTiles)
             }
             return .move
         }
         if let group = item as? TabGroup {
             if index == NSOutlineViewDropOnItemIndex {   // dropped on the group's header: add at the end
-                outlineView.setDropItem(group, dropChildIndex: group.tabs.count)
+                outlineView.setDropItem(group, dropChildIndex: children(of: group).count)
+            } else if index == 0, pinnedCount(group) > 0 {
+                outlineView.setDropItem(group, dropChildIndex: afterTiles)
             }
             return .move
         }
+        if let strip = item as? PinnedStrip {   // dropped on pinned tiles: go just below them
+            outlineView.setDropItem(strip.isTopLevel ? nil : strip.group, dropChildIndex: afterTiles)
+            return .move
+        }
         if let tab = item as? Tab, let loc = store.location(of: tab) {   // dropped on a tab: go before it
-            outlineView.setDropItem(loc.group, dropChildIndex: loc.index)
+            outlineView.setDropItem(loc.group, dropChildIndex: listIndex(loc.index, in: loc.group))
             return .move
         }
         return []
@@ -300,10 +441,11 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
                      item: Any?, childIndex index: Int) -> Bool {
         guard let dragged = draggedItem else { return false }
         if let group = dragged as? TabGroup {
-            store.move(group, to: index < 0 ? store.items.count : index)
+            store.move(group, to: index < 0 ? store.items.count : storeIndex(index, in: nil))
         } else if let tab = dragged as? Tab {
             let group = item as? TabGroup
-            store.move(tab, to: group, index: index < 0 ? (group?.tabs.count ?? store.items.count) : index)
+            let end = group?.tabs.count ?? store.items.count
+            store.move(tab, to: group, index: index < 0 ? end : storeIndex(index, in: group))
         }
         return true
     }
@@ -317,7 +459,12 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
             add(menu, "New Tab", #selector(menuNewTab(_:)), nil)
             return
         }
-        if let tab = item as? Tab {
+        if let tab = item as? Tab { fillTabMenu(menu, for: tab) }
+    }
+
+    /// The right-click menu for a tab (also used by pinned tiles).
+    func fillTabMenu(_ menu: NSMenu, for tab: Tab) {
+        do {
             add(menu, tab.pinned ? "Unpin Tab" : "Pin Tab", #selector(menuTogglePin(_:)), tab)
             add(menu, "Reload", #selector(menuReload(_:)), tab)
             add(menu, "Unload Tab (Free Memory)", #selector(menuUnload(_:)), tab).isEnabled = tab.isLoaded
@@ -611,4 +758,99 @@ final class ResizeHandle: NSView {
     }
 
     override func mouseUp(with event: NSEvent) { onDragEnd?() }
+}
+
+/// The row that shows pinned tabs as square tiles, four across.
+final class PinnedStripCellView: NSTableCellView {
+    static let id = NSUserInterfaceItemIdentifier("pinned")
+    private var tiles: [PinnedTile] = []
+
+    init() {
+        super.init(frame: .zero)
+        identifier = Self.id
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    func configure(_ strip: PinnedStrip, selected: Tab?, actions: PinnedTile.Actions) {
+        tiles.forEach { $0.removeFromSuperview() }
+        tiles = strip.tabs.map { tab in
+            let tile = PinnedTile(tab: tab, selected: tab === selected, groupColor: strip.group?.color.color, actions: actions)
+            addSubview(tile)
+            return tile
+        }
+        needsLayout = true
+    }
+
+    override func layout() {
+        super.layout()
+        let inset: CGFloat = 8
+        let gap = PinnedStrip.gap
+        let columns = CGFloat(PinnedStrip.columns)
+        let width = (bounds.width - inset * 2 - gap * (columns - 1)) / columns
+        for (i, tile) in tiles.enumerated() {
+            let row = i / PinnedStrip.columns
+            let column = i % PinnedStrip.columns
+            let top = 4 + CGFloat(row) * (PinnedStrip.tileHeight + gap)
+            tile.frame = NSRect(x: inset + CGFloat(column) * (width + gap),
+                                y: bounds.height - top - PinnedStrip.tileHeight,
+                                width: width, height: PinnedStrip.tileHeight)
+        }
+    }
+}
+
+/// One pinned tab: a rounded tile with the site's icon. Click to open,
+/// right-click for options, middle-click to close.
+final class PinnedTile: SolidView {
+    struct Actions {
+        let select: (Tab) -> Void
+        let close: (Tab) -> Void
+        let menu: (Tab) -> NSMenu
+    }
+
+    private let tab: Tab
+    private let actions: Actions
+    private let isSelected: Bool
+
+    init(tab: Tab, selected: Bool, groupColor: NSColor?, actions: Actions) {
+        self.tab = tab
+        self.actions = actions
+        self.isSelected = selected
+        super.init(color: selected ? Theme.selectedTab : Theme.sidebar)
+        cornerRadius = 10
+        borderWidth = 1.5
+        borderColor = groupColor?.blended(withFraction: 0.45, of: Theme.sidebar) ?? NSColor(hex: 0x4A4C62)
+        let icon = NSImageView(image: tab.favicon ?? Icons.globe ?? NSImage())
+        icon.imageScaling = .scaleProportionallyUpOrDown
+        icon.contentTintColor = Theme.mutedText
+        icon.alphaValue = (tab.isLoaded || selected) ? 1 : 0.55   // dimmer when unloaded
+        icon.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(icon)
+        NSLayoutConstraint.activate([
+            icon.centerXAnchor.constraint(equalTo: centerXAnchor),
+            icon.centerYAnchor.constraint(equalTo: centerYAnchor),
+            icon.widthAnchor.constraint(equalToConstant: 18),
+            icon.heightAnchor.constraint(equalToConstant: 18),
+        ])
+        toolTip = tab.displayTitle + (tab.isLoaded ? "" : "\n(Unloaded to save memory — click to reload)")
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+                                       owner: self, userInfo: nil))
+    }
+
+    override func mouseEntered(with event: NSEvent) { if !isSelected { fillColor = Theme.hoverTab } }
+    override func mouseExited(with event: NSEvent) { if !isSelected { fillColor = Theme.sidebar } }
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseUp(with event: NSEvent) {
+        if bounds.contains(convert(event.locationInWindow, from: nil)) { actions.select(tab) }
+    }
+    override func otherMouseDown(with event: NSEvent) {}
+    override func otherMouseUp(with event: NSEvent) { actions.close(tab) }
+    override func menu(for event: NSEvent) -> NSMenu? { actions.menu(tab) }
 }

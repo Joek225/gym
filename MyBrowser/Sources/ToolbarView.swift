@@ -5,6 +5,10 @@ import AppKit
 final class ToolbarView: NSView {
     static let height: CGFloat = 40
 
+    /// Shown only while the tab sidebar is hidden, to bring it back.
+    let sidebarButton = ToolbarView.makeButton("sidebar.leading", "Show the tab sidebar (⌃⌘S)")
+    /// Opens the extensions menu (like Chrome's puzzle-piece button).
+    let puzzleButton = ToolbarView.makeButton("puzzlepiece.extension", "Extensions")
     let backButton = ToolbarView.makeButton("chevron.left", "Back")
     let forwardButton = ToolbarView.makeButton("chevron.right", "Forward")
     let reloadButton = ToolbarView.makeButton("arrow.clockwise", "Reload")
@@ -48,19 +52,21 @@ final class ToolbarView: NSView {
         addressField.cell?.isScrollable = true
         addressField.cell?.wraps = false
 
-        let buttons = NSStackView(views: [backButton, forwardButton, reloadButton])
+        sidebarButton.isHidden = true
+        let buttons = NSStackView(views: [sidebarButton, backButton, forwardButton, reloadButton])
         buttons.orientation = .horizontal
         buttons.spacing = 2
 
         extensionStack.orientation = .horizontal
         extensionStack.spacing = 2
-        for v in [background, buttons, fieldBox, addressField, starButton, extensionStack] as [NSView] {
+        for v in [background, buttons, fieldBox, addressField, starButton, extensionStack, puzzleButton] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
         }
         addSubview(background)
         addSubview(buttons)
         addSubview(fieldBox)
         addSubview(extensionStack)
+        addSubview(puzzleButton)
         fieldBox.addSubview(addressField)
         fieldBox.addSubview(starButton)
 
@@ -76,7 +82,9 @@ final class ToolbarView: NSView {
 
             fieldBox.leadingAnchor.constraint(equalTo: buttons.trailingAnchor, constant: 8),
             fieldBox.trailingAnchor.constraint(equalTo: extensionStack.leadingAnchor, constant: -6),
-            extensionStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            extensionStack.trailingAnchor.constraint(equalTo: puzzleButton.leadingAnchor, constant: -2),
+            puzzleButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            puzzleButton.centerYAnchor.constraint(equalTo: centerYAnchor),
             extensionStack.centerYAnchor.constraint(equalTo: centerYAnchor),
             fieldBox.centerYAnchor.constraint(equalTo: centerYAnchor),
             fieldBox.heightAnchor.constraint(equalToConstant: 28),

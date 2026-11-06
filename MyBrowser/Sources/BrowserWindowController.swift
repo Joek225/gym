@@ -140,6 +140,11 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         bookmarksBar.groups = { [weak self] in self?.store.groups ?? [] }
         bookmarksBar.closedGroups = { GroupLibrary.shared.closed }
         toolbar.onExtensionClicked = { [weak self] id in self?.extensionButtonClicked(id) }
+        toolbar.sidebarButton.target = self
+        toolbar.sidebarButton.action = #selector(toggleSidebar(_:))
+        toolbar.puzzleButton.target = self
+        toolbar.puzzleButton.action = #selector(showExtensionsMenu(_:))
+        applySidebarVisibility()
 
         resizeHandle.onDrag = { [weak self] x in
             self?.sidebarWidth.constant = min(max(x, 160), 480)
@@ -439,7 +444,31 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         if sender.tag - 1 < tabs.count { select(tabs[sender.tag - 1]) } else { NSSound.beep() }
     }
 
-    @objc func openTools(_ sender: Any?) { ToolsWindowController.show() }
+    @objc func openTools(_ sender: Any?) {
+        if let window { ToolsOverlay.show(in: window) }
+    }
+
+    @objc func openPasswords(_ sender: Any?) {
+        if let window { PasswordsOverlay.show(in: window) }
+    }
+
+    @objc func searchTabs(_ sender: Any?) { sidebarSearchTabs() }
+
+    @objc func toggleSidebar(_ sender: Any?) { sidebarToggleCollapse() }
+
+    private var sidebarHidden: Bool {
+        get { UserDefaults.standard.bool(forKey: "sidebarHidden") }
+        set { UserDefaults.standard.set(newValue, forKey: "sidebarHidden") }
+    }
+
+    private func applySidebarVisibility() {
+        let hidden = sidebarHidden
+        sidebar.view.isHidden = hidden
+        resizeHandle.isHidden = hidden
+        let saved = UserDefaults.standard.double(forKey: "sidebarWidth")
+        sidebarWidth.constant = hidden ? 0 : (saved > 0 ? saved : 250)
+        toolbar.sidebarButton.isHidden = !hidden
+    }
 
     @objc func goBack(_ sender: Any?) { store.selected?.webView?.goBack() }
     @objc func goForward(_ sender: Any?) { store.selected?.webView?.goForward() }
@@ -561,7 +590,53 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     }
 
     func sidebarTogglePin(_ tab: Tab) { store.setPinned(tab, !tab.pinned) }
-    func sidebarOpenTools() { ToolsWindowController.show() }
+    func sidebarOpenTools() { openTools(nil) }
+
+    func sidebarToggleCollapse() {
+        sidebarHidden.toggle()
+        applySidebarVisibility()
+    }
+
+    /// The grid button: every tab group (open and closed), like Chrome's.
+    func sidebarShowGroups(anchor: NSView) {
+        let menu = NSMenu()
+        let open = store.groups
+        let closed = GroupLibrary.shared.closed
+        if open.isEmpty && closed.isEmpty {
+            let none = NSMenuItem(title: "No tab groups yet. Right-click a tab → Add Tab to New Group.", action: nil, keyEquivalent: "")
+            none.isEnabled = false
+            menu.addItem(none)
+        }
+        for group in open {
+            let item = NSMenuItem(title: (group.name.isEmpty ? "Unnamed group" : group.name) + "  (\(group.tabs.count))",
+                                  action: #selector(selectTabItem(_:)), keyEquivalent: "")
+            item.representedObject = group.tabs.first
+            item.image = group.color.swatch()
+            menu.addItem(item)
+        }
+        if !closed.isEmpty {
+            menu.addItem(.separator())
+            let header = NSMenuItem(title: "Closed groups", action: nil, keyEquivalent: "")
+            header.isEnabled = false
+            menu.addItem(header)
+            for saved in closed {
+                let item = NSMenuItem(title: (saved.name.isEmpty ? "Unnamed group" : saved.name) + "  (\(saved.tabs.count))",
+                                      action: #selector(reopenSavedGroup(_:)), keyEquivalent: "")
+                item.representedObject = saved.id
+                item.image = saved.color.swatch()
+                menu.addItem(item)
+            }
+        }
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: anchor.bounds.height + 4), in: anchor)
+    }
+
+    func sidebarSearchTabs() {
+        guard let window else { return }
+        let side = sidebar.view
+        let rect = side.isHidden ? toolbar.addressField.convert(toolbar.addressField.bounds, to: nil)
+                                 : side.convert(NSRect(x: 8, y: side.bounds.height - 48, width: 10, height: 10), to: nil)
+        TabSearch.show(anchor: window.convertToScreen(rect), in: window)
+    }
 
     func sidebarReload(_ tab: Tab) {
         if tab.webView == nil { select(tab) } else { tab.webView?.reload() }
@@ -669,6 +744,16 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         return tab
     }
 
+    /// The puzzle-piece button: installed extensions and ways to add more.
+    @objc func showExtensionsMenu(_ sender: NSButton) {
+        let menu = NSMenu()
+        menu.addItem(withTitle: "Import Extensions from Chrome…", action: #selector(importChromeExtensions(_:)), keyEquivalent: "")
+        menu.addItem(withTitle: "Add Extension from Folder…", action: #selector(addExtensionFolder(_:)), keyEquivalent: "")
+        menu.addItem(.separator())
+        ExtensionsMenuDelegate.shared.appendItems(to: menu)
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
+    }
+
     @objc func importChromeExtensions(_ sender: Any?) {
         guard #available(macOS 15.4, *) else { showNeedsNewerMac(); return }
         ExtensionInstaller.importFromChrome(window: window)
@@ -718,6 +803,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     func windowWillClose(_ notification: Notification) {
         unloadTimer?.invalidate()
         GroupEditor.closeAny()
+        Overlay.closeCurrent()
         AppDelegate.shared.windowDidClose(self)
     }
     func windowWillExitFullScreen(_ notification: Notification) { toolbar.leadingInset = 78 }
@@ -757,8 +843,13 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         guard let tab = store.tab(for: webView) else { return }
-        if logLoads {
-            NSLog("MyBrowser loaded: %@ — %@", webView.url?.absoluteString ?? "", webView.title ?? "")
+        if logLoads {   // used by the automatic test
+            let address = webView.url?.absoluteString ?? ""
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak webView] in
+                webView?.evaluateJavaScript("document.title") { title, _ in
+                    NSLog("MyBrowser loaded: %@ — title: %@", address, (title as? String) ?? "")
+                }
+            }
         }
         if tab === store.selected { refreshExtensionButtons() }
         Favicons.fetch(for: tab, in: webView) { [weak self, weak tab] in

@@ -22,6 +22,9 @@ enum WebKitEnvironment {
         config.defaultWebpagePreferences.preferredContentMode = .desktop
         // Identify like Safari so sites (Google etc.) serve their full versions.
         config.applicationNameForUserAgent = "Version/18.5 Safari/605.1.15"
+        // Saving and filling passwords, and skipping passkey screens that can't work here.
+        config.userContentController.addUserScript(PasskeyFallback.script)
+        PasswordAgent.shared.install(in: config.userContentController)
         // Lets installed extensions see and change pages (only when any are installed).
         if #available(macOS 15.4, *), let extensions = ExtensionManager.active {
             config.webExtensionController = extensions.controller

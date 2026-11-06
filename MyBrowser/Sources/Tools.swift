@@ -4,55 +4,40 @@ import UniformTypeIdentifiers
 import Vision
 import CoreImage
 
-/// The Tools window: an image converter and a background remover.
+/// The Tools overlay: an image converter and a background remover.
 /// It's only created when you open it and is freed when you close it.
 @MainActor
-final class ToolsWindowController: NSWindowController, NSWindowDelegate {
-    private static var current: ToolsWindowController?
-
-    static func show() {
-        let controller = current ?? ToolsWindowController()
-        current = controller
-        controller.showWindow(nil)
-        controller.window?.makeKeyAndOrderFront(nil)
+enum ToolsOverlay {
+    static func show(in window: NSWindow) {
+        Overlay.show(title: "Tools", content: ToolsView(), size: NSSize(width: 620, height: 640), in: window)
     }
+}
 
+final class ToolsView: NSView {
     private let converter = ConverterPane()
     private let remover = RemoverPane()
     private let picker = NSSegmentedControl(labels: ["File Converter", "Background Remover"],
                                             trackingMode: .selectOne, target: nil, action: nil)
 
     init() {
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 560),
-                              styleMask: [.titled, .closable, .miniaturizable],
-                              backing: .buffered, defer: true)
-        window.title = "Tools"
-        window.appearance = Theme.appearance
-        window.backgroundColor = Theme.sidebar
-        window.isReleasedWhenClosed = false
-        window.center()
-        super.init(window: window)
-        window.delegate = self
-
-        let content = SolidView(color: Theme.sidebar)
-        window.contentView = content
+        super.init(frame: .zero)
         picker.target = self
         picker.action = #selector(switchPane(_:))
         picker.selectedSegment = 0
         for v in [picker, converter, remover] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
-            content.addSubview(v)
+            addSubview(v)
         }
         NSLayoutConstraint.activate([
-            picker.topAnchor.constraint(equalTo: content.topAnchor, constant: 14),
-            picker.centerXAnchor.constraint(equalTo: content.centerXAnchor),
+            picker.topAnchor.constraint(equalTo: topAnchor),
+            picker.centerXAnchor.constraint(equalTo: centerXAnchor),
         ])
         for pane in [converter, remover] as [NSView] {
             NSLayoutConstraint.activate([
                 pane.topAnchor.constraint(equalTo: picker.bottomAnchor, constant: 14),
-                pane.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
-                pane.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
-                pane.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -16),
+                pane.leadingAnchor.constraint(equalTo: leadingAnchor),
+                pane.trailingAnchor.constraint(equalTo: trailingAnchor),
+                pane.bottomAnchor.constraint(equalTo: bottomAnchor),
             ])
         }
         switchPane(picker)
@@ -60,18 +45,9 @@ final class ToolsWindowController: NSWindowController, NSWindowDelegate {
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
-    func showRemover() {
-        picker.selectedSegment = 1
-        switchPane(picker)
-    }
-
     @objc private func switchPane(_ sender: NSSegmentedControl) {
         converter.isHidden = sender.selectedSegment != 0
         remover.isHidden = sender.selectedSegment != 1
-    }
-
-    func windowWillClose(_ notification: Notification) {
-        ToolsWindowController.current = nil   // frees images and the AI model
     }
 }
 
@@ -288,7 +264,7 @@ final class ConverterPane: NSView {
             stack.trailingAnchor.constraint(equalTo: trailingAnchor),
             stack.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor),
             drop.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            drop.heightAnchor.constraint(equalToConstant: 300),
+            drop.heightAnchor.constraint(equalToConstant: 320),
             status.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ])
         formatChanged(formatPopup)

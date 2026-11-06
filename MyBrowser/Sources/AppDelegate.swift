@@ -20,11 +20,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.mainMenu = MainMenu.build()
         SessionSaver.shared.windowsProvider = { [weak self] in self?.controllers.map(\.store) ?? [] }
 
-        // Extensions only start (and use memory) if you've installed any.
-        if #available(macOS 15.4, *), ExtensionManager.hasInstalledExtensions {
-            ExtensionManager.shared.loadInstalled()
+        Task { @MainActor in
+            // Extensions only start (and use memory) if you've installed any.
+            if #available(macOS 15.4, *) {
+                if let folder = Self.argument(after: "--install-extension") {   // used by the automatic test
+                    let failure = await ExtensionManager.shared.install(from: URL(fileURLWithPath: folder))
+                    NSLog("MyBrowser extension install: %@", failure ?? "OK")
+                    if CommandLine.arguments.contains("--quit-after-install") { NSApp.terminate(nil); return }
+                }
+                if ExtensionManager.hasInstalledExtensions {
+                    await ExtensionManager.shared.loadInstalled()
+                    for context in ExtensionManager.shared.contexts {
+                        NSLog("MyBrowser extension loaded: %@ (%ld warnings)", ExtensionManager.name(of: context),
+                              ExtensionManager.warnings(of: context).count)
+                    }
+                }
+            }
+            self.openWindows()
         }
+    }
 
+    private static func argument(after flag: String) -> String? {
+        let args = CommandLine.arguments
+        guard let i = args.firstIndex(of: flag), i + 1 < args.count else { return nil }
+        return args[i + 1]
+    }
+
+    private func openWindows() {
         let sessions = SessionSaver.shared.load()
         if sessions.isEmpty {
             open(BrowserWindowController(session: nil))
@@ -33,9 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // Optional: `MyBrowser --open https://example.com` opens a page at launch.
-        let args = CommandLine.arguments
-        if let i = args.firstIndex(of: "--open"), i + 1 < args.count,
-           let url = AddressParser.url(from: args[i + 1]) {
+        if let address = Self.argument(after: "--open"), let url = AddressParser.url(from: address) {
             frontController?.openFromLaunch(url)
         }
         NSApp.activate()

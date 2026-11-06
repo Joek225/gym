@@ -40,11 +40,14 @@ final class ExtensionManager: NSObject, WKWebExtensionControllerDelegate {
 
     // MARK: Installing
 
-    func loadInstalled() {
+    /// Loads every installed extension (before windows open, so they work on the first page).
+    func loadInstalled() async {
         try? FileManager.default.createDirectory(at: Self.folder, withIntermediateDirectories: true)
         let dirs = (try? FileManager.default.contentsOfDirectory(at: Self.folder, includingPropertiesForKeys: nil)) ?? []
         for dir in dirs.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) where dir.hasDirectoryPath {
-            Task { _ = await self.load(folder: dir) }
+            if let failure = await load(folder: dir) {
+                NSLog("MyBrowser: extension in %@ failed to load: %@", dir.lastPathComponent, failure)
+            }
         }
     }
 
@@ -113,32 +116,62 @@ final class ExtensionManager: NSObject, WKWebExtensionControllerDelegate {
     struct ChromeExtension {
         let name: String
         let version: String
+        let profile: String
         let folder: URL
     }
 
-    /// Looks inside Chrome's "Extensions" folder (each extension is ID/version/manifest.json).
+    /// Finds extensions in Chrome's folder, in every Chrome profile
+    /// (Chrome keeps them as <profile>/Extensions/<id>/<version>/manifest.json).
+    /// Also works if you pick a profile's Extensions folder or one extension's folder.
     static func scanChrome(_ root: URL) -> [ChromeExtension] {
         let fm = FileManager.default
         func subfolders(_ url: URL) -> [URL] {
             ((try? fm.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)) ?? [])
                 .filter(\.hasDirectoryPath)
-                .sorted { $0.lastPathComponent < $1.lastPathComponent }
+                .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
         }
+        // Chrome's names for its profiles ("Default" → "Person 1", "Profile 1" → "School", …)
+        var profileNames: [String: String] = [:]
+        if let data = try? Data(contentsOf: root.appendingPathComponent("Local State")),
+           let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+           let cache = (json["profile"] as? [String: Any])?["info_cache"] as? [String: Any] {
+            for (dir, info) in cache {
+                if let name = (info as? [String: Any])?["name"] as? String { profileNames[dir] = name }
+            }
+        }
+
         var found: [String: ChromeExtension] = [:]
-        func consider(_ dir: URL, key: String) {
+        func consider(_ dir: URL, key: String, profile: String) {
             let manifestURL = dir.appendingPathComponent("manifest.json")
             guard let data = try? Data(contentsOf: manifestURL),
                   let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return }
             let name = localized(json["name"] as? String ?? dir.lastPathComponent, in: dir,
                                  defaultLocale: json["default_locale"] as? String)
-            found[key] = ChromeExtension(name: name, version: json["version"] as? String ?? "", folder: dir)
+            found[key] = ChromeExtension(name: name, version: json["version"] as? String ?? "",
+                                         profile: profile, folder: dir)
         }
-        consider(root, key: root.path)
-        for idFolder in subfolders(root) {
-            consider(idFolder, key: idFolder.path)
-            for versionFolder in subfolders(idFolder) { consider(versionFolder, key: idFolder.path) }   // newest wins
+        func scanExtensionsFolder(_ folder: URL, profile: String) {
+            for idFolder in subfolders(folder) {
+                consider(idFolder, key: idFolder.path, profile: profile)
+                for version in subfolders(idFolder) {   // the newest version wins
+                    consider(version, key: idFolder.path, profile: profile)
+                }
+            }
         }
-        return found.values.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+
+        consider(root, key: root.path, profile: "")
+        scanExtensionsFolder(root, profile: "")
+        for profileFolder in subfolders(root) {
+            let extensions = profileFolder.appendingPathComponent("Extensions", isDirectory: true)
+            if fm.fileExists(atPath: extensions.path) {
+                let dir = profileFolder.lastPathComponent
+                scanExtensionsFolder(extensions, profile: profileNames[dir] ?? dir)
+            }
+        }
+        // The same extension in two profiles is only listed once.
+        var unique: [String: ChromeExtension] = [:]
+        for ext in found.values where unique[ext.name + ext.version] == nil { unique[ext.name + ext.version] = ext }
+        return unique.values.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
     /// Turns "__MSG_appName__" into the real name from the extension's translations.
