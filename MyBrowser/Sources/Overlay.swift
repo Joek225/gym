@@ -58,11 +58,16 @@ final class Overlay: NSObject {
         card.addSubview(titleLabel)
         card.addSubview(closeButton)
         card.addSubview(content)
+        // The panel's preferred size gives way when the window is smaller.
+        let preferredWidth = card.widthAnchor.constraint(equalToConstant: size.width)
+        let preferredHeight = card.heightAnchor.constraint(equalToConstant: size.height)
+        preferredWidth.priority = .defaultHigh
+        preferredHeight.priority = .defaultHigh
         NSLayoutConstraint.activate([
             card.centerXAnchor.constraint(equalTo: backdrop.centerXAnchor),
             card.centerYAnchor.constraint(equalTo: backdrop.centerYAnchor),
-            card.widthAnchor.constraint(equalToConstant: size.width),
-            card.heightAnchor.constraint(equalToConstant: size.height),
+            preferredWidth,
+            preferredHeight,
             card.widthAnchor.constraint(lessThanOrEqualTo: backdrop.widthAnchor, constant: -40),
             card.heightAnchor.constraint(lessThanOrEqualTo: backdrop.heightAnchor, constant: -40),
 
@@ -78,10 +83,7 @@ final class Overlay: NSObject {
             content.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -20),
             content.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -18),
         ])
-        // the card lowers its fixed size when the window is small
-        card.constraints.filter { $0.firstAttribute == .width || $0.firstAttribute == .height }
-            .forEach { $0.priority = .defaultHigh }
-        window.makeFirstResponder(card)
+        window.makeFirstResponder(nil)   // stop typing from reaching the page underneath
     }
 
     @objc private func closeClicked(_ sender: Any?) { close() }
