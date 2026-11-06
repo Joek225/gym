@@ -97,8 +97,15 @@ final class ToolbarView: NSView {
 
         leadingConstraint = buttons.leadingAnchor.constraint(equalTo: leadingAnchor, constant: leadingInset)
         // The bar stays centered and stretches until it meets the icons on the right.
+        // Always reaches the icons, even when empty (on a new tab). If the window is too narrow
+        // for it to also stay perfectly centered, centering gives way slightly instead.
         let reachRight = fieldBox.trailingAnchor.constraint(equalTo: right.leadingAnchor, constant: -14)
-        reachRight.priority = .defaultHigh
+        let centered = fieldBox.centerXAnchor.constraint(equalTo: centerXAnchor)
+        centered.priority = NSLayoutConstraint.Priority(990)
+        // Long addresses get cut off with "…" rather than pushing things around.
+        addressField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        addressField.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        memoryLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         NSLayoutConstraint.activate([
             background.topAnchor.constraint(equalTo: topAnchor),
             background.bottomAnchor.constraint(equalTo: bottomAnchor),
@@ -111,8 +118,7 @@ final class ToolbarView: NSView {
             right.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
             right.centerYAnchor.constraint(equalTo: centerYAnchor),
 
-            fieldBox.centerXAnchor.constraint(equalTo: centerXAnchor),
-            fieldBox.trailingAnchor.constraint(lessThanOrEqualTo: right.leadingAnchor, constant: -14),
+            centered,
             reachRight,
             fieldBox.centerYAnchor.constraint(equalTo: centerYAnchor),
             fieldBox.heightAnchor.constraint(equalToConstant: 28),
