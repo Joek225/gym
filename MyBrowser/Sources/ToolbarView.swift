@@ -80,7 +80,7 @@ final class ToolbarView: NSView {
         // The icon group never stretches: it stays packed at the far right, and the
         // address bar grows to meet it.
         right.setHuggingPriority(.required, for: .horizontal)
-        right.setContentCompressionResistancePriority(.required, for: .horizontal)
+        right.setContentCompressionResistancePriority(NSLayoutConstraint.Priority(995), for: .horizontal)
         extensionStack.setHuggingPriority(.required, for: .horizontal)
 
         // Memory use, just left of the address bar.
@@ -105,6 +105,7 @@ final class ToolbarView: NSView {
         // Always reaches the icons, even when empty (on a new tab). If the window is too narrow
         // for it to also stay perfectly centered, centering gives way slightly instead.
         let reachRight = fieldBox.trailingAnchor.constraint(equalTo: right.leadingAnchor, constant: -14)
+        reachRight.priority = NSLayoutConstraint.Priority(995)
         let centered = fieldBox.centerXAnchor.constraint(equalTo: centerXAnchor)
         centered.priority = NSLayoutConstraint.Priority(990)
         // Long addresses get cut off with "…" rather than pushing things around.
@@ -130,8 +131,8 @@ final class ToolbarView: NSView {
 
             memoryLabel.trailingAnchor.constraint(equalTo: fieldBox.leadingAnchor, constant: -10),
             memoryLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
-            memoryLabel.leadingAnchor.constraint(greaterThanOrEqualTo: buttons.trailingAnchor, constant: 10),
-            fieldBox.leadingAnchor.constraint(greaterThanOrEqualTo: buttons.trailingAnchor, constant: 12),
+            soft(memoryLabel.leadingAnchor.constraint(greaterThanOrEqualTo: buttons.trailingAnchor, constant: 10)),
+            soft(fieldBox.leadingAnchor.constraint(greaterThanOrEqualTo: buttons.trailingAnchor, constant: 12)),
 
             addressField.leadingAnchor.constraint(equalTo: fieldBox.leadingAnchor, constant: 14),
             addressField.trailingAnchor.constraint(equalTo: starButton.leadingAnchor, constant: -4),
@@ -143,6 +144,12 @@ final class ToolbarView: NSView {
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
+
+    /// A layout wish that gives way rather than ever making the window wider than the screen.
+    private func soft(_ c: NSLayoutConstraint) -> NSLayoutConstraint {
+        c.priority = NSLayoutConstraint.Priority(990)
+        return c
+    }
 
     func setStarred(_ starred: Bool) {
         starButton.image = ToolbarView.symbol(starred ? "star.fill" : "star", starred ? "Edit Bookmark" : "Bookmark This Page")

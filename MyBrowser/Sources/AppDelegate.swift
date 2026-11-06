@@ -95,6 +95,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
                     NSLog("MyBrowser window width after resize: %d", Int(window.frame.width))
                     Self.saveSnapshot(of: window)
+                    // Now make it narrow (like a laptop screen) and check nothing forces it wider.
+                    window.setFrame(NSRect(x: 0, y: 0, width: 1000, height: 700), display: true)
+                    window.layoutIfNeeded()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                        NSLog("MyBrowser window width after shrink: %d", Int(window.frame.width))
+                        for view in window.contentView?.subviews ?? [] {
+                            NSLog("MyBrowser min width of %@: %d", String(describing: type(of: view)), Int(view.fittingSize.width))
+                        }
+                    }
                 }
             }
         }

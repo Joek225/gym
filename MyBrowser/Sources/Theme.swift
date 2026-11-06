@@ -17,6 +17,8 @@ enum Theme {
     static let selectedTab = arcStyle ? NSColor(white: isDark ? 1 : 0, alpha: 0.16) : saved.toolbar
     static let hoverTab    = arcStyle ? NSColor(white: isDark ? 1 : 0, alpha: 0.08) : mix(saved.sidebar, saved.toolbar, 0.45)
     /// Background of the toolbar, bookmarks bar and sidebar (clear in Arc style, so the tint shows).
+    /// Dark text used on top of the bright group colors.
+    static let sidebarText = NSColor(hex: 0x1C1E30)
     static let chromeFill  = arcStyle ? NSColor.clear : saved.toolbar
     static let sidebarFill = arcStyle ? NSColor.clear : saved.sidebar
     /// Small surfaces in the sidebar (pinned tiles, the Tools button).
@@ -100,6 +102,9 @@ enum GroupColor: String, Codable, CaseIterable {
     }
 
     var name: String { rawValue.capitalized }
+
+    /// The darker version used for a turned-off group.
+    var offColor: NSColor { color.blended(withFraction: 0.55, of: .black) ?? color }
 
     /// The darker chip color used on the bookmarks bar, like Chrome's saved groups.
     @MainActor var dimColor: NSColor {

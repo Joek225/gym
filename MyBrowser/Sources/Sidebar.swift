@@ -27,6 +27,8 @@ protocol SidebarDelegate: AnyObject {
     func sidebarTearOff(id: UUID, at screenPoint: NSPoint)
     /// Clicking a turned-off group turns it back on.
     func sidebarEnableGroup(_ group: TabGroup)
+    /// A group was folded up (if you were in it, move to another tab).
+    func sidebarGroupCollapsed(_ group: TabGroup)
 }
 
 /// What's being dragged, written on the drag pasteboard ("tab:<id>" or "group:<id>"),
@@ -274,6 +276,7 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
                 cell.configure(group)
             }
             store.scheduleSave()
+            if group.isCollapsed { delegate?.sidebarGroupCollapsed(group) }
         } else if let tab = item as? Tab {
             delegate?.sidebarSelect(tab)
         }
@@ -758,10 +761,10 @@ final class GroupCellView: NSTableCellView {
         identifier = Self.id
         chip.cornerRadius = 7
         label.font = .systemFont(ofSize: 12.5, weight: .semibold)
-        label.textColor = Theme.sidebar
+        label.textColor = Theme.sidebarText
         label.lineBreakMode = .byTruncatingTail
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        chevron.contentTintColor = Theme.sidebar
+        chevron.contentTintColor = Theme.sidebarText
 
         for v in [chip, label, chevron] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
@@ -784,7 +787,9 @@ final class GroupCellView: NSTableCellView {
 
     func configure(_ group: TabGroup) {
         // A turned-off group is grey until you click it.
-        chip.fillColor = group.isDisabled ? NSColor(white: 0.45, alpha: 1) : group.color.color
+        chip.fillColor = group.isDisabled ? group.color.offColor : group.color.color
+        label.textColor = group.isDisabled ? group.color.color : Theme.sidebarText
+        chevron.contentTintColor = label.textColor
         let count = group.tabs.count
         let countText = "\(count) tab\(count == 1 ? "" : "s")"
         if group.isDisabled {

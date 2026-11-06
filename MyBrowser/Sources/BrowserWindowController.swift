@@ -387,20 +387,28 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     /// Turns a group off: closes all its pages (freeing their memory), greys it out
     /// and folds it up. Its tabs stay listed; click the group to turn it back on.
     func disableGroup(_ group: TabGroup) {
-        if store.selected?.group === group {
-            if let other = store.allTabs.first(where: { $0.group !== group }) {
-                select(other)
-            } else {
-                let blank = Tab(url: nil)
-                store.insert(blank, at: store.items.count, in: nil)
-                select(blank)
-            }
-        }
+        leave(group)
         group.tabs.forEach { $0.unload() }
         group.isDisabled = true
         group.isCollapsed = true
         store.changed()
     }
+
+    /// If you're on a tab in this group, switch to a tab outside it (a visible one if possible),
+    /// or to a new tab if there's nothing else.
+    private func leave(_ group: TabGroup) {
+        guard store.selected?.group === group else { return }
+        let outside = store.allTabs.filter { $0.group !== group }
+        if let next = outside.first(where: { !($0.group?.isCollapsed ?? false) }) ?? outside.first {
+            select(next)
+        } else {
+            let blank = Tab(url: nil)
+            store.insert(blank, at: store.items.count, in: nil)
+            select(blank)
+        }
+    }
+
+    func sidebarGroupCollapsed(_ group: TabGroup) { leave(group) }
 
     /// Turns a group back on and opens only the tab you were last on in it.
     func sidebarEnableGroup(_ group: TabGroup) {

@@ -101,11 +101,11 @@ final class BookmarksBarView: NSView {
         let title = group.name.isEmpty ? "\(group.tabs.count) tabs" : group.name
         let button = NSButton(title: "", target: self, action: #selector(clicked(_:)))
         button.isBordered = false
-        let color = group.isDisabled ? NSColor.gray : group.color.color
+        let color = group.isDisabled ? group.color.offColor : group.color.color
         button.attributedTitle = NSAttributedString(string: title, attributes: [
             .foregroundColor: color, .font: NSFont.systemFont(ofSize: 12, weight: .medium)])
         button.wantsLayer = true
-        button.layer?.backgroundColor = (group.isDisabled ? NSColor.gray.withAlphaComponent(0.25) : group.color.dimColor).cgColor
+        button.layer?.backgroundColor = (group.isDisabled ? group.color.offColor.withAlphaComponent(0.35) : group.color.dimColor).cgColor
         button.layer?.cornerRadius = 6
         button.toolTip = "Tab group: click to see its tabs"
         return button

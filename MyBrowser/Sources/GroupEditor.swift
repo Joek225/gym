@@ -160,11 +160,11 @@ final class GroupEditor: NSObject, NSWindowDelegate, NSTextFieldDelegate {
         guard let content = panel.contentView else { return }
         content.layoutSubtreeIfNeeded()
         let size = content.fittingSize
-        // Next to the group's header, kept on screen.
-        var origin = NSPoint(x: anchor.maxX + 6, y: anchor.maxY - size.height)
+        // Right underneath the group's header (or just above it if there's no room below).
+        var origin = NSPoint(x: anchor.minX + 4, y: anchor.minY - size.height - 4)
         if let screen = parent.screen?.visibleFrame {
-            origin.x = min(origin.x, screen.maxX - size.width - 8)
-            origin.y = max(origin.y, screen.minY + 8)
+            if origin.y < screen.minY + 8 { origin.y = anchor.maxY + 4 }
+            origin.x = min(max(origin.x, screen.minX + 8), screen.maxX - size.width - 8)
         }
         panel.setFrame(NSRect(origin: origin, size: size), display: true)
         parent.addChildWindow(panel, ordered: .above)
