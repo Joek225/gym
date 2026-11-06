@@ -28,7 +28,8 @@ enum MainMenu {
         file.addItem(withTitle: "New Window", action: #selector(AppDelegate.newWindow(_:)), keyEquivalent: "n")
         file.addItem(withTitle: "Reopen Closed Tab", action: #selector(W.reopenClosedTab(_:)), keyEquivalent: "t")
             .keyEquivalentModifierMask = [.command, .shift]
-        file.addItem(withTitle: "Open Location…", action: #selector(W.focusAddressBar(_:)), keyEquivalent: "l")
+        file.addItem(withTitle: "Search or Go to Address…", action: #selector(W.focusAddressBar(_:)), keyEquivalent: "l")
+        file.addItem(withTitle: "Import from Chrome…", action: #selector(W.importFromChrome(_:)), keyEquivalent: "")
         file.addItem(.separator())
         file.addItem(withTitle: "Close Tab", action: #selector(W.closeTab(_:)), keyEquivalent: "w")
         file.addItem(withTitle: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
@@ -71,7 +72,7 @@ enum MainMenu {
         let bookmarks = submenu(in: main, title: "Bookmarks")
         bookmarks.addItem(withTitle: "Bookmark This Page…", action: #selector(W.bookmarkThisPage(_:)), keyEquivalent: "d")
         bookmarks.addItem(withTitle: "Add Folder…", action: #selector(W.newBookmarkFolder(_:)), keyEquivalent: "")
-        bookmarks.addItem(withTitle: "Import Bookmarks from Chrome…", action: #selector(W.importChromeBookmarks(_:)), keyEquivalent: "")
+        bookmarks.addItem(withTitle: "Import from Chrome…", action: #selector(W.importChromeBookmarks(_:)), keyEquivalent: "")
         bookmarks.addItem(.separator())
         BookmarksMenuDelegate.shared.fixedItemCount = bookmarks.items.count
         bookmarks.delegate = BookmarksMenuDelegate.shared
@@ -114,7 +115,7 @@ enum MainMenu {
             .keyEquivalentModifierMask = [.command, .control]
 
         let extensions = submenu(in: main, title: "Extensions")
-        extensions.addItem(withTitle: "Import Extensions from Chrome…", action: #selector(W.importChromeExtensions(_:)), keyEquivalent: "")
+        extensions.addItem(withTitle: "Import from Chrome…", action: #selector(W.importChromeExtensions(_:)), keyEquivalent: "")
         extensions.addItem(withTitle: "Add Extension from Folder…", action: #selector(W.addExtensionFolder(_:)), keyEquivalent: "")
         extensions.addItem(.separator())
         ExtensionsMenuDelegate.shared.fixedItemCount = extensions.items.count

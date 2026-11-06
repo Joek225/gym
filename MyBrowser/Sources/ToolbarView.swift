@@ -46,7 +46,10 @@ final class ToolbarView: NSView {
         addressField.focusRingType = .none
         addressField.font = .systemFont(ofSize: 13)
         addressField.textColor = Theme.text
-        addressField.placeholderString = "Search or enter address"
+        addressField.placeholderString = "New Tab"
+        // Display only: you type on the new tab page, never up here.
+        addressField.isEditable = false
+        addressField.isSelectable = true
         addressField.lineBreakMode = .byTruncatingTail
         addressField.usesSingleLineMode = true
         addressField.cell?.isScrollable = true

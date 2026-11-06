@@ -160,6 +160,18 @@ final class BookmarkStore {
 /// Clicking an item goes to the browser window via `openBookmarkItem(_:)`.
 @MainActor
 enum BookmarkMenus {
+    /// Every bookmark (not folders), for search suggestions.
+    static func allBookmarks() -> [BookmarkNode] {
+        var result: [BookmarkNode] = []
+        func walk(_ node: BookmarkNode) {
+            if node.url != nil { result.append(node) }
+            node.children?.forEach(walk)
+        }
+        walk(BookmarkStore.shared.bar)
+        walk(BookmarkStore.shared.other)
+        return result
+    }
+
     static func menu(for folder: BookmarkNode) -> NSMenu {
         let menu = NSMenu(title: folder.title)
         let children = folder.children ?? []
@@ -283,52 +295,18 @@ enum BookmarkEditor {
     }
 }
 
-// MARK: - Chrome import
+// MARK: - Chrome bookmarks
 
-@MainActor
-enum ChromeImporter {
-    static func run(window: NSWindow?) {
-        let panel = NSOpenPanel()
-        panel.message = "Choose Chrome's file named “Bookmarks” (no extension). It's in the “Default” folder shown here (or a “Profile 1” folder if you use several Chrome profiles)."
-        panel.prompt = "Import"
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.showsHiddenFiles = true
-        panel.directoryURL = URL(fileURLWithPath: realHomeFolder)
-            .appendingPathComponent("Library/Application Support/Google/Chrome/Default", isDirectory: true)
-
-        let finish: (NSApplication.ModalResponse) -> Void = { response in
-            guard response == .OK, let url = panel.url else { return }
-            importFile(url, window: window)
-        }
-        if let window { panel.beginSheetModal(for: window, completionHandler: finish) } else { finish(panel.runModal()) }
-    }
-
-    /// The real home folder (the sandbox otherwise reports a private one).
-    private static var realHomeFolder: String {
-        if let pw = getpwuid(getuid()), let dir = pw.pointee.pw_dir { return String(cString: dir) }
-        return NSHomeDirectory()
-    }
-
-    private static func importFile(_ url: URL, window: NSWindow?) {
-        let message: String
-        if let data = try? Data(contentsOf: url),
-           let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-           let roots = json["roots"] as? [String: Any] {
-            let bar = (roots["bookmark_bar"] as? [String: Any]).map(convert)?.children ?? []
-            let other = (roots["other"] as? [String: Any]).map(convert)?.children ?? []
-            let mobile = (roots["synced"] as? [String: Any]).map(convert)?.children ?? []
-            BookmarkStore.shared.importChrome(bar: bar, other: other, mobile: mobile)
-            let count = (bar + other + mobile).reduce(0) { $0 + $1.bookmarkCount }
-            message = "Imported \(count) bookmarks from Chrome."
-        } else {
-            message = "That doesn't look like Chrome's Bookmarks file. Pick the file named exactly “Bookmarks” inside Chrome's “Default” folder."
-        }
-        let alert = NSAlert()
-        alert.messageText = "Import from Chrome"
-        alert.informativeText = message
-        if let window { alert.beginSheetModal(for: window, completionHandler: nil) } else { alert.runModal() }
+enum ChromeBookmarks {
+    /// Reads Chrome's "Bookmarks" file. Returns (bar, other, mobile) or nil if it can't be read.
+    static func read(_ url: URL) -> (bar: [BookmarkNode], other: [BookmarkNode], mobile: [BookmarkNode])? {
+        guard let data = try? Data(contentsOf: url),
+              let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let roots = json["roots"] as? [String: Any] else { return nil }
+        let bar = (roots["bookmark_bar"] as? [String: Any]).map(convert)?.children ?? []
+        let other = (roots["other"] as? [String: Any]).map(convert)?.children ?? []
+        let mobile = (roots["synced"] as? [String: Any]).map(convert)?.children ?? []
+        return (bar, other, mobile)
     }
 
     private static func convert(_ dict: [String: Any]) -> BookmarkNode {

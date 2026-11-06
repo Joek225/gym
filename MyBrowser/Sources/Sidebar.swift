@@ -109,12 +109,9 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
         // Under the + button: Tools (left half) and a placeholder (right half).
         let tools = SolidView(color: Theme.toolbar)
         tools.cornerRadius = 8
-        let toolsButton = NSButton(title: " Tools", image: Icons.symbol("wand.and.stars", size: 12) ?? NSImage(),
-                                   target: self, action: #selector(toolsClicked(_:)))
+        let toolsButton = NSButton(title: "Tools", target: self, action: #selector(toolsClicked(_:)))
         toolsButton.isBordered = false
-        toolsButton.imagePosition = .imageLeading
-        toolsButton.contentTintColor = Theme.text
-        toolsButton.attributedTitle = NSAttributedString(string: " Tools", attributes: [
+        toolsButton.attributedTitle = NSAttributedString(string: "Tools", attributes: [
             .foregroundColor: Theme.text, .font: NSFont.systemFont(ofSize: 12)])
         toolsButton.toolTip = "File converter and background remover"
         let placeholder = SolidView(color: Theme.hoverTab)

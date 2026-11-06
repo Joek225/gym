@@ -6,7 +6,7 @@ import WebKit
 @MainActor
 final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTextFieldDelegate,
                                      NSMenuItemValidation, WKNavigationDelegate, WKUIDelegate,
-                                     SidebarDelegate, GroupEditorActions {
+                                     SidebarDelegate, GroupEditorActions, NewTabDelegate {
     /// Tabs you haven't looked at for this long are unloaded to free memory.
     static let unloadAfter: TimeInterval = 5 * 60
 
@@ -17,6 +17,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     private let resizeHandle = ResizeHandle()
     private let webContainer = SolidView(color: Theme.background)
     private let errorView = ErrorView()
+    private let newTabPage = NewTabView()
     private var sidebarWidth: NSLayoutConstraint!
     private var barHeight: NSLayoutConstraint!
     private var unloadTimer: Timer?
@@ -75,7 +76,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         window.contentView = content
         let side = sidebar.view
 
-        for v in [toolbar, bookmarksBar, side, webContainer, errorView, resizeHandle] as [NSView] {
+        for v in [toolbar, bookmarksBar, side, webContainer, errorView, newTabPage, resizeHandle] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             content.addSubview(v)
         }
@@ -112,6 +113,11 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
             errorView.trailingAnchor.constraint(equalTo: webContainer.trailingAnchor),
             errorView.bottomAnchor.constraint(equalTo: webContainer.bottomAnchor),
 
+            newTabPage.topAnchor.constraint(equalTo: webContainer.topAnchor),
+            newTabPage.leadingAnchor.constraint(equalTo: webContainer.leadingAnchor),
+            newTabPage.trailingAnchor.constraint(equalTo: webContainer.trailingAnchor),
+            newTabPage.bottomAnchor.constraint(equalTo: webContainer.bottomAnchor),
+
             resizeHandle.centerXAnchor.constraint(equalTo: side.trailingAnchor),
             resizeHandle.widthAnchor.constraint(equalToConstant: 6),
             resizeHandle.topAnchor.constraint(equalTo: side.topAnchor),
@@ -128,9 +134,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         toolbar.reloadButton.action = #selector(reloadOrStop(_:))
         toolbar.starButton.target = self
         toolbar.starButton.action = #selector(bookmarkThisPage(_:))
-        toolbar.addressField.target = self
-        toolbar.addressField.action = #selector(addressEntered(_:))
-        toolbar.addressField.delegate = self
+        newTabPage.delegate = self
 
         sidebar.delegate = self
         store.onChange = { [weak self] in
@@ -187,15 +191,19 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         store.scheduleSave()
         if previous !== tab { ExtensionEvents.tabActivated(tab, previous: previous) }
         refreshExtensionButtons()
-        if tab.webView == nil {
-            focusAddressBar(nil)
+        if isBlank(tab) {
+            newTabPage.reset()
         } else {
             window?.makeFirstResponder(tab.webView)
         }
     }
 
+    /// A new tab that hasn't gone anywhere yet shows the search page.
+    private func isBlank(_ tab: Tab) -> Bool { tab.webView == nil && tab.url == nil && tab.savedState == nil }
+
     /// Puts the tab's page in the content area.
     private func show(_ tab: Tab) {
+        newTabPage.isHidden = !isBlank(tab)
         for view in webContainer.subviews where view !== tab.webView { view.removeFromSuperview() }
         if let webView = tab.webView, webView.superview !== webContainer {
             webView.frame = webContainer.bounds
@@ -346,11 +354,9 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         tab.errorMessage = nil
         tab.failedURL = nil
         tab.savedState = nil
-        if tab.webView == nil {
-            install(WebKitEnvironment.makeWebView(), for: tab)
-            if tab === store.selected { show(tab) }
-        }
+        if tab.webView == nil { install(WebKitEnvironment.makeWebView(), for: tab) }
         tab.url = url
+        if tab === store.selected { show(tab) }
         if url.isFileURL {
             tab.webView?.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
         } else {
@@ -360,15 +366,21 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         sidebar.refresh(tab)
     }
 
-    @objc func addressEntered(_ sender: NSTextField) {
-        guard let url = AddressParser.url(from: sender.stringValue) else { return }
+    /// ⌘L: typing only happens on the new tab page. On a blank tab it puts the cursor
+    /// in the search box; on any other tab it opens a new tab to search from.
+    @objc func focusAddressBar(_ sender: Any?) {
+        if let tab = store.selected, isBlank(tab) { newTabPage.focus() } else { newTab(sender) }
+    }
+
+    func newTabOpen(_ url: URL) {
         load(url)
         window?.makeFirstResponder(store.selected?.webView)
     }
 
-    @objc func focusAddressBar(_ sender: Any?) {
-        window?.makeFirstResponder(toolbar.addressField)
-        toolbar.addressField.currentEditor()?.selectAll(nil)
+    func newTabImportFromChrome() { importFromChrome(nil) }
+
+    @objc func importFromChrome(_ sender: Any?) {
+        if let window { ChromeImportOverlay.show(in: window) }
     }
 
     @objc func newTab(_ sender: Any?) {
@@ -503,12 +515,14 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         }
     }
 
+    /// Bookmarks open in the current tab only if it's a blank new tab; otherwise in a new tab
+    /// (a tab's address is never changed by typing or picking something else).
     @objc func openBookmarkItem(_ sender: NSMenuItem) {
         guard let node = sender.representedObject as? BookmarkNode, let url = node.url else { return }
-        if NSEvent.modifierFlags.contains(.command) {
-            openInNewTab(url, background: true)
-        } else {
+        if let tab = store.selected, isBlank(tab) {
             load(url)
+        } else {
+            openInNewTab(url, background: NSEvent.modifierFlags.contains(.command))
         }
     }
 
@@ -542,7 +556,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         BookmarkEditor.edit(folder, in: window, isNew: false)
     }
 
-    @objc func importChromeBookmarks(_ sender: Any?) { ChromeImporter.run(window: window) }
+    @objc func importChromeBookmarks(_ sender: Any?) { importFromChrome(sender) }
 
     @objc func toggleBookmarksBar(_ sender: Any?) {
         showsBookmarksBar.toggle()
@@ -747,17 +761,14 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     /// The puzzle-piece button: installed extensions and ways to add more.
     @objc func showExtensionsMenu(_ sender: NSButton) {
         let menu = NSMenu()
-        menu.addItem(withTitle: "Import Extensions from Chrome…", action: #selector(importChromeExtensions(_:)), keyEquivalent: "")
+        menu.addItem(withTitle: "Import from Chrome…", action: #selector(importFromChrome(_:)), keyEquivalent: "")
         menu.addItem(withTitle: "Add Extension from Folder…", action: #selector(addExtensionFolder(_:)), keyEquivalent: "")
         menu.addItem(.separator())
         ExtensionsMenuDelegate.shared.appendItems(to: menu)
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
     }
 
-    @objc func importChromeExtensions(_ sender: Any?) {
-        guard #available(macOS 15.4, *) else { showNeedsNewerMac(); return }
-        ExtensionInstaller.importFromChrome(window: window)
-    }
+    @objc func importChromeExtensions(_ sender: Any?) { importFromChrome(sender) }
 
     @objc func addExtensionFolder(_ sender: Any?) {
         guard #available(macOS 15.4, *) else { showNeedsNewerMac(); return }

@@ -6,7 +6,8 @@ import AppKit
 final class Overlay: NSObject {
     private static var current: Overlay?
 
-    private let backdrop = OverlayBackdrop()
+    private let root = OverlayRoot()
+    private let backdrop = NSVisualEffectView()
     private let card = KeyHandlingView(color: Theme.sidebar)
     private weak var window: NSWindow?
 
@@ -28,15 +29,22 @@ final class Overlay: NSObject {
     private func install(title: String, content: NSView, size: NSSize) {
         guard let window, let host = window.contentView else { return }
 
-        // The blur: everything in the window behind this view is blurred.
-        backdrop.material = .hudWindow
+        // Catches clicks outside the panel (to close it) and keeps them off the page.
+        root.onClick = { [weak self] in self?.close() }
+        root.frame = host.bounds
+        root.autoresizingMask = [.width, .height]
+        host.addSubview(root)
+
+        // A light blur: the blurred layer is only partly see-through,
+        // so the browser behind stays recognizable.
+        backdrop.material = .fullScreenUI
         backdrop.blendingMode = .withinWindow
         backdrop.state = .active
         backdrop.appearance = Theme.appearance
-        backdrop.onClick = { [weak self] in self?.close() }
-        backdrop.frame = host.bounds
+        backdrop.alphaValue = 0.45
+        backdrop.frame = root.bounds
         backdrop.autoresizingMask = [.width, .height]
-        host.addSubview(backdrop)
+        root.addSubview(backdrop)
 
         // The solid panel in the middle.
         card.cornerRadius = 16
@@ -54,7 +62,7 @@ final class Overlay: NSObject {
         for v in [card, titleLabel, closeButton, content] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
         }
-        backdrop.addSubview(card)
+        root.addSubview(card)
         card.addSubview(titleLabel)
         card.addSubview(closeButton)
         card.addSubview(content)
@@ -64,12 +72,12 @@ final class Overlay: NSObject {
         preferredWidth.priority = .defaultHigh
         preferredHeight.priority = .defaultHigh
         NSLayoutConstraint.activate([
-            card.centerXAnchor.constraint(equalTo: backdrop.centerXAnchor),
-            card.centerYAnchor.constraint(equalTo: backdrop.centerYAnchor),
+            card.centerXAnchor.constraint(equalTo: root.centerXAnchor),
+            card.centerYAnchor.constraint(equalTo: root.centerYAnchor),
             preferredWidth,
             preferredHeight,
-            card.widthAnchor.constraint(lessThanOrEqualTo: backdrop.widthAnchor, constant: -40),
-            card.heightAnchor.constraint(lessThanOrEqualTo: backdrop.heightAnchor, constant: -40),
+            card.widthAnchor.constraint(lessThanOrEqualTo: root.widthAnchor, constant: -40),
+            card.heightAnchor.constraint(lessThanOrEqualTo: root.heightAnchor, constant: -40),
 
             titleLabel.topAnchor.constraint(equalTo: card.topAnchor, constant: 16),
             titleLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 20),
@@ -91,17 +99,19 @@ final class Overlay: NSObject {
     func close() {
         guard Overlay.current === self else { return }
         Overlay.current = nil
-        backdrop.removeFromSuperview()   // frees everything inside
+        root.removeFromSuperview()   // frees everything inside
     }
 }
 
-/// The blurred background. Clicking it (outside the panel) closes the overlay,
-/// and it stops clicks and scrolling from reaching the page underneath.
-final class OverlayBackdrop: NSVisualEffectView {
+/// Covers the window behind the panel. Clicking it (outside the panel) closes the
+/// overlay, and it stops clicks and scrolling from reaching the page underneath.
+final class OverlayRoot: NSView {
     var onClick: (() -> Void)?
-    override func mouseDown(with event: NSEvent) {
-        if hitTest(convert(event.locationInWindow, from: nil)) === self { onClick?() }
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let hit = super.hitTest(point)
+        return hit is NSVisualEffectView ? self : hit   // the blur layer counts as "outside"
     }
+    override func mouseDown(with event: NSEvent) { onClick?() }
     override func rightMouseDown(with event: NSEvent) {}
     override func scrollWheel(with event: NSEvent) {}
     override var acceptsFirstResponder: Bool { false }

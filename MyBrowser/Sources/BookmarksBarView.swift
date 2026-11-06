@@ -21,7 +21,7 @@ final class BookmarksBarView: NSView {
     private let background = SolidView(color: Theme.toolbar)
     private var entries: [(button: NSButton, entry: Entry)] = []
     private let overflowButton = NSButton()
-    private let emptyHint = NSTextField(labelWithString: "Bookmark pages with ⌘D or the ☆ star. Import from Chrome in the Bookmarks menu.")
+    private let emptyHint = NSTextField(labelWithString: "Bookmark pages with ⌘D or the ☆ star. To bring over Chrome's, use the link on the new tab page (⌘T).")
 
     init() {
         super.init(frame: .zero)
@@ -223,7 +223,7 @@ final class BookmarksBarView: NSView {
             menu.addItem(.separator())
         }
         menu.addItem(withTitle: "Add Folder…", action: #selector(BrowserWindowController.newBookmarkFolder(_:)), keyEquivalent: "")
-        menu.addItem(withTitle: "Import Bookmarks from Chrome…", action: #selector(BrowserWindowController.importChromeBookmarks(_:)), keyEquivalent: "")
+        menu.addItem(withTitle: "Import from Chrome…", action: #selector(BrowserWindowController.importChromeBookmarks(_:)), keyEquivalent: "")
         menu.addItem(withTitle: "Hide Bookmarks Bar", action: #selector(BrowserWindowController.toggleBookmarksBar(_:)), keyEquivalent: "")
         return menu
     }
