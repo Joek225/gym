@@ -20,7 +20,11 @@ To stop it, press **⌘Q** in the browser, or click ■ Stop in Xcode.
 | ⇧⌘T | Reopen the last closed tab |
 | ⌃Tab / ⌃⇧Tab | Next / previous tab (also ⇧⌘] / ⇧⌘[ and ⌥⌘→ / ⌥⌘←) |
 | ⌘1 … ⌘8, ⌘9 | Go to tab 1–8, or the last tab |
+| ⌥1 … ⌥8, ⌥9 | Go to tab 1–8 (or the last tab) **inside the current group** |
 | ⇧⌘G | Put the current tab in a new group |
+| ⌃⌘C | New tab in the current group |
+| ⌃⌘W | Close the current group (it stays on the bookmarks bar to reopen) |
+| ⌘N | New window |
 | ⌘D | Bookmark this page (or edit the bookmark) |
 | ⇧⌘B | Show / hide the bookmarks bar |
 | ⌘L | Jump to the address bar |
@@ -35,10 +39,27 @@ To stop it, press **⌘Q** in the browser, or click ■ Stop in Xcode.
 - Tabs are in the sidebar on the left. Drag the sidebar's right edge to resize it.
 - Drag tabs up and down to reorder them. Drag a tab onto a group's colored header to add it to the group.
 - Right-click a tab: **Add Tab to New Group**, **Add Tab to Group**, **Remove from Group**, or **Unload Tab**.
-- Right-click a group's header to rename it, change its color, ungroup it or close it. Click the header to collapse or expand it.
+- Right-click a group's header to open the group editor (like Chrome): name, color, new tab in group, move group to a new window, close, ungroup or delete. Click the header to collapse or expand it.
+- **Close group** keeps it as an outlined chip on the bookmarks bar so you can reopen it. **Delete group** forgets it.
+- Right-click a tab and choose **Pin Tab**. Pinned tabs stay at the top of their group (or of the sidebar) and show a 📌.
 - Groups also appear as colored chips on the left of the bookmarks bar. Click one to jump to any of its tabs.
 - Tabs and groups are kept when you quit and reopen the browser.
 - Tabs you haven't looked at for 5 minutes are **unloaded** to free memory. Their title shows slightly dimmer. Clicking one reloads it, and its back/forward history is kept. Tabs playing audio or video, or using the camera or microphone, are never unloaded.
+
+## Tools
+
+The **Tools** button under **+** opens:
+- **File Converter**: turn any image (PNG, JPEG, HEIC, WebP, TIFF, GIF, BMP, RAW…) into PNG, JPEG, HEIC, TIFF, GIF, BMP or PDF, optionally smaller.
+- **Background Remover**: cuts out the person, pet or object using Apple's on-device AI. Nothing is uploaded. Saves a transparent PNG.
+
+The window uses no memory until you open it and frees it when you close it.
+
+## Extensions (macOS 15.4 or newer)
+
+- **Extensions menu → Import Extensions from Chrome…**: click "Use This Folder", then tick the extensions you want. They're copied into the browser.
+- **Add Extension from Folder…**: for any unpacked extension (a folder with `manifest.json`).
+- Extension buttons appear at the right end of the toolbar.
+- Extensions → (name) → **Problems & Details…** lists anything WebKit couldn't support.
 
 ## Bookmarks
 
