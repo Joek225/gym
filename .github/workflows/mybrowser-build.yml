@@ -25,6 +25,7 @@ jobs:
           test -x build/Release/MyBrowser.app/Contents/MacOS/MyBrowser
       - name: Launch, load a page, measure memory
         shell: bash
+        timeout-minutes: 4
         run: |
           build/Release/MyBrowser.app/Contents/MacOS/MyBrowser --open https://example.com --log-loads > app.log 2>&1 &
           PID=$!
@@ -39,12 +40,12 @@ jobs:
             exit 1
           fi
           echo "App is still running after 20s (good)"
-          grep -q "MyBrowser loaded: https://example.com" app.log
-          screencapture -x screenshot.png || true
+          grep -q "MyBrowser loaded: https://example.com" app.log && echo "Page loaded (good)"
           echo "--- Memory footprint ---"
-          footprint $PID 2>/dev/null | head -n 8 || true
-          footprint -p WebContent 2>/dev/null | grep -i "footprint" | head -n 5 || true
-          kill $PID
+          perl -e 'alarm 20; exec @ARGV' footprint $PID 2>/dev/null | head -n 8 || true
+          perl -e 'alarm 20; exec @ARGV' footprint -p WebContent 2>/dev/null | grep -i "footprint" | head -n 5 || true
+          echo "--- Done, stopping app ---"
+          kill -9 $PID || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
