@@ -59,6 +59,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             frontController?.openFromLaunch(url)
         }
         NSApp.activate()
+
+        // Used by the automatic test: make the window very wide and check it stays that size.
+        if CommandLine.arguments.contains("--test-resize"), let window = frontController?.window {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                window.setFrame(NSRect(x: 0, y: 0, width: 1900, height: 1000), display: true)
+                window.layoutIfNeeded()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                    NSLog("MyBrowser window width after resize: %d", Int(window.frame.width))
+                }
+            }
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }

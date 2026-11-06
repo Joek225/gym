@@ -68,12 +68,13 @@ jobs:
           echo 'document.title = "Extension works";' > testext/content.js
           perl -e 'alarm 60; exec @ARGV' "$APP" --install-extension "$PWD/testext" --quit-after-install > ext1.log 2>&1 || true
           cat ext1.log | grep MyBrowser || true
-          "$APP" --open https://example.com --log-loads > ext2.log 2>&1 &
+          "$APP" --open https://example.com --log-loads --test-resize > ext2.log 2>&1 &
           PID=$!
           sleep 20
           grep MyBrowser ext2.log || true
           kill -9 $PID || true
           grep -q "title: Extension works" ext2.log && echo "EXTENSION TEST PASSED"
+          grep -q "window width after resize: 1900" ext2.log && echo "RESIZE TEST PASSED"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

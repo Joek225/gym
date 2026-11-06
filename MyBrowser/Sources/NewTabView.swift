@@ -72,7 +72,9 @@ final class NewTabView: SolidView, NSTextFieldDelegate {
         NSLayoutConstraint.activate([
             box.centerXAnchor.constraint(equalTo: centerXAnchor),
             box.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -90),
-            box.widthAnchor.constraint(equalTo: widthAnchor, multiplier: 0.6),
+            // Never a hard size: the box shrinks in small windows and stops at 620 points,
+            // so the window itself can be any size (including full screen).
+            box.widthAnchor.constraint(lessThanOrEqualTo: widthAnchor, constant: -60),
             box.widthAnchor.constraint(lessThanOrEqualToConstant: 620),
             box.heightAnchor.constraint(equalToConstant: 46),
             glass.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 18),
@@ -93,7 +95,7 @@ final class NewTabView: SolidView, NSTextFieldDelegate {
             importButton.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -28),
         ])
         let wide = box.widthAnchor.constraint(equalToConstant: 620)
-        wide.priority = .defaultLow
+        wide.priority = .defaultHigh
         wide.isActive = true
     }
 
