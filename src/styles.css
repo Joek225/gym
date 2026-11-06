@@ -1916,3 +1916,84 @@ input[type='time']::-webkit-calendar-picker-indicator {
   color: var(--muted);
   background: #1d1f29;
 }
+
+/* ---- Move data (top right) ---- */
+.move-data-btn {
+  margin-left: auto;
+  align-self: center;
+  flex: none;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+}
+
+.move-data-btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.move-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 20px;
+}
+
+.move-body h3 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.move-body section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.move-step {
+  color: var(--muted);
+}
+
+.move-btn {
+  height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.move-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.move-btn.danger {
+  border-color: #ff8a8a;
+  color: #ff8a8a;
+}
+
+.modal .move-text {
+  height: 90px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  font-size: 12px;
+  resize: none;
+}
+
+.move-file {
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.move-note {
+  font-size: 14px;
+}
+
+.move-error {
+  color: #ff8a8a;
+  font-size: 14px;
+}
