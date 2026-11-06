@@ -1,15 +1,39 @@
-# MyBrowser
+# beababrowser
 
 A lightweight personal Mac web browser built on WebKit (the engine Safari uses).
 The top priority is low memory use.
 
-## How to run it
+## Install it as a normal app (no Xcode needed afterwards)
+
+1. Open **MyBrowser.xcodeproj** in Xcode.
+2. Menu bar: **Product → Archive**. Wait for the Organizer window.
+3. Right-click the newest archive → **Show in Finder**.
+4. Right-click the `.xcarchive` file → **Show Package Contents** → open **Products → Applications**.
+5. Drag **beababrowser** into your **Applications** folder. Open it from Launchpad, Spotlight or the Dock like any app.
+
+Repeat these steps whenever you get a new version. Your tabs, bookmarks and passwords stay.
+
+## How to run it from Xcode (while testing)
 
 1. Double-click **MyBrowser.xcodeproj**. Xcode opens.
 2. Press **⌘R** (or click the ▶ Play button at the top left).
 3. The browser window appears with a search box in the middle. Type a search or address and press Return.
 
 To stop it, press **⌘Q** in the browser, or click ■ Stop in Xcode.
+
+## More Chrome features
+
+| Keys | What it does |
+|---|---|
+| ⌘, | Settings: colors & themes, search engine, unload timer, ad blocking, memory readout, default browser |
+| ⌘Y | History (search, open, delete, clear) |
+| ⇧⌘J | Downloads (saved to your Downloads folder) |
+| ⌘F / ⌘G / ⇧⌘G | Find in page / next / previous |
+| ⌘P | Print |
+| ⇧⌘N | New private window (nothing is saved) |
+| Right-click a page → Inspect Element | Developer tools |
+
+Drag any tab anywhere: reorder tiles, drop on the tiles to pin, drag a tile into the list to unpin, drag tabs or groups into another window, or drag a tab out of the window to open it in a new one.
 
 ## Keyboard shortcuts
 
