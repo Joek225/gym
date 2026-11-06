@@ -29,8 +29,26 @@ jobs:
           build/Release/MyBrowser.app/Contents/MacOS/MyBrowser --open https://example.com --log-loads > app.log 2>&1 &
           PID=$!
           sleep 20
-          kill -0 $PID && echo "App is still running after 20s (good)"
-          cat app.log
+          echo "--- App output ---"; cat app.log
+          if ! kill -0 $PID 2>/dev/null; then
+            echo "!!! The app quit or crashed. Crash report:"
+            for f in ~/Library/Logs/DiagnosticReports/MyBrowser*; do
+              python3 - "$f" <<'PY'
+          import json, sys
+          text = open(sys.argv[1]).read()
+          body = json.loads(text.split("\n", 1)[1])
+          print(body.get("exception"), body.get("termination", {}).get("indicator"))
+          for t in body.get("threads", []):
+              if t.get("triggered"):
+                  imgs = body.get("usedImages", [])
+                  for fr in t.get("frames", [])[:25]:
+                      img = imgs[fr["imageIndex"]].get("name", "?") if fr.get("imageIndex") is not None else "?"
+                      print(" ", img, fr.get("symbol", "?"), fr.get("sourceFile", ""), fr.get("sourceLine", ""))
+          PY
+            done
+            exit 1
+          fi
+          echo "App is still running after 20s (good)"
           grep -q "MyBrowser loaded: https://example.com" app.log
           screencapture -x screenshot.png || true
           echo "--- Memory footprint ---"
