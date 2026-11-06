@@ -1,5 +1,6 @@
 // The row of tab buttons across the top of the page.
 import type { TabInfo } from '../tabs';
+import MoveData from './MoveData';
 
 interface Props {
   tabs: TabInfo[];
@@ -19,6 +20,7 @@ export default function TabBar({ tabs, activeId, onSelect }: Props) {
           {tab.label}
         </button>
       ))}
+      <MoveData />
     </nav>
   );
 }

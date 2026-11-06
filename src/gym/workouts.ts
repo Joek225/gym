@@ -30,8 +30,7 @@ const TYPE_BY_WEEKDAY: WorkoutType[] = [
 
 // "2026-10-01" → the workout type for that day.
 export function workoutTypeFor(date: string): WorkoutType {
-  const [y, m, d] = date.split('-').map(Number);
-  return TYPE_BY_WEEKDAY[new Date(y, m - 1, d).getDay()];
+  return TYPE_BY_WEEKDAY[parseDate(date).getDay()];
 }
 
 // The calendar banner color: normal red on Mon/Tue/Thu/Fri (even a Custom holiday workout),
@@ -70,6 +69,50 @@ export const TEMPLATES: Templates = {
   lower: ['Deadlift', 'Quad Extension', 'Lying Hamstring Curl', 'Hack Squat', 'Hip Thrust'],
 };
 
+// The split from 6 Nov 2026 on: one line per set, in this order (a name twice = 2 sets).
+export const NEW_SPLIT_FROM = '2026-11-06';
+export const NEW_TEMPLATES: Templates = {
+  upper: [
+    'T-Bar Row',
+    'T-Bar Row',
+    'Machine Chest Press',
+    'Machine Chest Press',
+    'Lat Pulldown',
+    'Single Arm Row',
+    'Cable Chest Fly',
+    'Shoulder Press',
+    'Hammer Curl',
+    'Preacher Curl',
+    'Tricep Pushdown',
+    'Tricep Extension',
+  ],
+  lower: [
+    'Sissy Squat',
+    'Sissy Squat',
+    'Leg Extension',
+    'Leg Extension',
+    'Lying Leg Curl',
+    'Lying Leg Curl',
+    'Deadlift',
+  ],
+};
+
+// The exercise list for a day: the new split from NEW_SPLIT_FROM, the old one before.
+export function templateFor(type: 'upper' | 'lower', date: string): string[] {
+  return (date >= NEW_SPLIT_FROM ? NEW_TEMPLATES : TEMPLATES)[type];
+}
+
+// Your usual gym, filled in on normal (non-holiday) Monday–Friday workouts.
+export const HOME_GYM = 'apex';
+const isWeekday = (date: string) => {
+  const day = parseDate(date).getDay();
+  return day >= 1 && day <= 5;
+};
+const parseDate = (date: string) => {
+  const [y, m, d] = date.split('-').map(Number);
+  return new Date(y, m - 1, d);
+};
+
 // Exercises you do a few different ways: the sheet asks which one before you log it,
 // and the choice becomes part of the name (e.g. "Cable Lateral Raise").
 export const VARIANTS: Record<string, string[]> = {
@@ -90,23 +133,47 @@ export function isStandardWorkout(w: WorkoutRecord): boolean {
 // A new workout for a date. Upper/Lower days start with the template's exercise names
 // (copied, so later template changes don't touch this workout). Holiday days are Custom.
 export async function newWorkout(date: string): Promise<WorkoutRecord> {
-  const type = (await isHoliday(date)) ? 'custom' : workoutTypeFor(date);
-  const names = type === 'custom' ? [''] : TEMPLATES[type];
+  const holiday = await isHoliday(date);
+  const type = holiday ? 'custom' : workoutTypeFor(date);
+  const names = type === 'custom' ? [''] : templateFor(type, date);
+  const location = holiday ? '' : defaultLocation(date);
   return {
     date,
     type,
     customName: '',
     rows: names.map((name) => ({ name, reps: '', partial: '', weight: '' })),
+    location,
     updatedAt: Date.now(),
   };
 }
 
-// The workout to open for a date: the saved one, or a new one. A saved workout with lifts is
-// never changed. One with only cardio is switched to Custom if the day is now a holiday.
+const defaultLocation = (date: string) => (isWeekday(date) ? HOME_GYM : '');
+
+// The workout to open for a date: the saved one, or a new one. Lines you've logged are never
+// changed. One with only cardio is switched to Custom if the day is now a holiday. From
+// NEW_SPLIT_FROM on, an Upper/Lower workout shows the new exercise list, keeping logged lines.
 export async function workoutToEdit(date: string, saved?: WorkoutRecord): Promise<WorkoutRecord> {
   if (!saved) return newWorkout(date);
-  if (hasLifts(saved) || saved.type === 'custom' || !(await isHoliday(date))) return saved;
-  return { ...(await newWorkout(date)), cardio: saved.cardio };
+  const holiday = await isHoliday(date);
+  let w = saved;
+  if (!hasLifts(saved) && saved.type !== 'custom' && holiday) w = { ...(await newWorkout(date)), cardio: saved.cardio };
+  else if (w.type !== 'custom' && date >= NEW_SPLIT_FROM) w = { ...w, rows: withTemplate(w.rows, templateFor(w.type, date)) };
+  // Older workouts have no location yet: fill in your usual gym on normal weekdays.
+  if (w.location === undefined && !holiday) w = { ...w, location: defaultLocation(date) };
+  return w;
+}
+
+// The template's lines in order, each filled from a matching logged line when there is one;
+// logged lines that aren't in the template stay, at the end.
+function withTemplate(rows: WorkoutRow[], names: string[]): WorkoutRow[] {
+  const logged = rows.filter(isLogged);
+  const used = new Set<WorkoutRow>();
+  const out = names.map((name) => {
+    const match = logged.find((r) => !used.has(r) && normalizeExerciseName(r.name) === normalizeExerciseName(name));
+    if (match) used.add(match);
+    return match ?? { name, reps: '', partial: '', weight: '' };
+  });
+  return [...out, ...logged.filter((r) => !used.has(r))];
 }
 
 // True if a line has any numbers/weight filled in.
