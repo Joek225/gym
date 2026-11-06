@@ -25,8 +25,9 @@ enum WebKitEnvironment {
         return config
     }
 
-    static func makeWebView() -> WKWebView {
-        let webView = WKWebView(frame: .zero, configuration: makeConfiguration())
+    /// Pass `configuration` only when WebKit hands us one (pop-up windows).
+    static func makeWebView(configuration: WKWebViewConfiguration? = nil) -> WKWebView {
+        let webView = WKWebView(frame: .zero, configuration: configuration ?? makeConfiguration())
         webView.allowsMagnification = true          // pinch to zoom
         // Swipe-to-go-back keeps screenshots of previous pages in memory,
         // so it's off. Use Cmd+[ / Cmd+] or the toolbar buttons instead.

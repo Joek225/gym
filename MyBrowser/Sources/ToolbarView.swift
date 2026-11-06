@@ -9,10 +9,10 @@ final class ToolbarView: NSView {
     let forwardButton = ToolbarView.makeButton("chevron.right", "Forward")
     let reloadButton = ToolbarView.makeButton("arrow.clockwise", "Reload")
     let addressField = NSTextField()
+    let starButton = ToolbarView.makeButton("star", "Bookmark This Page (⌘D)")
 
     private let background = SolidView(color: Theme.toolbar)
     private let fieldBox = SolidView(color: Theme.field)
-    private let bottomLine = SolidView(color: Theme.separator)
     private var leadingConstraint: NSLayoutConstraint!
 
     /// Space on the left for the red/yellow/green window buttons.
@@ -22,8 +22,7 @@ final class ToolbarView: NSView {
         super.init(frame: .zero)
         background.movesWindow = true
 
-        fieldBox.cornerRadius = 7
-        fieldBox.borderColor = Theme.fieldBorder
+        fieldBox.cornerRadius = 14
 
         addressField.isBordered = false
         addressField.isBezeled = false
@@ -41,14 +40,14 @@ final class ToolbarView: NSView {
         buttons.orientation = .horizontal
         buttons.spacing = 2
 
-        for v in [background, bottomLine, buttons, fieldBox, addressField] as [NSView] {
+        for v in [background, buttons, fieldBox, addressField, starButton] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
         }
         addSubview(background)
-        addSubview(bottomLine)
         addSubview(buttons)
         addSubview(fieldBox)
         fieldBox.addSubview(addressField)
+        fieldBox.addSubview(starButton)
 
         leadingConstraint = buttons.leadingAnchor.constraint(equalTo: leadingAnchor, constant: leadingInset)
         NSLayoutConstraint.activate([
@@ -57,26 +56,30 @@ final class ToolbarView: NSView {
             background.leadingAnchor.constraint(equalTo: leadingAnchor),
             background.trailingAnchor.constraint(equalTo: trailingAnchor),
 
-            bottomLine.heightAnchor.constraint(equalToConstant: 1),
-            bottomLine.bottomAnchor.constraint(equalTo: bottomAnchor),
-            bottomLine.leadingAnchor.constraint(equalTo: leadingAnchor),
-            bottomLine.trailingAnchor.constraint(equalTo: trailingAnchor),
-
             leadingConstraint,
             buttons.centerYAnchor.constraint(equalTo: centerYAnchor),
 
             fieldBox.leadingAnchor.constraint(equalTo: buttons.trailingAnchor, constant: 8),
             fieldBox.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
             fieldBox.centerYAnchor.constraint(equalTo: centerYAnchor),
-            fieldBox.heightAnchor.constraint(equalToConstant: 26),
+            fieldBox.heightAnchor.constraint(equalToConstant: 28),
 
-            addressField.leadingAnchor.constraint(equalTo: fieldBox.leadingAnchor, constant: 9),
-            addressField.trailingAnchor.constraint(equalTo: fieldBox.trailingAnchor, constant: -9),
+            addressField.leadingAnchor.constraint(equalTo: fieldBox.leadingAnchor, constant: 14),
+            addressField.trailingAnchor.constraint(equalTo: starButton.leadingAnchor, constant: -4),
             addressField.centerYAnchor.constraint(equalTo: fieldBox.centerYAnchor),
+
+            starButton.trailingAnchor.constraint(equalTo: fieldBox.trailingAnchor, constant: -2),
+            starButton.centerYAnchor.constraint(equalTo: fieldBox.centerYAnchor),
         ])
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
+
+    func setStarred(_ starred: Bool) {
+        starButton.image = ToolbarView.symbol(starred ? "star.fill" : "star", starred ? "Edit Bookmark" : "Bookmark This Page")
+        starButton.contentTintColor = starred ? Theme.accent : Theme.icon
+        starButton.toolTip = starred ? "Edit Bookmark (⌘D)" : "Bookmark This Page (⌘D)"
+    }
 
     func setLoading(_ loading: Bool) {
         let name = loading ? "xmark" : "arrow.clockwise"

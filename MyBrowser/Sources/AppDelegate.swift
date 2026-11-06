@@ -25,11 +25,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let args = CommandLine.arguments
         if let i = args.firstIndex(of: "--open"), i + 1 < args.count,
            let url = AddressParser.url(from: args[i + 1]) {
-            controller.load(url)
-        } else {
-            controller.focusAddressBar(nil)
+            controller.openFromLaunch(url)
         }
         NSApp.activate()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        windowController?.saveSession()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
