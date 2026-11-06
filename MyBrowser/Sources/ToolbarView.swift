@@ -111,7 +111,8 @@ final class ToolbarView: NSView {
         // Long addresses get cut off with "…" rather than pushing things around.
         addressField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         addressField.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        memoryLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        // The memory number always gets its room (the bar moves over a little if needed).
+        memoryLabel.setContentCompressionResistancePriority(NSLayoutConstraint.Priority(994), for: .horizontal)
         NSLayoutConstraint.activate([
             background.topAnchor.constraint(equalTo: topAnchor),
             background.bottomAnchor.constraint(equalTo: bottomAnchor),
@@ -131,7 +132,7 @@ final class ToolbarView: NSView {
 
             memoryLabel.trailingAnchor.constraint(equalTo: fieldBox.leadingAnchor, constant: -10),
             memoryLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
-            soft(memoryLabel.leadingAnchor.constraint(greaterThanOrEqualTo: buttons.trailingAnchor, constant: 10)),
+            firm(memoryLabel.leadingAnchor.constraint(greaterThanOrEqualTo: buttons.trailingAnchor, constant: 10)),
             soft(fieldBox.leadingAnchor.constraint(greaterThanOrEqualTo: buttons.trailingAnchor, constant: 12)),
 
             addressField.leadingAnchor.constraint(equalTo: fieldBox.leadingAnchor, constant: 14),
@@ -148,6 +149,12 @@ final class ToolbarView: NSView {
     /// A layout wish that gives way rather than ever making the window wider than the screen.
     private func soft(_ c: NSLayoutConstraint) -> NSLayoutConstraint {
         c.priority = NSLayoutConstraint.Priority(990)
+        return c
+    }
+
+    /// Stronger than centering, but still never forces the window wider.
+    private func firm(_ c: NSLayoutConstraint) -> NSLayoutConstraint {
+        c.priority = NSLayoutConstraint.Priority(994)
         return c
     }
 
