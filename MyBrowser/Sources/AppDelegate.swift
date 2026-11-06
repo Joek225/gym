@@ -94,9 +94,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 window.layoutIfNeeded()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
                     NSLog("MyBrowser window width after resize: %d", Int(window.frame.width))
+                    Self.saveSnapshot(of: window)
                 }
             }
         }
+    }
+
+    /// Used by the automatic test: saves a picture of the window's top part so the layout can be checked.
+    private static func saveSnapshot(of window: NSWindow) {
+        guard let view = window.contentView else { return }
+        let rect = NSRect(x: 0, y: view.bounds.height - 140, width: view.bounds.width, height: 140)
+        guard let rep = view.bitmapImageRepForCachingDisplay(in: rect) else { return }
+        view.cacheDisplay(in: rect, to: rep)
+        guard let png = rep.representation(using: .png, properties: [:]) else { return }
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("toolbar.png")
+        try? png.write(to: url)
+        NSLog("MyBrowser snapshot: %@", url.path)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }

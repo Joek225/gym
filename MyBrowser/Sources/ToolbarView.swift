@@ -72,7 +72,7 @@ final class ToolbarView: NSView {
         divider.translatesAutoresizingMaskIntoConstraints = false
         divider.widthAnchor.constraint(equalToConstant: 1).isActive = true
         divider.heightAnchor.constraint(equalToConstant: 18).isActive = true
-        menuButton.frameCenterRotation = 90   // "⋮" like Chrome
+        menuButton.image = ToolbarView.verticalDots()   // "⋮" like Chrome
         let right = NSStackView(views: [extensionStack, puzzleButton, divider, downloadsButton, menuButton])
         right.spacing = 6
         right.setCustomSpacing(10, after: puzzleButton)
@@ -144,7 +144,11 @@ final class ToolbarView: NSView {
         extensionButtons = [:]
         for item in items {
             let button = ToolbarView.makeButton("puzzlepiece.extension", item.label)
-            if let icon = item.icon { button.image = icon }
+            if let icon = item.icon?.copy() as? NSImage {
+                icon.size = NSSize(width: 18, height: 18)   // extensions often supply big icons
+                button.image = icon
+            }
+            button.imageScaling = .scaleProportionallyDown
             button.toolTip = item.badge.isEmpty ? item.label : "\(item.label) (\(item.badge))"
             button.target = self
             button.action = #selector(extensionClicked(_:))
@@ -155,6 +159,35 @@ final class ToolbarView: NSView {
     }
 
     func extensionButton(id: String) -> NSView? { extensionButtons[id] }
+
+    /// Chrome's three vertical dots, drawn as a template image (it takes the icon color).
+    private static func verticalDots() -> NSImage {
+        let image = NSImage(size: NSSize(width: 16, height: 16), flipped: false) { rect in
+            NSColor.black.setFill()
+            for y in [3.0, 8.0, 13.0] {
+                NSBezierPath(ovalIn: NSRect(x: rect.midX - 1.6, y: y - 1.6, width: 3.2, height: 3.2)).fill()
+            }
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }
+
+    /// Shows a page's address the way Chrome does: no "https://" or "www.",
+    /// and without the long tracking part after "?". The full address is in the tooltip.
+    func showAddress(_ url: URL?) {
+        guard let url else {
+            addressField.stringValue = ""
+            addressField.toolTip = nil
+            return
+        }
+        var host = url.host ?? ""
+        if host.hasPrefix("www.") { host = String(host.dropFirst(4)) }
+        var text = host.isEmpty ? url.absoluteString : host + (url.path == "/" ? "" : url.path)
+        if let fragment = url.fragment, !fragment.isEmpty, fragment.count < 30 { text += "#" + fragment }
+        addressField.stringValue = text
+        addressField.toolTip = url.absoluteString
+    }
 
     @objc private func extensionClicked(_ sender: NSButton) {
         if let id = sender.identifier?.rawValue { onExtensionClicked?(id) }

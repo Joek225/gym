@@ -439,7 +439,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         toolbar.forwardButton.isEnabled = webView?.canGoForward ?? false
         toolbar.setLoading(webView?.isLoading ?? false)
         toolbar.setStarred(BookmarkStore.shared.isBookmarked(tab.url))
-        if !isEditingAddress { toolbar.addressField.stringValue = tab.displayURL?.absoluteString ?? "" }
+        toolbar.showAddress(tab.displayURL)
         window?.title = tab.displayTitle
         if let message = tab.errorMessage {
             errorView.show(message: message, address: tab.failedURL?.host ?? "")
@@ -849,7 +849,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         guard control === toolbar.addressField, selector == #selector(NSResponder.cancelOperation(_:)) else {
             return false
         }
-        toolbar.addressField.stringValue = store.selected?.displayURL?.absoluteString ?? ""
+        toolbar.showAddress(store.selected?.displayURL)
         if let webView = store.selected?.webView { window?.makeFirstResponder(webView) }
         return true
     }

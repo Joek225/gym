@@ -10,7 +10,8 @@ enum Theme {
     static let toolbar     = saved.toolbar
     static let background  = saved.background
     static let accent      = saved.accent
-    static let field       = mix(saved.sidebar, saved.toolbar, 0.15)
+    static let field       = Preferences.arcStyle ? NSColor(white: isDark ? 1 : 0, alpha: 0.12)
+                                                  : mix(saved.sidebar, saved.toolbar, 0.15)
     /// Arc style: the window is a see-through tinted gradient and pages sit on a rounded card.
     static let arcStyle    = Preferences.arcStyle
     static let selectedTab = arcStyle ? NSColor(white: isDark ? 1 : 0, alpha: 0.16) : saved.toolbar

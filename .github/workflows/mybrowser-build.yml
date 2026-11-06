@@ -90,6 +90,11 @@ jobs:
           kill -9 $PID || true
           grep -q "title: Extension works" ext2.log && echo "EXTENSION TEST PASSED"
           grep -q "window width after resize: 1900" ext2.log && echo "RESIZE TEST PASSED"
+          SNAP=$(grep -o "snapshot: .*" ext2.log | sed 's/snapshot: //' | head -1)
+          if [ -n "$SNAP" ] && [ -f "$SNAP" ]; then
+            sips -Z 1400 "$SNAP" --out small.png >/dev/null 2>&1 || cp "$SNAP" small.png
+            echo "SNAPSHOT-BEGIN"; base64 -i small.png | fold -w 1000; echo "SNAPSHOT-END"
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
