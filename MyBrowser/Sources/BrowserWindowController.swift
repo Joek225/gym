@@ -15,6 +15,8 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     /// Covers the whole window in black after 5 idle minutes on a new tab.
     private let dimmer = SolidView(color: .black)
     private var lastActivity = Date()
+    /// Becomes true once the window has appeared (see `showWindow`).
+    private var isOnScreen = false
     private var memoryReadout: MemoryReadout?
 
     let store: TabStore
@@ -47,7 +49,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1280, height: 820),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
-            backing: .buffered, defer: true)
+            backing: .buffered, defer: false)
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.isOpaque = !Theme.arcStyle
@@ -84,6 +86,15 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func showWindow(_ sender: Any?) {
+        super.showWindow(sender)
+        guard !isOnScreen else { return }
+        isOnScreen = true
+        // Now that the window is on screen (at your screen's real sharpness), load the current tab.
+        window?.displayIfNeeded()
+        if let tab = store.selected { select(tab) }
+    }
 
     // MARK: Layout
 
@@ -240,7 +251,10 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         store.selected = tab
         tab.lastActive = Date()
         if let group = tab.group, group.isCollapsed { group.isCollapsed = false }   // like Chrome
-        if tab.webView == nil, tab.url != nil || tab.savedState != nil { wake(tab) }
+        // Pages only start loading once the window is really on screen: a page that starts
+        // before that is told the screen is low-resolution, and canvas-drawn text
+        // (Google Docs, Sheets, Figma…) then stays blurry for good.
+        if isOnScreen, tab.webView == nil, tab.url != nil || tab.savedState != nil { wake(tab) }
         show(tab)
         sidebar.reload()
         updateToolbar()
@@ -1176,8 +1190,12 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         if logLoads {   // used by the automatic test
             let address = webView.url?.absoluteString ?? ""
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak webView] in
-                webView?.evaluateJavaScript("document.title") { title, _ in
-                    NSLog("MyBrowser loaded: %@ — title: %@", address, (title as? String) ?? "")
+                webView?.evaluateJavaScript("document.title + ' | dpr ' + window.devicePixelRatio") { title, _ in
+                    let text = (title as? String) ?? ""
+                    NSLog("MyBrowser loaded: %@ — title: %@ (window scale %.1f)", address,
+                          String(text.split(separator: "|").first ?? "").trimmingCharacters(in: .whitespaces),
+                          webView?.window?.backingScaleFactor ?? 0)
+                    NSLog("MyBrowser page sharpness: %@", String(text.split(separator: "|").last ?? ""))
                 }
             }
         }
