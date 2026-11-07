@@ -20,14 +20,26 @@ final class BrowserWebView: WKWebView {
         info.draggingSource == nil && StandInDrag.hasContent(info.draggingPasteboard)
     }
 
+    /// What the page itself last said about the drag (nothing = it doesn't want it here).
+    private var pageOperation: NSDragOperation = []
+
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         stand?.cleanUp()
         stand = needsStandIn(sender) ? StandInDrag(sender) : nil
-        return super.draggingEntered(stand ?? sender)
+        return answer(super.draggingEntered(stand ?? sender))
     }
 
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
-        super.draggingUpdated(stand ?? sender)
+        answer(super.draggingUpdated(stand ?? sender))
+    }
+
+    /// Some sites (Claude, for one) turn drops down but accept the same picture pasted.
+    /// For drags we're carrying, show the green + anyway; if the page still says no when
+    /// you let go over a text box, the picture is pasted into that box instead.
+    private func answer(_ operation: NSDragOperation) -> NSDragOperation {
+        guard stand != nil else { return operation }
+        pageOperation = operation
+        return operation.isEmpty ? .copy : operation
     }
 
     override func draggingExited(_ sender: NSDraggingInfo?) {
@@ -37,7 +49,7 @@ final class BrowserWebView: WKWebView {
     }
 
     override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
-        super.prepareForDragOperation(stand ?? sender)
+        stand != nil ? true : super.prepareForDragOperation(sender)
     }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
@@ -46,15 +58,74 @@ final class BrowserWebView: WKWebView {
         let files = stand.collectCopies()
         guard !files.isEmpty else { return false }
         stand.use(files)
+        let point = convert(sender.draggingLocation, from: nil)
+        if pageOperation.isEmpty {
+            // The page refused the drop: tell WebKit the drag is over, then paste instead.
+            super.draggingExited(stand)
+            pasteInstead(files, at: point)
+            return true
+        }
+        _ = super.prepareForDragOperation(stand)
         if super.performDragOperation(stand) { return true }
         // WebKit said no: hand the page the files another way.
-        deliver(files: files, at: convert(sender.draggingLocation, from: nil))
+        deliver(files: files, at: point)
         return true
     }
 
     override func concludeDragOperation(_ sender: NSDraggingInfo?) {
-        super.concludeDragOperation(stand ?? sender)
+        if stand == nil || !pageOperation.isEmpty { super.concludeDragOperation(stand ?? sender) }
         stand = nil   // the temporary file stays until the app quits, so the page can finish reading it
+    }
+
+    /// Puts the cursor in the text box under the drop point and pastes the files there, as if
+    /// you'd copied them and pressed ⌘V. Your clipboard is put back right after.
+    private func pasteInstead(_ files: [URL], at point: NSPoint) {
+        let scale = max(pageZoom * magnification, 0.01)
+        let x = point.x / scale
+        let y = (isFlipped ? point.y : bounds.height - point.y) / scale
+        let js = """
+        let el = document.elementFromPoint(x, y);
+        while (el && el.shadowRoot && el.shadowRoot.elementFromPoint) {
+          const inner = el.shadowRoot.elementFromPoint(x, y);
+          if (!inner || inner === el) break;
+          el = inner;
+        }
+        const box = el && el.closest('textarea, input:not([type=hidden]), [contenteditable=""], [contenteditable="true"], [contenteditable="plaintext-only"]');
+        if (!box) return false;
+        box.focus();
+        return true;
+        """
+        callAsyncJavaScript(js, arguments: ["x": x, "y": y], in: nil, in: .page) { [weak self] result in
+            guard let self, case .success(let value) = result, (value as? Bool) == true else { return }
+            self.window?.makeFirstResponder(self)
+            let general = NSPasteboard.general
+            let saved = Self.copyItems(of: general)
+            general.clearContents()
+            for file in files {
+                let item = NSPasteboardItem()
+                item.setString(file.absoluteString, forType: .fileURL)
+                if let type = UTType(filenameExtension: file.pathExtension), type.conforms(to: .image),
+                   let data = try? Data(contentsOf: file) {
+                    item.setData(data, forType: NSPasteboard.PasteboardType(type.identifier))
+                }
+                general.writeObjects([item])
+            }
+            self.paste(nil)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                general.clearContents()
+                if !saved.isEmpty { general.writeObjects(saved) }
+            }
+        }
+    }
+
+    private static func copyItems(of pasteboard: NSPasteboard) -> [NSPasteboardItem] {
+        (pasteboard.pasteboardItems ?? []).map { original in
+            let copy = NSPasteboardItem()
+            for type in original.types {
+                if let data = original.data(forType: type) { copy.setData(data, forType: type) }
+            }
+            return copy
+        }
     }
 
     /// Gives the files to the page as a real drop at the spot where you let go.

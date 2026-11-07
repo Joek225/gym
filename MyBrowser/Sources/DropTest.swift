@@ -29,13 +29,31 @@ enum DropTest {
                 runCase("image", webView: webView) {
                     runCase("file again", webView: webView) {
                         runCase("image again", webView: webView) {
-                            runCase("photo", webView: webView) {}
+                            runCase("photo", webView: webView) {
+                                // Like Claude: the message box refuses drops but accepts pasted pictures.
+                                webView.loadHTMLString(editorPage, baseURL: URL(string: "https://example.com/"))
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                    runCase("refused drop", webView: webView) {}
+                                }
+                            }
                         }
                     }
                 }
             }
         }
     }
+
+    private static let editorPage = """
+    <html><body style="margin:0"><div id="box" contenteditable="true" style="position:fixed;inset:0">message</div><script>
+    document.addEventListener('dragover', (e) => { /* refuses drops: no preventDefault */ });
+    document.addEventListener('drop', (e) => e.preventDefault());
+    document.getElementById('box').addEventListener('paste', (e) => {
+      e.preventDefault();
+      const f = e.clipboardData.files;
+      document.title = 'dropped ' + f.length + (f[0] ? ' ' + f[0].name + ' ' + f[0].size + ' ' + f[0].type : '') + ' trusted=' + e.isTrusted;
+    });
+    </script></body></html>
+    """
 
     private static func picture() -> Data {
         let image = NSImage(size: NSSize(width: 40, height: 30), flipped: false) { rect in

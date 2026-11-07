@@ -29,7 +29,7 @@ jobs:
         run: |
           build/Release/beababrowser.app/Contents/MacOS/beababrowser --open https://example.com --log-loads --test-drop > app.log 2>&1 &
           PID=$!
-          sleep 38
+          sleep 44
           echo "--- App output ---"; cat app.log
           if ! kill -0 $PID 2>/dev/null; then
             echo "!!! The app quit or crashed. Running it again under the debugger:"
@@ -42,7 +42,7 @@ jobs:
           echo "App is still running after 20s (good)"
           grep -q "MyBrowser loaded: https://example.com" app.log && echo "Page loaded (good)"
           grep "drop test" app.log || echo "(no drop test output)"
-          for c in "file:" "image:" "file again:" "image again:" "photo:"; do
+          for c in "file:" "image:" "file again:" "image again:" "photo:" "refused drop:"; do
             grep "drop test $c" app.log | grep "page got: dropped 1 " | grep -v " 0 image" | grep -q "trusted=true" && echo "DROP TEST PASSED ($c)" || { echo "!!! DROP TEST FAILED ($c)"; exit 1; }
           done
           echo "--- Memory footprint ---"
