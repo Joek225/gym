@@ -29,12 +29,14 @@ enum DropTest {
                 runCase("image", webView: webView) {
                     runCase("file again", webView: webView) {
                         runCase("image again", webView: webView) {
+                            runCase("quick file", webView: webView) {
                             runCase("photo", webView: webView) {
                                 // Like Claude: the message box refuses drops but accepts pasted pictures.
                                 webView.loadHTMLString(editorPage, baseURL: URL(string: "https://example.com/"))
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                                     runCase("refused drop", webView: webView) {}
                                 }
+                            }
                             }
                         }
                     }
@@ -67,7 +69,7 @@ enum DropTest {
         let pb = NSPasteboard(name: NSPasteboard.Name("beababrowser-drop-test-\(name)"))
         pb.clearContents()
         let png = picture()
-        if name.hasPrefix("file") {
+        if name.hasPrefix("file") || name.hasPrefix("quick") {
             let url = FileManager.default.temporaryDirectory.appendingPathComponent("Screenshot \(name).png")
             try? png.write(to: url)
             pb.writeObjects([url as NSURL])
@@ -99,7 +101,8 @@ enum DropTest {
                 }
             }
         }
-        step(4)
+        // "quick": let go the instant the drag arrives, before the page has answered.
+        step(name.hasPrefix("quick") ? 0 : 4)
     }
 }
 

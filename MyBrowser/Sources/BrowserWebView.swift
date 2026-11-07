@@ -59,6 +59,14 @@ final class BrowserWebView: WKWebView {
         guard !files.isEmpty else { return false }
         stand.use(files)
         let point = convert(sender.draggingLocation, from: nil)
+        // The page answers "do you want this?" a moment after the mouse moves. If you let go
+        // quickly, its answer may not be in yet: wait for it (up to about a second) instead of
+        // treating the drop as refused. This made drops fail now and then.
+        let deadline = Date().addingTimeInterval(1.2)
+        while pageOperation.isEmpty && Date() < deadline {
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.03))
+            pageOperation = super.draggingUpdated(stand)
+        }
         if pageOperation.isEmpty {
             // The page refused the drop: tell WebKit the drag is over, then paste instead.
             super.draggingExited(stand)
