@@ -882,7 +882,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     private func sidebarHovered(_ inside: Bool) {
         guard sidebarCompact, inside != sidebarPeeking else { return }
         // Keep it open while a menu or the group editor from it is showing.
-        if !inside, Overlay.current != nil { return }
+        if !inside, Overlay.isShowing { return }
         sidebarPeeking = inside
         applySidebarVisibility(animated: true)
     }

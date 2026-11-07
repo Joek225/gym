@@ -10,12 +10,6 @@ enum SettingsOverlay {
 }
 
 final class SettingsView: NSView {
-    private var colors = ThemeColors.load()
-    private let presetPopup = NSPopUpButton()
-    private let sidebarWell = NSColorWell()
-    private let toolbarWell = NSColorWell()
-    private let backgroundWell = NSColorWell()
-    private let accentWell = NSColorWell()
     private let restartNote = NSTextField(labelWithString: "")
     private let searchPopup = NSPopUpButton()
     private let unloadPopup = NSPopUpButton()
@@ -30,28 +24,20 @@ final class SettingsView: NSView {
     init() {
         super.init(frame: .zero)
 
-        // Colors
-        presetPopup.addItem(withTitle: "Choose a preset theme…")
-        ThemeColors.presets.forEach { presetPopup.addItem(withTitle: $0.name) }
-        presetPopup.target = self
-        presetPopup.action = #selector(presetChosen(_:))
-        for (well, color) in [(sidebarWell, colors.sidebar), (toolbarWell, colors.toolbar),
-                              (backgroundWell, colors.background), (accentWell, colors.accent)] {
-            well.color = color
-            well.target = self
-            well.action = #selector(colorChanged(_:))
-            well.widthAnchor.constraint(equalToConstant: 54).isActive = true
-            well.heightAnchor.constraint(equalToConstant: 26).isActive = true
-        }
-        let colorGrid = NSGridView(views: [
-            [label("Sidebar"), sidebarWell, label("Toolbar"), toolbarWell],
-            [label("Background"), backgroundWell, label("Accent"), accentWell],
-        ])
-        colorGrid.columnSpacing = 10
-        colorGrid.rowSpacing = 10
+        // Accent: the four colors from your calendar.
+        let swatches = NSStackView(views: ThemeColors.Accent.allCases.map { accent in
+            let b = NSButton(title: accent.name, image: Self.swatch(accent.color, chosen: accent == ThemeColors.accentChoice),
+                             target: self, action: #selector(accentChosen(_:)))
+            b.identifier = NSUserInterfaceItemIdentifier(accent.rawValue)
+            b.isBordered = false
+            b.imagePosition = .imageAbove
+            b.font = .systemFont(ofSize: 11)
+            b.contentTintColor = Theme.text
+            return b
+        })
+        swatches.spacing = 18
         restartNote.textColor = Theme.accent
         restartNote.font = .systemFont(ofSize: 12)
-        let restart = button("Apply Colors", #selector(restartClicked(_:)))
 
         // Browsing
         Preferences.SearchEngine.allCases.forEach { searchPopup.addItem(withTitle: $0.rawValue) }
@@ -84,11 +70,11 @@ final class SettingsView: NSView {
         let defaultButton = button("Make beababrowser Your Default Browser", #selector(defaultClicked(_:)))
 
         let stack = NSStackView(views: [
-            heading("Colors"), presetPopup, colorGrid, NSStackView(views: [restart, restartNote]),
+            heading("Accent color"), swatches,
             heading("Search"), row("Search with", searchPopup),
             heading("Memory"), row("Unload tabs I haven't used for", unloadPopup),
             row("Turn off groups I haven't used for", groupsPopup), adsBox, memoryBox,
-            heading("Privacy & security"), securityNote(), touchBox, quitBox, devBox, clearButton,
+            heading("Privacy & security"), securityNote(), touchBox, quitBox, devBox, clearButton, restartNote,
             heading("Default browser"), defaultButton,
         ])
         stack.orientation = .vertical
@@ -133,31 +119,25 @@ final class SettingsView: NSView {
         return b
     }
 
-    private func colorsEdited() {
-        colors.save()
-        restartNote.stringValue = "Click Apply Colors to see them."
+    private static func swatch(_ color: NSColor, chosen: Bool) -> NSImage {
+        NSImage(size: NSSize(width: 30, height: 30), flipped: false) { rect in
+            if chosen {
+                Theme.text.setStroke()
+                let ring = NSBezierPath(ovalIn: rect.insetBy(dx: 1, dy: 1))
+                ring.lineWidth = 2
+                ring.stroke()
+            }
+            color.setFill()
+            NSBezierPath(ovalIn: rect.insetBy(dx: 5, dy: 5)).fill()
+            return true
+        }
     }
 
-    @objc private func presetChosen(_ sender: NSPopUpButton) {
-        guard sender.indexOfSelectedItem > 0 else { return }
-        colors = ThemeColors.presets[sender.indexOfSelectedItem - 1].colors
-        sidebarWell.color = colors.sidebar
-        toolbarWell.color = colors.toolbar
-        backgroundWell.color = colors.background
-        accentWell.color = colors.accent
-        colors.save()
-        AppDelegate.shared.rebuildWindows(thenShowSettings: true)   // a preset applies straight away
-    }
-
-    @objc private func colorChanged(_ sender: NSColorWell) {
-        colors = ThemeColors(sidebar: sidebarWell.color, toolbar: toolbarWell.color,
-                             background: backgroundWell.color, accent: accentWell.color)
-        colorsEdited()
-    }
-
-    @objc private func restartClicked(_ sender: Any?) {
-        colors.save()
-        AppDelegate.shared.rebuildWindows(thenShowSettings: true)
+    @objc private func accentChosen(_ sender: NSButton) {
+        guard let raw = sender.identifier?.rawValue, let accent = ThemeColors.Accent(rawValue: raw),
+              accent != ThemeColors.accentChoice else { return }
+        ThemeColors.accentChoice = accent
+        AppDelegate.shared.rebuildWindows(thenShowSettings: true)   // applies straight away
     }
 
     @objc private func groupsChanged(_ sender: NSPopUpButton) {
