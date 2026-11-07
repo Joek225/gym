@@ -21,7 +21,6 @@ final class SettingsView: NSView {
     private let unloadPopup = NSPopUpButton()
     private let adsBox = NSButton(checkboxWithTitle: "Block ads and trackers (makes pages lighter)", target: nil, action: nil)
     private let memoryBox = NSButton(checkboxWithTitle: "Show memory use in the toolbar", target: nil, action: nil)
-    private let arcBox = NSButton(checkboxWithTitle: "Arc-style see-through background (off = solid colors)", target: nil, action: nil)
     private let groupsPopup = NSPopUpButton()
     private let groupChoices: [(String, Int)] = [("10 minutes", 10), ("30 minutes", 30), ("1 hour", 60),
                                                  ("3 hours", 180), ("Never", 0)]
@@ -72,9 +71,6 @@ final class SettingsView: NSView {
         memoryBox.target = self
         memoryBox.action = #selector(memoryChanged(_:))
 
-        arcBox.state = Preferences.arcStyle ? .on : .off
-        arcBox.target = self
-        arcBox.action = #selector(arcChanged(_:))
         groupChoices.forEach { groupsPopup.addItem(withTitle: $0.0) }
         groupsPopup.selectItem(at: groupChoices.firstIndex { $0.1 == Preferences.disableGroupsMinutes } ?? 1)
         groupsPopup.target = self
@@ -83,7 +79,7 @@ final class SettingsView: NSView {
         let defaultButton = button("Make beababrowser Your Default Browser", #selector(defaultClicked(_:)))
 
         let stack = NSStackView(views: [
-            heading("Colors"), presetPopup, colorGrid, arcBox, NSStackView(views: [restart, restartNote]),
+            heading("Colors"), presetPopup, colorGrid, NSStackView(views: [restart, restartNote]),
             heading("Search"), row("Search with", searchPopup),
             heading("Memory"), row("Unload tabs I haven't used for", unloadPopup),
             row("Turn off groups I haven't used for", groupsPopup), adsBox, memoryBox,
@@ -156,11 +152,6 @@ final class SettingsView: NSView {
     @objc private func restartClicked(_ sender: Any?) {
         colors.save()
         AppDelegate.shared.rebuildWindows(thenShowSettings: true)
-    }
-
-    @objc private func arcChanged(_ sender: NSButton) {
-        Preferences.arcStyle = sender.state == .on
-        AppDelegate.shared.rebuildWindows(thenShowSettings: true)   // applies straight away
     }
 
     @objc private func groupsChanged(_ sender: NSPopUpButton) {

@@ -882,7 +882,7 @@ final class PinnedTile: SolidView, NSDraggingSource {
         super.init(color: selected ? Theme.selectedTab : Theme.tileFill)
         cornerRadius = 10
         borderWidth = 1.5
-        borderColor = groupColor?.blended(withFraction: 0.45, of: Theme.sidebar) ?? NSColor(hex: 0x4A4C62)
+        borderColor = groupColor?.blended(withFraction: 0.45, of: Theme.sidebar) ?? Theme.hairline
         let icon = NSImageView(image: tab.favicon ?? Icons.globe ?? NSImage())
         icon.imageScaling = .scaleProportionallyUpOrDown
         icon.contentTintColor = Theme.mutedText

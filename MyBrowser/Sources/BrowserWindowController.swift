@@ -52,9 +52,9 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
             backing: .buffered, defer: false)
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
-        window.isOpaque = !Theme.arcStyle
+        window.isOpaque = true
         window.appearance = Theme.appearance
-        window.backgroundColor = Theme.arcStyle ? .clear : Theme.toolbar
+        window.backgroundColor = Theme.sidebar
         window.acceptsMouseMovedEvents = true
         window.title = isPrivate ? "Private Window" : "beababrowser"
         window.tabbingMode = .disallowed        // tabs live in our sidebar instead

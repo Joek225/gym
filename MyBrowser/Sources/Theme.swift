@@ -13,21 +13,27 @@ enum Theme {
     static var background: NSColor { saved.background }
     static var accent: NSColor { saved.accent }
     static var isDark: Bool { (saved.sidebar.usingColorSpace(.sRGB)?.brightnessComponent ?? 0) < 0.55 }
-    /// Arc style: the window is a see-through tinted gradient and pages sit on a rounded card.
-    static var arcStyle: Bool { Preferences.arcStyle }
-    private static var overlayTint: NSColor { NSColor(white: isDark ? 1 : 0, alpha: 1) }
+    /// Arc look: one soft gradient behind everything, with lighter and darker shades of it
+    /// on top. It looks see-through but is all solid color (no blur), which saves energy.
+    static let arcStyle = true
+    private static func white(_ a: CGFloat) -> NSColor { NSColor(white: 1, alpha: a) }
+    private static func black(_ a: CGFloat) -> NSColor { NSColor(white: 0, alpha: a) }
 
-    static var field: NSColor { arcStyle ? overlayTint.withAlphaComponent(0.12) : mix(saved.sidebar, saved.toolbar, 0.15) }
-    static var selectedTab: NSColor { arcStyle ? overlayTint.withAlphaComponent(0.16) : saved.toolbar }
-    static var hoverTab: NSColor { arcStyle ? overlayTint.withAlphaComponent(0.08) : mix(saved.sidebar, saved.toolbar, 0.45) }
+    static var field: NSColor { isDark ? white(0.12) : white(0.55) }
+    static var selectedTab: NSColor { isDark ? white(0.16) : white(0.78) }
+    static var hoverTab: NSColor { isDark ? white(0.08) : white(0.38) }
     /// Dark text used on top of the bright group colors.
     static let sidebarText = NSColor(hex: 0x1C1E30)
     /// Background of the toolbar, bookmarks bar and sidebar (clear in Arc style, so the tint shows).
     static var chromeFill: NSColor { arcStyle ? .clear : saved.toolbar }
     static var sidebarFill: NSColor { arcStyle ? .clear : saved.sidebar }
     /// Small surfaces in the sidebar (pinned tiles, the Tools button).
-    static var tileFill: NSColor { arcStyle ? overlayTint.withAlphaComponent(0.07) : saved.sidebar }
-    static var buttonFill: NSColor { arcStyle ? overlayTint.withAlphaComponent(0.12) : saved.toolbar }
+    /// A soft fill for boxes on the white page area (like the new tab search box).
+    static var pageBoxFill: NSColor { isDark ? field : black(0.04) }
+    /// Thin outlines that suit light and dark themes.
+    static var hairline: NSColor { isDark ? NSColor(hex: 0x4A4C62) : black(0.09) }
+    static var tileFill: NSColor { isDark ? white(0.07) : black(0.045) }
+    static var buttonFill: NSColor { isDark ? white(0.12) : white(0.45) }
     static var text: NSColor { isDark ? NSColor(hex: 0xE3E4EE) : NSColor(hex: 0x1F1F1F) }
     static var mutedText: NSColor { isDark ? NSColor(hex: 0x9C9EB2) : NSColor(hex: 0x5F6368) }
     static var icon: NSColor { isDark ? NSColor(hex: 0xC2C4D1) : NSColor(hex: 0x3C4043) }
@@ -52,6 +58,8 @@ struct ThemeColors {
     }
 
     static let presets: [Preset] = [
+        Preset(name: "Lavender (Arc)", colors: ThemeColors(sidebar: NSColor(hex: 0xCCD7F6), toolbar: NSColor(hex: 0xC4CCE7),
+                                                           background: NSColor(hex: 0xFFFFFF), accent: NSColor(hex: 0x5B6EE1))),
         Preset(name: "Navy (your Chrome theme)", colors: ThemeColors(sidebar: NSColor(hex: 0x1C1E30), toolbar: NSColor(hex: 0x38394E),
                                                          background: NSColor(hex: 0x1C1E30), accent: NSColor(hex: 0x87E3EB))),
         Preset(name: "Graphite", colors: ThemeColors(sidebar: NSColor(hex: 0x1F1F1F), toolbar: NSColor(hex: 0x35363A),
@@ -68,6 +76,11 @@ struct ThemeColors {
 
     static func load() -> ThemeColors {
         let d = UserDefaults.standard
+        // One-time switch to the new Arc-style lavender look (you can still pick others in Settings).
+        if !d.bool(forKey: "theme.lavenderDefault") {
+            d.set(true, forKey: "theme.lavenderDefault")
+            presets[0].colors.save()
+        }
         let fallback = presets[0].colors
         func color(_ key: String, _ standard: NSColor) -> NSColor {
             guard let hex = d.string(forKey: "theme." + key), let value = UInt32(hex, radix: 16) else { return standard }

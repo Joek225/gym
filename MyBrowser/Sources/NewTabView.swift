@@ -21,9 +21,9 @@ final class NewTabView: SolidView, NSTextFieldDelegate {
         let url: URL
     }
 
-    private let box = SolidView(color: Theme.field)
+    private let box = SolidView(color: Theme.pageBoxFill)
     private let field = NSTextField()
-    private let list = SolidView(color: Theme.field)
+    private let list = SolidView(color: Theme.background)
     private let rows = NSStackView()
     private var suggestions: [Suggestion] = []
     private var selected = 0
@@ -34,7 +34,7 @@ final class NewTabView: SolidView, NSTextFieldDelegate {
         super.init(color: Theme.background)
 
         box.cornerRadius = 23
-        box.borderColor = Theme.toolbar
+        box.borderColor = Theme.hairline
         let glass = NSImageView(image: Icons.symbol("magnifyingglass", size: 15) ?? NSImage())
         glass.contentTintColor = Theme.mutedText
         field.placeholderString = "Search Google or type a web address"
@@ -48,7 +48,7 @@ final class NewTabView: SolidView, NSTextFieldDelegate {
         field.cell?.wraps = false
 
         list.cornerRadius = 14
-        list.borderColor = Theme.toolbar
+        list.borderColor = Theme.hairline
         list.isHidden = true
         rows.orientation = .vertical
         rows.spacing = 0
@@ -229,11 +229,11 @@ final class NewTabView: SolidView, NSTextFieldDelegate {
 final class SuggestionRow: SolidView {
     static let height: CGFloat = 34
     private let action: () -> Void
-    var isHighlighted = false { didSet { fillColor = isHighlighted ? Theme.hoverTab : Theme.field } }
+    var isHighlighted = false { didSet { fillColor = isHighlighted ? Theme.pageBoxFill : Theme.background } }
 
     init(icon: String, text: String, detail: String, action: @escaping () -> Void) {
         self.action = action
-        super.init(color: Theme.field)
+        super.init(color: Theme.background)
         cornerRadius = 8
         let image = NSImageView(image: Icons.symbol(icon, size: 13) ?? NSImage())
         image.contentTintColor = Theme.mutedText
