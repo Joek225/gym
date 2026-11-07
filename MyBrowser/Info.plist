@@ -2,7 +2,16 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- Lets macOS offer MyBrowser as your default web browser. -->
+	<!-- Shown by macOS the first time a website you allowed asks for these. -->
+	<key>NSCameraUsageDescription</key>
+	<string>A website you allowed wants to use your camera.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>A website you allowed wants to use your microphone.</string>
+	<key>NSLocationUsageDescription</key>
+	<string>A website you allowed wants to know your location.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>A website you allowed wants to know your location.</string>
+	<!-- Lets macOS offer beababrowser as your default web browser. -->
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

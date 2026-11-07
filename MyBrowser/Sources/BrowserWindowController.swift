@@ -14,6 +14,9 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     private let findBar = FindBar()
     /// Covers the whole window in black after 5 idle minutes on a new tab.
     private let dimmer = SolidView(color: .black)
+    /// Pulsing dots shown while an unloaded tab wakes up.
+    private let loadingDots = LoadingDots()
+    private var progressObservation: NSKeyValueObservation?
     private var sleptAt = Date.distantPast
     /// Becomes true once the window has appeared (see `showWindow`).
     private var isOnScreen = false
@@ -110,7 +113,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
             errorView.layer?.masksToBounds = true
         }
 
-        for v in [toolbar, bookmarksBar, side, webContainer, errorView, newTabPage, findBar, resizeHandle, dimmer] as [NSView] {
+        for v in [toolbar, bookmarksBar, side, webContainer, errorView, newTabPage, findBar, resizeHandle, loadingDots, dimmer] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             content.addSubview(v)
         }
@@ -141,6 +144,11 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
             webContainer.leadingAnchor.constraint(equalTo: side.trailingAnchor),
             webContainer.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -margin),
             webContainer.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -margin),
+
+            loadingDots.centerXAnchor.constraint(equalTo: webContainer.centerXAnchor),
+            loadingDots.centerYAnchor.constraint(equalTo: webContainer.centerYAnchor),
+            loadingDots.widthAnchor.constraint(equalToConstant: 56),
+            loadingDots.heightAnchor.constraint(equalToConstant: 16),
 
             dimmer.topAnchor.constraint(equalTo: content.topAnchor),
             dimmer.leadingAnchor.constraint(equalTo: content.leadingAnchor),
@@ -186,6 +194,8 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         toolbar.downloadsButton.action = #selector(showDownloads(_:))
         toolbar.menuButton.target = self
         toolbar.menuButton.action = #selector(showMainMenu(_:))
+        toolbar.siteButton.target = self
+        toolbar.siteButton.action = #selector(showSiteInfo(_:))
         memoryReadout = MemoryReadout(label: toolbar.memoryLabel) {
             AppDelegate.shared.controllers.flatMap { $0.store.allTabs.compactMap(\.webView) }
         }
@@ -242,6 +252,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
 
     func select(_ tab: Tab) {
         let previous = store.selected
+        progressObservation = nil
         if let old = previous, old !== tab { old.lastActive = Date(); old.group?.lastActive = Date() }
         if let group = tab.group {
             group.isDisabled = false      // opening a tab turns its group back on
@@ -297,6 +308,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         let webView = WebKitEnvironment.makeWebView(store: privateStore)
         install(webView, for: tab)
         attach(webView)
+        tab.isWaking = true
         if let state = tab.savedState {
             webView.interactionState = state
             tab.savedState = nil
@@ -393,7 +405,9 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         setDimmed(false)
     }
 
-    /// The new tab page's Sleep button: the window goes black until you move the mouse or press a key.
+    /// The Sleep button (top right): the window goes black until you move the mouse or press a key.
+    @objc func sleepWindow(_ sender: Any?) { newTabSleep() }
+
     func newTabSleep() {
         sleptAt = Date()
         setDimmed(true)
@@ -470,7 +484,29 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
 
     // MARK: Toolbar
 
+    /// Shows the dots while the current tab is waking up, until its page is mostly loaded.
+    private func updateLoadingDots() {
+        guard let tab = store.selected, tab.isWaking, let webView = tab.webView else {
+            loadingDots.stop()
+            progressObservation = nil
+            return
+        }
+        if webView.estimatedProgress >= 0.7 || !webView.isLoading {
+            tab.isWaking = false
+            loadingDots.stop()
+            progressObservation = nil
+            return
+        }
+        loadingDots.start()
+        if progressObservation == nil {
+            progressObservation = webView.observe(\.estimatedProgress) { [weak self] _, _ in
+                MainActor.assumeIsolated { self?.updateLoadingDots() }
+            }
+        }
+    }
+
     private func updateToolbar() {
+        updateLoadingDots()
         guard let tab = store.selected else { return }
         let webView = tab.webView
         toolbar.backButton.isEnabled = webView?.canGoBack ?? false
@@ -641,6 +677,11 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         add("Page Info", #selector(showPageInfo(_:)))
         add("Settings", #selector(openSettings(_:)), ",")
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
+    }
+
+    @objc func showSiteInfo(_ sender: Any?) {
+        guard let webView = store.selected?.webView else { NSSound.beep(); return }
+        SiteInfoPanel.show(for: webView, below: toolbar.siteButton)
     }
 
     @objc func openSettings(_ sender: Any?) {
@@ -1189,7 +1230,8 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         if navigationAction.shouldPerformDownload {
-            decisionHandler(.download)
+            let host = navigationAction.request.url?.host ?? webView.url?.host ?? ""
+            decisionHandler(SitePermissions.get(.downloads, host) == .block ? .cancel : .download)
             return
         }
         // ⌘-click or middle-click a link: open it in a new tab (⇧⌘-click switches to it).
@@ -1209,7 +1251,9 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         let disposition = (navigationResponse.response as? HTTPURLResponse)?
             .value(forHTTPHeaderField: "Content-Disposition")?.lowercased() ?? ""
         if !navigationResponse.canShowMIMEType || (navigationResponse.isForMainFrame && disposition.hasPrefix("attachment")) {
-            decisionHandler(.download)
+            // Downloads can be blocked per site (site info panel → Automatic downloads).
+            let host = webView.url?.host ?? navigationResponse.response.url?.host ?? ""
+            decisionHandler(SitePermissions.get(.downloads, host) == .block ? .cancel : .download)
         } else {
             decisionHandler(.allow)
         }
@@ -1318,6 +1362,43 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         var frame = window.convertToScreen(webView.convert(webView.bounds, to: nil))
         frame.size.height += 80
         completionHandler(frame)
+    }
+
+    /// A site wants the camera and/or microphone: follow your choice for that site, or ask.
+    func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin,
+                 initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType,
+                 decisionHandler: @escaping (WKPermissionDecision) -> Void) {
+        let kinds: [PermissionKind]
+        switch type {
+        case .camera: kinds = [.camera]
+        case .microphone: kinds = [.microphone]
+        default: kinds = [.camera, .microphone]
+        }
+        askPermission(kinds, host: origin.host, decisionHandler: decisionHandler)
+    }
+
+    /// A site wants your location (WebKit asks apps through this hidden hook).
+    @objc(_webView:requestGeolocationPermissionForOrigin:initiatedByFrame:decisionHandler:)
+    func webViewRequestsLocation(_ webView: WKWebView, origin: WKSecurityOrigin, frame: WKFrameInfo,
+                                 decisionHandler: @escaping (WKPermissionDecision) -> Void) {
+        askPermission([.location], host: origin.host, decisionHandler: decisionHandler)
+    }
+
+    private func askPermission(_ kinds: [PermissionKind], host: String,
+                               decisionHandler: @escaping (WKPermissionDecision) -> Void) {
+        let values = kinds.map { SitePermissions.get($0, host) }
+        if values.contains(.block) { decisionHandler(.deny); return }
+        if values.allSatisfy({ $0 == .allow }) { decisionHandler(.grant); return }
+        let alert = NSAlert()
+        alert.messageText = "\(host) wants to use your \(kinds.map { $0.title.lowercased() }.joined(separator: " and "))"
+        alert.informativeText = "Your choice is remembered for this site. Change it any time with the button at the left of the address."
+        alert.addButton(withTitle: "Allow")
+        alert.addButton(withTitle: "Block")
+        present(alert) { response in
+            let value: PermissionValue = response == .alertFirstButtonReturn ? .allow : .block
+            kinds.forEach { SitePermissions.set($0, host, value) }
+            decisionHandler(value == .allow ? .grant : .deny)
+        }
     }
 
     func webViewDidClose(_ webView: WKWebView) {

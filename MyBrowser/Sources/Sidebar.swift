@@ -132,23 +132,6 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
         scroll.borderType = .noBorder
         scroll.contentInsets = NSEdgeInsets(top: 6, left: 0, bottom: 6, right: 0)
 
-        // An invisible guide for the width of the bottom row (there's no + button: use ⌘T).
-        let newTab = NSView()
-
-        // Bottom row: Tools (left half) and a placeholder (right half).
-        let tools = SolidView(color: Theme.buttonFill)
-        tools.cornerRadius = 8
-        let toolsButton = NSButton(title: "Tools", target: self, action: #selector(toolsClicked(_:)))
-        toolsButton.isBordered = false
-        toolsButton.attributedTitle = NSAttributedString(string: "Tools", attributes: [
-            .foregroundColor: Theme.text, .font: NSFont.systemFont(ofSize: 12)])
-        toolsButton.toolTip = "File converter and background remover"
-        let placeholder = SolidView(color: Theme.hoverTab)
-        placeholder.cornerRadius = 8
-        let placeholderLabel = NSTextField(labelWithString: "Coming soon")
-        placeholderLabel.font = .systemFont(ofSize: 11)
-        placeholderLabel.textColor = Theme.mutedText
-
         // Top: hide-sidebar button on the left; tab groups and tab search on the right (like Chrome).
         let collapse = headerButton("sidebar.leading", "Hide the tab sidebar (⌃⌘S)", #selector(collapseClicked(_:)))
         let groupsPill = SolidView(color: Theme.buttonFill)
@@ -160,7 +143,7 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
         let headerLine = SolidView(color: Theme.buttonFill)
 
         for v in [collapse, groupsPill, searchPill, groupsButton, searchButton, headerLine,
-                  scroll, newTab, tools, toolsButton, placeholder, placeholderLabel] as [NSView] {
+                  scroll] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(v)
         }
@@ -187,29 +170,7 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
             scroll.topAnchor.constraint(equalTo: headerLine.bottomAnchor, constant: 2),
             scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            scroll.bottomAnchor.constraint(equalTo: newTab.topAnchor, constant: -6),
-
-            newTab.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
-            newTab.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -8),
-            newTab.bottomAnchor.constraint(equalTo: tools.topAnchor),
-            newTab.heightAnchor.constraint(equalToConstant: 0),
-
-            tools.leadingAnchor.constraint(equalTo: newTab.leadingAnchor),
-            tools.widthAnchor.constraint(equalTo: newTab.widthAnchor, multiplier: 0.5, constant: -3),
-            tools.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -8),
-            tools.heightAnchor.constraint(equalToConstant: 30),
-            toolsButton.leadingAnchor.constraint(equalTo: tools.leadingAnchor),
-            toolsButton.trailingAnchor.constraint(equalTo: tools.trailingAnchor),
-            toolsButton.topAnchor.constraint(equalTo: tools.topAnchor),
-            toolsButton.bottomAnchor.constraint(equalTo: tools.bottomAnchor),
-
-            placeholder.trailingAnchor.constraint(equalTo: newTab.trailingAnchor),
-            placeholder.widthAnchor.constraint(equalTo: tools.widthAnchor),
-            placeholder.topAnchor.constraint(equalTo: tools.topAnchor),
-            placeholder.bottomAnchor.constraint(equalTo: tools.bottomAnchor),
-            placeholderLabel.centerXAnchor.constraint(equalTo: placeholder.centerXAnchor),
-            placeholderLabel.centerYAnchor.constraint(equalTo: placeholder.centerYAnchor),
-
+            scroll.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -6),
         ])
     }
 

@@ -57,19 +57,10 @@ final class NewTabView: SolidView, NSTextFieldDelegate {
         rows.spacing = 0
         rows.alignment = .leading
 
-        let sleepButton = NSButton(title: "Sleep", image: Icons.symbol("moon.zzz", size: 12) ?? NSImage(),
-                                   target: self, action: #selector(sleepClicked(_:)))
-        sleepButton.isBordered = false
-        sleepButton.imagePosition = .imageLeading
-        sleepButton.contentTintColor = Theme.mutedText
-        sleepButton.attributedTitle = NSAttributedString(string: " Sleep", attributes: [
-            .foregroundColor: Theme.mutedText, .font: NSFont.systemFont(ofSize: 13)])
-        sleepButton.toolTip = "Turn the window black until you move the mouse or press a key"
         shelf.onOpen = { [weak self] node in self?.delegate?.newTabOpenBookmark(node) }
 
-        for v in [shelf, box, glass, field, sleepButton, list, rows] as [NSView] { v.translatesAutoresizingMaskIntoConstraints = false }
+        for v in [shelf, box, glass, field, list, rows] as [NSView] { v.translatesAutoresizingMaskIntoConstraints = false }
         addSubview(shelf)
-        addSubview(sleepButton)   // below the suggestion box, which covers it while showing
         addSubview(box)
         box.addSubview(glass)
         box.addSubview(field)
@@ -99,12 +90,10 @@ final class NewTabView: SolidView, NSTextFieldDelegate {
             rows.leadingAnchor.constraint(equalTo: list.leadingAnchor, constant: 6),
             rows.trailingAnchor.constraint(equalTo: list.trailingAnchor, constant: -6),
 
-            // Bookmarks sit above the search box; Sleep sits under it.
+            // Bookmarks sit above the search box.
             shelf.bottomAnchor.constraint(equalTo: box.topAnchor, constant: -26),
             shelf.centerXAnchor.constraint(equalTo: centerXAnchor),
             shelf.widthAnchor.constraint(lessThanOrEqualTo: widthAnchor, constant: -40),
-            sleepButton.topAnchor.constraint(equalTo: box.bottomAnchor, constant: 22),
-            sleepButton.centerXAnchor.constraint(equalTo: centerXAnchor),
 
         ])
         let shelfWidth = shelf.widthAnchor.constraint(equalTo: box.widthAnchor, constant: 120)
@@ -127,7 +116,6 @@ final class NewTabView: SolidView, NSTextFieldDelegate {
 
     func focus() { window?.makeFirstResponder(field) }
 
-    @objc private func sleepClicked(_ sender: Any?) { delegate?.newTabSleep() }
 
     /// Keeps the bookmarks up to date while the page is showing.
     func bookmarksChanged() { shelf.reload() }

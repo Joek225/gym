@@ -41,6 +41,8 @@ final class Tab: NSObject {
     /// When you last looked at this tab (used to decide when to unload it).
     var lastActive = Date()
     var errorMessage: String?
+    /// True while an unloaded tab is loading again (the dots show until it's mostly drawn).
+    var isWaking = false
     var failedURL: URL?
     /// Back/forward history saved when the tab was unloaded.
     var savedState: Any?

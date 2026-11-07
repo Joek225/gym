@@ -19,6 +19,11 @@ final class ToolbarView: NSView {
     let reloadButton = ToolbarView.makeButton("arrow.clockwise", "Reload")
     let addressField = NSTextField()
     let starButton = ToolbarView.makeButton("star", "Bookmark This Page (⌘D)")
+    /// Chrome's site info button (connection, permissions, site data), left of the address.
+    let siteButton = ToolbarView.makeButton("slider.horizontal.3", "View site information")
+    /// Called when you click the address (it gets copied).
+    var onAddressClicked: (() -> Void)?
+    private var shownURL: URL?
 
     /// One extension's button (its icon from the extension's toolbar action).
     struct ExtensionButton {
@@ -89,7 +94,7 @@ final class ToolbarView: NSView {
         memoryLabel.alignment = .right
         memoryLabel.isHidden = true
 
-        for v in [background, buttons, fieldBox, addressField, starButton, right, memoryLabel] as [NSView] {
+        for v in [background, buttons, fieldBox, addressField, starButton, siteButton, right, memoryLabel] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
         }
         addSubview(background)
@@ -97,8 +102,13 @@ final class ToolbarView: NSView {
         addSubview(fieldBox)
         addSubview(right)
         addSubview(memoryLabel)
+        fieldBox.addSubview(siteButton)
         fieldBox.addSubview(addressField)
         fieldBox.addSubview(starButton)
+        // Click anywhere on the address to copy it.
+        addressField.isSelectable = false
+        let click = NSClickGestureRecognizer(target: self, action: #selector(addressClicked(_:)))
+        fieldBox.addGestureRecognizer(click)
 
         leadingConstraint = buttons.leadingAnchor.constraint(equalTo: leadingAnchor, constant: leadingInset)
         // The bar stays centered and stretches until it meets the icons on the right.
@@ -135,7 +145,9 @@ final class ToolbarView: NSView {
             firm(memoryLabel.leadingAnchor.constraint(greaterThanOrEqualTo: buttons.trailingAnchor, constant: 10)),
             soft(fieldBox.leadingAnchor.constraint(greaterThanOrEqualTo: buttons.trailingAnchor, constant: 12)),
 
-            addressField.leadingAnchor.constraint(equalTo: fieldBox.leadingAnchor, constant: 14),
+            siteButton.leadingAnchor.constraint(equalTo: fieldBox.leadingAnchor, constant: 3),
+            siteButton.centerYAnchor.constraint(equalTo: fieldBox.centerYAnchor),
+            addressField.leadingAnchor.constraint(equalTo: siteButton.trailingAnchor, constant: 4),
             addressField.trailingAnchor.constraint(equalTo: starButton.leadingAnchor, constant: -4),
             addressField.centerYAnchor.constraint(equalTo: fieldBox.centerYAnchor),
 
@@ -185,6 +197,20 @@ final class ToolbarView: NSView {
 
     func extensionButton(id: String) -> NSView? { extensionButtons[id] }
 
+    @objc private func addressClicked(_ sender: NSClickGestureRecognizer) {
+        guard let url = shownURL else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(url.absoluteString, forType: .string)
+        // Show "Copied" for a moment.
+        let previous = addressField.stringValue
+        addressField.stringValue = "Copied ✓"
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) { [weak self] in
+            guard let self, self.addressField.stringValue == "Copied ✓" else { return }
+            self.addressField.stringValue = previous
+        }
+        onAddressClicked?()
+    }
+
     /// Chrome's three vertical dots, drawn as a template image (it takes the icon color).
     private static func verticalDots() -> NSImage {
         let image = NSImage(size: NSSize(width: 16, height: 16), flipped: false) { rect in
@@ -201,6 +227,14 @@ final class ToolbarView: NSView {
     /// Shows a page's address the way Chrome does: no "https://" or "www.",
     /// and without the long tracking part after "?". The full address is in the tooltip.
     func showAddress(_ url: URL?) {
+        shownURL = url
+        siteButton.isHidden = url == nil
+        if let url {
+            let secure = url.scheme == "https"
+            siteButton.image = ToolbarView.symbol(secure ? "slider.horizontal.3" : "exclamationmark.triangle",
+                                                  secure ? "View site information" : "Not secure")
+            siteButton.contentTintColor = secure ? Theme.icon : NSColor.systemOrange
+        }
         guard let url else {
             addressField.stringValue = ""
             addressField.toolTip = nil
