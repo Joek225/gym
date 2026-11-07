@@ -628,6 +628,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         add("Zoom Out", #selector(zoomOutPage(_:)), "-")
         add("Tools", #selector(openTools(_:)))
         menu.addItem(.separator())
+        add("Page Info", #selector(showPageInfo(_:)))
         add("Settings", #selector(openSettings(_:)), ",")
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
     }
@@ -785,7 +786,32 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
 
     @objc func zoomInPage(_ sender: Any?) { if let w = store.selected?.webView { w.pageZoom = min(w.pageZoom + 0.1, 3) } }
     @objc func zoomOutPage(_ sender: Any?) { if let w = store.selected?.webView { w.pageZoom = max(w.pageZoom - 0.1, 0.3) } }
-    @objc func actualSize(_ sender: Any?) { store.selected?.webView?.pageZoom = 1 }
+    /// ⌘0: back to normal size, undoing both ⌘+/⌘- zoom and trackpad pinch-zoom.
+    @objc func actualSize(_ sender: Any?) {
+        store.selected?.webView?.pageZoom = 1
+        store.selected?.webView?.magnification = 1
+    }
+
+    /// Numbers that help track down display problems (like blurry text).
+    @objc func showPageInfo(_ sender: Any?) {
+        guard let webView = store.selected?.webView, let window else { NSSound.beep(); return }
+        let js = "[window.devicePixelRatio, window.innerWidth, (window.visualViewport ? window.visualViewport.scale : 1)].join(',')"
+        webView.evaluateJavaScript(js) { [weak self] result, _ in
+            let parts = ((result as? String) ?? "?,?,?").split(separator: ",").map(String.init)
+            let alert = NSAlert()
+            alert.messageText = "Page Info"
+            alert.informativeText = """
+            Screen sharpness (window): \(window.backingScaleFactor)x
+            Screen sharpness (page sees): \(parts.first ?? "?")x
+            Pinch-zoom: \(String(format: "%.2f", webView.magnification))x
+            Page zoom (⌘+/⌘-): \(String(format: "%.2f", webView.pageZoom))x
+            Page pinch scale: \(parts.count > 2 ? parts[2] : "?")
+            Page width: \(parts.count > 1 ? parts[1] : "?") points
+            Arc-style background: \(Theme.arcStyle ? "on" : "off")
+            """
+            self?.present(alert) { _ in }
+        }
+    }
 
     // MARK: Bookmarks
 

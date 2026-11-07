@@ -73,6 +73,8 @@ enum MainMenu {
         view.addItem(withTitle: "Actual Size", action: #selector(W.actualSize(_:)), keyEquivalent: "0")
         view.addItem(withTitle: "Zoom In", action: #selector(W.zoomInPage(_:)), keyEquivalent: "=")
         view.addItem(withTitle: "Zoom Out", action: #selector(W.zoomOutPage(_:)), keyEquivalent: "-")
+        view.addItem(withTitle: "Page Info", action: #selector(W.showPageInfo(_:)), keyEquivalent: "i")
+            .keyEquivalentModifierMask = [.command, .option, .shift]
         view.addItem(.separator())
         view.addItem(withTitle: "Enter Full Screen", action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f")
             .keyEquivalentModifierMask = [.command, .control]
