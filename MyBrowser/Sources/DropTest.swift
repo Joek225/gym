@@ -28,7 +28,9 @@ enum DropTest {
             runCase("file", webView: webView) {
                 runCase("image", webView: webView) {
                     runCase("file again", webView: webView) {
-                        runCase("image again", webView: webView) {}
+                        runCase("image again", webView: webView) {
+                            runCase("photo", webView: webView) {}
+                        }
                     }
                 }
             }
@@ -51,6 +53,10 @@ enum DropTest {
             let url = FileManager.default.temporaryDirectory.appendingPathComponent("Screenshot \(name).png")
             try? png.write(to: url)
             pb.writeObjects([url as NSURL])
+        } else if name == "photo" {
+            // How Photos and the screenshot thumbnail describe a picture.
+            pb.setString("public.png", forType: NSPasteboard.PasteboardType("com.apple.pasteboard.promised-file-content-type"))
+            pb.setData(png, forType: .png)
         } else {
             pb.setData(png, forType: .png)
             pb.setData(NSImage(data: png)?.tiffRepresentation, forType: .tiff)

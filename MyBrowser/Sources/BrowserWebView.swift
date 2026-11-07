@@ -2,23 +2,22 @@ import AppKit
 import WebKit
 import UniformTypeIdentifiers
 
-/// The web view used for every page. It behaves exactly like WebKit's own, except for
-/// pictures dragged in from other apps that aren't saved files yet (the floating screenshot
-/// thumbnail, Photos, Preview, Messages…). WebKit can't hand those to a page, so the browser
-/// saves the picture as a real file first and lets WebKit drop *that* — a genuine drop,
-/// exactly like dragging a file from Finder, which sites such as Claude and Snapchat need.
+/// The web view used for every page. It behaves exactly like WebKit's own, except for drops
+/// from other apps (Finder files, the screenshot thumbnail, Photos, Messages…).
+///
+/// How Chrome does it: its main app reads the dragged file or picture data itself and gives
+/// the page a copy; the page's own process never opens your files. We do the same: the
+/// dragged files/picture are copied into the browser's own temporary folder, and WebKit then
+/// performs a genuine drop of those copies. (Letting WebKit's page process open files
+/// elsewhere on your Mac fails because of the app sandbox, which is why drops broke.)
 final class BrowserWebView: WKWebView {
-    /// The drag as WebKit sees it while we're standing in for a picture (nil = normal drag).
+    /// The drag as WebKit sees it while we're standing in for it (nil = normal drag).
     private var stand: StandInDrag?
 
-    /// Pictures from another app that aren't files. Files from Finder and drags within the
-    /// page go straight to WebKit untouched.
+    /// Anything from another app that carries files or a picture. Drags within the page
+    /// (selected text, links, images moved inside a site) go straight to WebKit.
     private func needsStandIn(_ info: NSDraggingInfo) -> Bool {
-        if info.draggingSource != nil { return false }
-        let pb = info.draggingPasteboard
-        if pb.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) { return false }
-        if pb.canReadObject(forClasses: [NSFilePromiseReceiver.self], options: nil) { return true }
-        return pb.canReadObject(forClasses: [NSImage.self], options: nil)
+        info.draggingSource == nil && StandInDrag.hasContent(info.draggingPasteboard)
     }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
@@ -44,11 +43,12 @@ final class BrowserWebView: WKWebView {
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         guard let stand else { return super.performDragOperation(sender) }
         // Now get the real picture (a promised file is only written when you let go).
-        guard let file = stand.collectPicture() else { return false }
-        stand.use(file)
+        let files = stand.collectCopies()
+        guard !files.isEmpty else { return false }
+        stand.use(files)
         if super.performDragOperation(stand) { return true }
-        // WebKit said no: hand the page the file another way.
-        deliver(files: [file], at: convert(sender.draggingLocation, from: nil))
+        // WebKit said no: hand the page the files another way.
+        deliver(files: files, at: convert(sender.draggingLocation, from: nil))
         return true
     }
 
@@ -94,38 +94,107 @@ final class BrowserWebView: WKWebView {
 }
 
 
-/// The drag as WebKit sees it while it's carrying a picture from another app: the same drag,
-/// except it holds a real file. While hovering, the file is a placeholder (sites only see
-/// "a file is coming"); when you let go it is swapped for the actual picture.
+/// The drag as WebKit sees it while we stand in for a drop from another app: the same drag,
+/// except it carries copies of the files in the browser's own folder. While hovering, the
+/// copies are empty placeholders with the right names (sites only see "files are coming");
+/// when you let go they're filled in. Reading the data follows Chrome's order: real files,
+/// then a picture's "promised file" data, then any picture on the drag, then (last resort)
+/// asking the other app to write its promised file.
 @MainActor
 final class StandInDrag: NSObject, NSDraggingInfo {
     private let original: NSDraggingInfo
     private let pasteboard = NSPasteboard(name: NSPasteboard.Name("beababrowser-drop-\(UUID().uuidString)"))
     private let folder: URL
+    private static let promisedContentType = NSPasteboard.PasteboardType("com.apple.pasteboard.promised-file-content-type")
+    private static let maxBytes = 256 * 1024 * 1024   // same limit as Chrome
 
     init(_ original: NSDraggingInfo) {
         self.original = original
         folder = FileManager.default.temporaryDirectory.appendingPathComponent("drops/\(UUID().uuidString)", isDirectory: true)
         super.init()
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let promised = (original.draggingPasteboard.readObjects(forClasses: [NSFilePromiseReceiver.self], options: nil)
-                        as? [NSFilePromiseReceiver])?.first?.fileNames.first
-        let placeholder = folder.appendingPathComponent(promised ?? "Image.png")
-        FileManager.default.createFile(atPath: placeholder.path, contents: Data())
-        use(placeholder)
+        let names = Self.names(on: original.draggingPasteboard)
+        use(names.enumerated().map { i, name in
+            let url = slot(i).appendingPathComponent(name)
+            FileManager.default.createFile(atPath: url.path, contents: Data())
+            return url
+        })
     }
 
-    func use(_ file: URL) {
+    /// Whether a drag from another app carries anything we can turn into files.
+    static func hasContent(_ pb: NSPasteboard) -> Bool {
+        !fileURLs(pb).isEmpty || pictureData(pb) != nil
+            || pb.canReadObject(forClasses: [NSFilePromiseReceiver.self], options: nil)
+    }
+
+    private static func fileURLs(_ pb: NSPasteboard) -> [URL] {
+        ((pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]) ?? [])
+            .filter { !$0.hasDirectoryPath }
+    }
+
+    /// A picture carried as data: the "promised file" content first (screenshots, Photos),
+    /// then any image type on the drag.
+    private static func pictureData(_ pb: NSPasteboard) -> (data: Data, ext: String)? {
+        let types = pb.types ?? []
+        if types.contains(promisedContentType), let id = pb.string(forType: promisedContentType),
+           types.contains(NSPasteboard.PasteboardType(id)), let data = pb.data(forType: NSPasteboard.PasteboardType(id)) {
+            return (data, UTType(id)?.preferredFilenameExtension ?? "png")
+        }
+        for type in types {
+            if let ut = UTType(type.rawValue), ut.conforms(to: .image), let data = pb.data(forType: type) {
+                // Pages understand PNG/JPEG/GIF/WebP/HEIC; turn anything else (like TIFF) into PNG.
+                if ["png", "jpeg", "gif", "webp", "heic"].contains(ut.preferredFilenameExtension ?? "") {
+                    return (data, ut.preferredFilenameExtension ?? "png")
+                }
+                if let rep = NSBitmapImageRep(data: data), let png = rep.representation(using: .png, properties: [:]) {
+                    return (png, "png")
+                }
+            }
+        }
+        return nil
+    }
+
+    private static func names(on pb: NSPasteboard) -> [String] {
+        let files = fileURLs(pb)
+        if !files.isEmpty { return files.map(\.lastPathComponent) }
+        if let picture = pictureData(pb) { return ["Image.\(picture.ext)"] }
+        let promised = (pb.readObjects(forClasses: [NSFilePromiseReceiver.self], options: nil) as? [NSFilePromiseReceiver])?
+            .first?.fileNames.first
+        return [promised ?? "Image.png"]
+    }
+
+    /// Each file gets its own folder, so two files with the same name don't collide.
+    private func slot(_ i: Int) -> URL {
+        let url = folder.appendingPathComponent("\(i)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+
+    func use(_ files: [URL]) {
         pasteboard.clearContents()
-        pasteboard.writeObjects([file as NSURL])
+        pasteboard.writeObjects(files.map { $0 as NSURL })
     }
 
-    /// Saves the dragged picture as a file: the promised file if the app offers one,
-    /// otherwise the picture itself as a PNG.
-    func collectPicture() -> URL? {
+    /// Copies what's being dragged into the browser's folder and returns the copies.
+    func collectCopies() -> [URL] {
         let pb = original.draggingPasteboard
-        if let promises = pb.readObjects(forClasses: [NSFilePromiseReceiver.self], options: nil) as? [NSFilePromiseReceiver],
-           let promise = promises.first {
+        // 1. Real files (Finder, the desktop, a screenshot): read here, in the browser itself.
+        let files = Self.fileURLs(pb)
+        if !files.isEmpty {
+            return files.enumerated().compactMap { i, file in
+                let size = (try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+                guard size <= Self.maxBytes, let data = try? Data(contentsOf: file) else { return nil }
+                let copy = slot(i).appendingPathComponent(file.lastPathComponent)
+                return (try? data.write(to: copy)) != nil ? copy : nil
+            }
+        }
+        // 2. A picture carried as data.
+        if let picture = Self.pictureData(pb), picture.data.count <= Self.maxBytes {
+            let copy = slot(0).appendingPathComponent("Image.\(picture.ext)")
+            if (try? picture.data.write(to: copy)) != nil { return [copy] }
+        }
+        // 3. Last resort: ask the other app to write its promised file.
+        if let promise = (pb.readObjects(forClasses: [NSFilePromiseReceiver.self], options: nil) as? [NSFilePromiseReceiver])?.first {
             let target = folder.appendingPathComponent("received", isDirectory: true)
             try? FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
             var received: URL?
@@ -136,19 +205,11 @@ final class StandInDrag: NSObject, NSDraggingInfo {
                     finished = true
                 }
             }
-            // Wait (up to 5 seconds) for the other app to write it, keeping the app responsive.
             let deadline = Date().addingTimeInterval(5)
             while !finished && Date() < deadline { RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02)) }
-            if let received { return received }
+            if let received { return [received] }
         }
-        if let image = (pb.readObjects(forClasses: [NSImage.self], options: nil) as? [NSImage])?.first,
-           let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
-           let png = rep.representation(using: .png, properties: [:]) {
-            let url = folder.appendingPathComponent("Image.png")
-            try? png.write(to: url)
-            return url
-        }
-        return nil
+        return []
     }
 
     func cleanUp() { pasteboard.releaseGlobally() }
