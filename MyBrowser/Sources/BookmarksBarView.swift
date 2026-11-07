@@ -97,34 +97,43 @@ final class BookmarksBarView: NSView {
         return button
     }
 
-    private func makeChip(_ group: TabGroup) -> NSButton {
-        let title = group.name.isEmpty ? "\(group.tabs.count) tabs" : group.name
+    /// Colors for a group chip that are easy to read on both light and dark themes:
+    /// a solid group-colored chip with dark text (like the sidebar), a darker chip with
+    /// white text when the group is turned off, and an outline for closed groups.
+    private func chipStyle(_ color: GroupColor, disabled: Bool, closed: Bool) -> (fill: NSColor, text: NSColor, border: NSColor?) {
+        if closed {
+            let ink = Theme.isDark ? color.color : (color.color.blended(withFraction: 0.55, of: .black) ?? color.color)
+            return (.clear, ink, ink)
+        }
+        if disabled { return (color.offColor, NSColor(white: 1, alpha: 0.92), nil) }
+        return (color.color, Theme.sidebarText, nil)
+    }
+
+    private func styledChip(title: String, style: (fill: NSColor, text: NSColor, border: NSColor?), tip: String) -> NSButton {
         let button = NSButton(title: "", target: self, action: #selector(clicked(_:)))
         button.isBordered = false
-        let color = group.isDisabled ? group.color.offColor : group.color.color
         button.attributedTitle = NSAttributedString(string: title, attributes: [
-            .foregroundColor: color, .font: NSFont.systemFont(ofSize: 12, weight: .medium)])
+            .foregroundColor: style.text, .font: NSFont.systemFont(ofSize: 12, weight: .semibold)])
         button.wantsLayer = true
-        button.layer?.backgroundColor = (group.isDisabled ? group.color.offColor.withAlphaComponent(0.35) : group.color.dimColor).cgColor
+        button.layer?.backgroundColor = style.fill.cgColor
+        button.layer?.borderColor = style.border?.cgColor
+        button.layer?.borderWidth = style.border == nil ? 0 : 1.5
         button.layer?.cornerRadius = 6
-        button.toolTip = "Tab group: click to see its tabs"
+        button.toolTip = tip
         return button
     }
 
-    /// A closed group: same color, but dimmer and with an outline instead of a fill.
+    private func makeChip(_ group: TabGroup) -> NSButton {
+        let title = group.name.isEmpty ? "\(group.tabs.count) tabs" : group.name
+        return styledChip(title: title, style: chipStyle(group.color, disabled: group.isDisabled, closed: false),
+                          tip: group.isDisabled ? "Turned-off tab group: click to see its tabs" : "Tab group: click to see its tabs")
+    }
+
+    /// A closed group: an outline in the group's color instead of a fill.
     private func makeClosedChip(_ saved: SavedGroup) -> NSButton {
         let title = saved.name.isEmpty ? "\(saved.tabs.count) tabs" : saved.name
-        let button = NSButton(title: "", target: self, action: #selector(clicked(_:)))
-        button.isBordered = false
-        button.attributedTitle = NSAttributedString(string: title, attributes: [
-            .foregroundColor: saved.color.color.withAlphaComponent(1).blended(withFraction: 0.35, of: Theme.toolbar) ?? saved.color.color,
-            .font: NSFont.systemFont(ofSize: 12, weight: .medium)])
-        button.wantsLayer = true
-        button.layer?.borderColor = saved.color.dimColor.cgColor
-        button.layer?.borderWidth = 1.5
-        button.layer?.cornerRadius = 6
-        button.toolTip = "Closed tab group: click to reopen"
-        return button
+        return styledChip(title: title, style: chipStyle(saved.color, disabled: false, closed: true),
+                          tip: "Closed tab group: click to reopen")
     }
 
     private func closedGroupMenu(_ saved: SavedGroup) -> NSMenu {
