@@ -49,7 +49,8 @@ enum DropTest {
 
     private static let editorPage = """
     <html><body style="margin:0"><div id="box" contenteditable="true" style="position:fixed;inset:0">message</div><script>
-    document.addEventListener('dragover', (e) => { /* refuses drops: no preventDefault */ });
+    // Refuses drops outright, the way Claude's message box does (no green + while hovering).
+    document.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'none'; });
     document.addEventListener('drop', (e) => e.preventDefault());
     document.getElementById('box').addEventListener('paste', (e) => {
       e.preventDefault();
