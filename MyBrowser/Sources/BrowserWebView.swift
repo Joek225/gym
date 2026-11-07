@@ -14,6 +14,32 @@ final class BrowserWebView: WKWebView {
     /// The drag as WebKit sees it while we're standing in for it (nil = normal drag).
     private var stand: StandInDrag?
 
+    // Background tabs stay in the window, hidden behind the one you're looking at. macOS
+    // still offered drops to those hidden pages, so a screenshot dropped on Claude could
+    // land in an Instagram tab you couldn't see. Hidden pages now don't accept drops at all.
+    private var webKitDragTypes: [NSPasteboard.PasteboardType]?
+
+    override var isHidden: Bool {
+        didSet { updateDropRegistration() }
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        updateDropRegistration()
+    }
+
+    private func updateDropRegistration() {
+        if webKitDragTypes == nil, !registeredDraggedTypes.isEmpty { webKitDragTypes = registeredDraggedTypes }
+        if isHidden || window == nil {
+            unregisterDraggedTypes()
+        } else if let types = webKitDragTypes, registeredDraggedTypes.isEmpty {
+            registerForDraggedTypes(types)
+        }
+    }
+
+    /// Only the page you can see takes drops.
+    private var canTakeDrops: Bool { window != nil && !isHiddenOrHasHiddenAncestor }
+
     /// Anything from another app that carries files or a picture. Drags within the page
     /// (selected text, links, images moved inside a site) go straight to WebKit.
     private func needsStandIn(_ info: NSDraggingInfo) -> Bool {
@@ -24,13 +50,15 @@ final class BrowserWebView: WKWebView {
     private var pageOperation: NSDragOperation = []
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard canTakeDrops else { return [] }
         stand?.cleanUp()
         stand = needsStandIn(sender) ? StandInDrag(sender) : nil
         return answer(super.draggingEntered(stand ?? sender))
     }
 
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
-        answer(super.draggingUpdated(stand ?? sender))
+        guard canTakeDrops else { return [] }
+        return answer(super.draggingUpdated(stand ?? sender))
     }
 
     /// Some sites (Claude, for one) turn drops down but accept the same picture pasted.
@@ -53,6 +81,7 @@ final class BrowserWebView: WKWebView {
     }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard canTakeDrops else { return false }
         guard let stand else { return super.performDragOperation(sender) }
         // Now get the real picture (a promised file is only written when you let go).
         let files = stand.collectCopies()

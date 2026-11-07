@@ -34,7 +34,9 @@ enum DropTest {
                                 // Like Claude: the message box refuses drops but accepts pasted pictures.
                                 webView.loadHTMLString(editorPage, baseURL: URL(string: "https://example.com/"))
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                                    runCase("refused drop", webView: webView) {}
+                                    runCase("refused drop", webView: webView) {
+                                        checkHiddenTabs(controller: controller)
+                                    }
                                 }
                             }
                             }
@@ -56,6 +58,23 @@ enum DropTest {
     });
     </script></body></html>
     """
+
+    /// With a second tab open and then left in the background, only the visible page may
+    /// accept drops (a hidden tab catching a screenshot was a real problem).
+    private static func checkHiddenTabs(controller: BrowserWindowController) {
+        guard let first = controller.selectedTab else { return }
+        controller.openInNewTab(URL(string: "https://example.com/?second")!, background: false)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            controller.select(first)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                let pages = (first.webView?.superview?.subviews ?? []).compactMap { $0 as? WKWebView }
+                let visible = pages.filter { !$0.isHidden }
+                let hiddenTaking = pages.filter { $0.isHidden && !$0.registeredDraggedTypes.isEmpty }
+                NSLog("MyBrowser drop registration: pages %d, visible taking drops %d, hidden taking drops %d",
+                      pages.count, visible.filter { !$0.registeredDraggedTypes.isEmpty }.count, hiddenTaking.count)
+            }
+        }
+    }
 
     private static func picture() -> Data {
         let image = NSImage(size: NSSize(width: 40, height: 30), flipped: false) { rect in
