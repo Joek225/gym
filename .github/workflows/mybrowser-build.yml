@@ -43,7 +43,7 @@ jobs:
           grep -q "MyBrowser loaded: https://example.com" app.log && echo "Page loaded (good)"
           grep "drop test" app.log || echo "(no drop test output)"
           for c in "file:" "image:" "file again:" "image again:"; do
-            grep "drop test $c" app.log | grep -q "page got: dropped 1 " && echo "DROP TEST PASSED ($c)" || { echo "!!! DROP TEST FAILED ($c)"; exit 1; }
+            grep "drop test $c" app.log | grep "page got: dropped 1 " | grep -v " 0 image" | grep -q "trusted=true" && echo "DROP TEST PASSED ($c)" || { echo "!!! DROP TEST FAILED ($c)"; exit 1; }
           done
           echo "--- Memory footprint ---"
           perl -e 'alarm 20; exec @ARGV' footprint $PID 2>/dev/null | head -n 8 || true

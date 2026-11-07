@@ -156,8 +156,14 @@ final class NewTabView: SolidView, NSTextFieldDelegate {
         }
     }
 
+    /// True once you've picked a suggestion with the arrow keys or the mouse.
+    private var pickedSuggestion = false
+
     private func go() {
-        if !suggestions.isEmpty, selected < suggestions.count, !list.isHidden {
+        // Unless you picked a suggestion, use exactly what's typed right now. (The list can be a
+        // moment behind fast typing, which used to cut the last letters off a search.)
+        NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(updateNow), object: nil)
+        if pickedSuggestion, !suggestions.isEmpty, selected < suggestions.count, !list.isHidden {
             delegate?.newTabOpen(suggestions[selected].url)
         } else if let url = AddressParser.url(from: field.stringValue) {
             delegate?.newTabOpen(url)
@@ -167,6 +173,7 @@ final class NewTabView: SolidView, NSTextFieldDelegate {
     private func move(_ step: Int) {
         guard !suggestions.isEmpty else { return }
         selected = (selected + step + suggestions.count) % suggestions.count
+        pickedSuggestion = true
         highlight()
     }
 
@@ -222,6 +229,7 @@ final class NewTabView: SolidView, NSTextFieldDelegate {
     private func show(_ items: [Suggestion]) {
         suggestions = Array(items.prefix(8))
         selected = 0
+        pickedSuggestion = false
         rows.arrangedSubviews.forEach { $0.removeFromSuperview() }
         for (i, item) in suggestions.enumerated() {
             let symbol: String
@@ -233,6 +241,7 @@ final class NewTabView: SolidView, NSTextFieldDelegate {
             }
             let row = SuggestionRow(icon: symbol, text: item.text, detail: item.detail) { [weak self] in
                 self?.selected = i
+                self?.pickedSuggestion = true
                 self?.go()
             }
             rows.addArrangedSubview(row)

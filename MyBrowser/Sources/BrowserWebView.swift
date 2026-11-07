@@ -2,102 +2,59 @@ import AppKit
 import WebKit
 import UniformTypeIdentifiers
 
-/// The web view used for every page. It behaves exactly like WebKit's own, except for one
-/// safety net: if WebKit turns down something dropped onto the page — for example the
-/// floating screenshot thumbnail, or a photo from the Photos app, which hand over a
-/// "promised" file instead of a finished one — we collect the file ourselves and hand it
-/// to the page as a normal file drop (the way upload areas like chat boxes expect).
+/// The web view used for every page. It behaves exactly like WebKit's own, except for
+/// pictures dragged in from other apps that aren't saved files yet (the floating screenshot
+/// thumbnail, Photos, Preview, Messages…). WebKit can't hand those to a page, so the browser
+/// saves the picture as a real file first and lets WebKit drop *that* — a genuine drop,
+/// exactly like dragging a file from Finder, which sites such as Claude and Snapchat need.
 final class BrowserWebView: WKWebView {
-    private var handlingDropOurselves = false
+    /// The drag as WebKit sees it while we're standing in for a picture (nil = normal drag).
+    private var stand: StandInDrag?
 
-    /// Anything dropped from another app (Finder files, the floating screenshot thumbnail,
-    /// Photos, Preview, Messages…) is collected by the browser itself and handed to the page
-    /// as a normal file drop. WebKit's own handling accepted some of these and then gave the
-    /// page nothing, and could stop working after the first drop. Drags inside the page, and
-    /// very large files (videos), are still left to WebKit.
-    private func shouldHandleOurselves(_ info: NSDraggingInfo) -> Bool {
-        if info.draggingSource != nil { return false }                        // dragged within the browser
+    /// Pictures from another app that aren't files. Files from Finder and drags within the
+    /// page go straight to WebKit untouched.
+    private func needsStandIn(_ info: NSDraggingInfo) -> Bool {
+        if info.draggingSource != nil { return false }
         let pb = info.draggingPasteboard
-        if let files = pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL],
-           !files.isEmpty {
-            let total = files.reduce(0) { $0 + ((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) }
-            let folders = files.contains { $0.hasDirectoryPath }
-            return total < 80_000_000 && !folders
-        }
+        if pb.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) { return false }
         if pb.canReadObject(forClasses: [NSFilePromiseReceiver.self], options: nil) { return true }
         return pb.canReadObject(forClasses: [NSImage.self], options: nil)
     }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        handlingDropOurselves = shouldHandleOurselves(sender)
-        return handlingDropOurselves ? .copy : super.draggingEntered(sender)
+        stand?.cleanUp()
+        stand = needsStandIn(sender) ? StandInDrag(sender) : nil
+        return super.draggingEntered(stand ?? sender)
     }
 
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
-        handlingDropOurselves ? .copy : super.draggingUpdated(sender)
+        super.draggingUpdated(stand ?? sender)
     }
 
     override func draggingExited(_ sender: NSDraggingInfo?) {
-        if handlingDropOurselves { handlingDropOurselves = false } else { super.draggingExited(sender) }
+        super.draggingExited(stand ?? sender)
+        stand?.cleanUp()
+        stand = nil
     }
 
     override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
-        handlingDropOurselves ? true : super.prepareForDragOperation(sender)
-    }
-
-    override func concludeDragOperation(_ sender: NSDraggingInfo?) {
-        if !handlingDropOurselves { super.concludeDragOperation(sender) }
+        super.prepareForDragOperation(stand ?? sender)
     }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
-        guard handlingDropOurselves else { return super.performDragOperation(sender) }
-        DispatchQueue.main.async { [weak self] in self?.handlingDropOurselves = false }
-        let point = convert(sender.draggingLocation, from: nil)
-        let pb = sender.draggingPasteboard
+        guard let stand else { return super.performDragOperation(sender) }
+        // Now get the real picture (a promised file is only written when you let go).
+        guard let file = stand.collectPicture() else { return false }
+        stand.use(file)
+        if super.performDragOperation(stand) { return true }
+        // WebKit said no: hand the page the file another way.
+        deliver(files: [file], at: convert(sender.draggingLocation, from: nil))
+        return true
+    }
 
-        // 1. Real files (Finder, the desktop, a saved screenshot).
-        if let files = pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL],
-           !files.isEmpty {
-            deliver(files: files, at: point)
-            return true
-        }
-
-        // 2. Promised files (screenshot thumbnail, Photos): ask for them to be written into a temporary folder.
-        if let promises = pb.readObjects(forClasses: [NSFilePromiseReceiver.self], options: nil) as? [NSFilePromiseReceiver],
-           !promises.isEmpty {
-            let folder = FileManager.default.temporaryDirectory.appendingPathComponent("drops-\(UUID().uuidString)", isDirectory: true)
-            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            let queue = OperationQueue()
-            var collected: [URL] = []
-            let group = DispatchGroup()
-            for promise in promises {
-                // Some apps don't say how many files they'll write, so count at least one,
-                // and ignore any extra "done" calls (otherwise the drop silently never arrives).
-                var remaining = max(1, promise.fileNames.count)
-                group.enter()
-                promise.receivePromisedFiles(atDestination: folder, options: [:], operationQueue: queue) { url, error in
-                    DispatchQueue.main.async {
-                        if error == nil { collected.append(url) }
-                        guard remaining > 0 else { return }
-                        remaining -= 1
-                        if remaining == 0 { group.leave() }
-                    }
-                }
-            }
-            group.notify(queue: .main) { [weak self] in self?.deliver(files: collected, at: point) }
-            return true
-        }
-
-        // 3. A plain picture on the clipboard of the drag: save it as a PNG.
-        if let image = (pb.readObjects(forClasses: [NSImage.self], options: nil) as? [NSImage])?.first,
-           let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
-           let png = rep.representation(using: .png, properties: [:]) {
-            let url = FileManager.default.temporaryDirectory.appendingPathComponent("Image \(UUID().uuidString.prefix(6)).png")
-            try? png.write(to: url)
-            deliver(files: [url], at: point)
-            return true
-        }
-        return false
+    override func concludeDragOperation(_ sender: NSDraggingInfo?) {
+        super.concludeDragOperation(stand ?? sender)
+        stand = nil   // the temporary file stays until the app quits, so the page can finish reading it
     }
 
     /// Gives the files to the page as a real drop at the spot where you let go.
@@ -134,4 +91,94 @@ final class BrowserWebView: WKWebView {
         """
         callAsyncJavaScript(js, arguments: ["files": items, "x": x, "y": y], in: nil, in: .page, completionHandler: nil)
     }
+}
+
+
+/// The drag as WebKit sees it while it's carrying a picture from another app: the same drag,
+/// except it holds a real file. While hovering, the file is a placeholder (sites only see
+/// "a file is coming"); when you let go it is swapped for the actual picture.
+@MainActor
+final class StandInDrag: NSObject, NSDraggingInfo {
+    private let original: NSDraggingInfo
+    private let pasteboard = NSPasteboard(name: NSPasteboard.Name("beababrowser-drop-\(UUID().uuidString)"))
+    private let folder: URL
+
+    init(_ original: NSDraggingInfo) {
+        self.original = original
+        folder = FileManager.default.temporaryDirectory.appendingPathComponent("drops/\(UUID().uuidString)", isDirectory: true)
+        super.init()
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let promised = (original.draggingPasteboard.readObjects(forClasses: [NSFilePromiseReceiver.self], options: nil)
+                        as? [NSFilePromiseReceiver])?.first?.fileNames.first
+        let placeholder = folder.appendingPathComponent(promised ?? "Image.png")
+        FileManager.default.createFile(atPath: placeholder.path, contents: Data())
+        use(placeholder)
+    }
+
+    func use(_ file: URL) {
+        pasteboard.clearContents()
+        pasteboard.writeObjects([file as NSURL])
+    }
+
+    /// Saves the dragged picture as a file: the promised file if the app offers one,
+    /// otherwise the picture itself as a PNG.
+    func collectPicture() -> URL? {
+        let pb = original.draggingPasteboard
+        if let promises = pb.readObjects(forClasses: [NSFilePromiseReceiver.self], options: nil) as? [NSFilePromiseReceiver],
+           let promise = promises.first {
+            let target = folder.appendingPathComponent("received", isDirectory: true)
+            try? FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+            var received: URL?
+            var finished = false
+            promise.receivePromisedFiles(atDestination: target, options: [:], operationQueue: OperationQueue()) { url, error in
+                DispatchQueue.main.async {
+                    if error == nil, received == nil { received = url }
+                    finished = true
+                }
+            }
+            // Wait (up to 5 seconds) for the other app to write it, keeping the app responsive.
+            let deadline = Date().addingTimeInterval(5)
+            while !finished && Date() < deadline { RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02)) }
+            if let received { return received }
+        }
+        if let image = (pb.readObjects(forClasses: [NSImage.self], options: nil) as? [NSImage])?.first,
+           let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
+           let png = rep.representation(using: .png, properties: [:]) {
+            let url = folder.appendingPathComponent("Image.png")
+            try? png.write(to: url)
+            return url
+        }
+        return nil
+    }
+
+    func cleanUp() { pasteboard.releaseGlobally() }
+
+    var draggingDestinationWindow: NSWindow? { original.draggingDestinationWindow }
+    var draggingSourceOperationMask: NSDragOperation { original.draggingSourceOperationMask.union(.copy) }
+    var draggingLocation: NSPoint { original.draggingLocation }
+    var draggedImageLocation: NSPoint { original.draggedImageLocation }
+    var draggedImage: NSImage? { original.draggedImage }
+    var draggingPasteboard: NSPasteboard { pasteboard }
+    var draggingSource: Any? { nil }
+    var draggingSequenceNumber: Int { original.draggingSequenceNumber }
+    func slideDraggedImage(to screenPoint: NSPoint) { original.slideDraggedImage(to: screenPoint) }
+    var draggingFormation: NSDraggingFormation {
+        get { original.draggingFormation }
+        set { original.draggingFormation = newValue }
+    }
+    var animatesToDestination: Bool {
+        get { original.animatesToDestination }
+        set { original.animatesToDestination = newValue }
+    }
+    var numberOfValidItemsForDrop: Int {
+        get { original.numberOfValidItemsForDrop }
+        set { original.numberOfValidItemsForDrop = newValue }
+    }
+    func enumerateDraggingItems(options enumOpts: NSDraggingItemEnumerationOptions = [], for view: NSView?,
+                                classes classArray: [AnyClass], searchOptions: [NSPasteboard.ReadingOptionKey: Any] = [:],
+                                using block: (NSDraggingItem, Int, UnsafeMutablePointer<ObjCBool>) -> Void) {
+        original.enumerateDraggingItems(options: enumOpts, for: view, classes: classArray, searchOptions: searchOptions, using: block)
+    }
+    var springLoadingHighlight: NSSpringLoadingHighlight { original.springLoadingHighlight }
+    func resetSpringLoading() { original.resetSpringLoading() }
 }

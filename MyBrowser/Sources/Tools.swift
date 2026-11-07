@@ -139,6 +139,11 @@ final class ImageDropView: SolidView {
         super.init(color: Theme.toolbar)
         cornerRadius = 12
         preview.imageScaling = .scaleProportionallyDown
+        // A big picture must never push the box (and the window) wider or taller: it shrinks to fit.
+        for orientation in [NSLayoutConstraint.Orientation.horizontal, .vertical] {
+            preview.setContentCompressionResistancePriority(.init(1), for: orientation)
+            preview.setContentHuggingPriority(.init(1), for: orientation)
+        }
         preview.unregisterDraggedTypes()
         hint.textColor = Theme.mutedText
         hint.font = .systemFont(ofSize: 13)

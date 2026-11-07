@@ -397,7 +397,30 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
             window?.performClose(nil)   // closing the last tab closes the window, like Chrome
             return
         }
-        if wasSelected { select(remaining[min(index, remaining.count - 1)]) }
+        guard wasSelected else { return }
+        if let next = nearestTabInView(to: index, in: remaining) {
+            select(next)
+        } else {
+            // Only tabs inside folded or turned-off groups are left: don't open one of those.
+            newTab(nil)
+        }
+    }
+
+    /// Tabs you can see without opening a group: tabs outside groups (pinned ones too)
+    /// and tabs in groups that are open.
+    private func isInView(_ tab: Tab) -> Bool {
+        guard let group = tab.group else { return true }
+        return !group.isDisabled && !group.isCollapsed
+    }
+
+    /// The tab in view closest to a position in the list (the one after it first, like Chrome).
+    private func nearestTabInView(to index: Int, in tabs: [Tab]) -> Tab? {
+        let candidates = tabs.enumerated().filter { isInView($0.element) }
+        return candidates.min { a, b in
+            let da = a.offset >= index ? a.offset - index : index - a.offset - 1
+            let db = b.offset >= index ? b.offset - index : index - b.offset - 1
+            return da != db ? da < db : a.offset > b.offset
+        }?.element
     }
 
     // MARK: Unloading idle tabs
@@ -447,8 +470,9 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     /// or to a new tab if there's nothing else.
     private func leave(_ group: TabGroup) {
         guard store.selected?.group === group else { return }
-        let outside = store.allTabs.filter { $0.group !== group }
-        if let next = outside.first(where: { !($0.group?.isCollapsed ?? false) }) ?? outside.first {
+        let all = store.allTabs
+        let index = all.firstIndex { $0 === store.selected } ?? 0
+        if let next = nearestTabInView(to: index, in: all.map { $0.group === group ? nil : $0 }.compactMap { $0 }) {
             select(next)
         } else {
             let blank = Tab(url: nil)
@@ -598,8 +622,27 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         select(tab)
     }
 
+    private var pinnedCloseAsked: (tab: Tab, at: Date)?
+
     @objc func closeTab(_ sender: Any?) {
-        if let tab = store.selected { close(tab) }
+        guard let tab = store.selected else { return }
+        // A pinned tab outside a group needs ⌘W twice (so it isn't closed by accident).
+        if tab.pinned, tab.group == nil {
+            if let asked = pinnedCloseAsked, asked.tab === tab, Date().timeIntervalSince(asked.at) < 2 {
+                pinnedCloseAsked = nil
+            } else {
+                pinnedCloseAsked = (tab, Date())
+                toolbar.flash("Press ⌘W again to close this pinned tab")
+                return
+            }
+        }
+        close(tab)
+    }
+
+    /// Clicking a group on the top bar: opens it on the tab you were last on.
+    @objc func openGroupFromBar(_ sender: NSMenuItem) {
+        guard let group = sender.representedObject as? TabGroup else { return }
+        sidebarEnableGroup(group)
     }
 
     @objc func reopenClosedTab(_ sender: Any?) {
@@ -620,14 +663,15 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     @objc func selectPreviousTab(_ sender: Any?) { selectTab(offset: -1) }
 
     private func selectTab(offset: Int) {
-        let tabs = store.allTabs
+        // Skips tabs inside folded or turned-off groups.
+        let tabs = store.allTabs.filter { isInView($0) || $0 === store.selected }
         guard let current = store.selected, let i = tabs.firstIndex(of: current), tabs.count > 1 else { return }
         select(tabs[(i + offset + tabs.count) % tabs.count])
     }
 
     /// ⌘1–⌘8 pick that tab; ⌘9 picks the last one.
     @objc func selectTabNumber(_ sender: NSMenuItem) {
-        let tabs = store.allTabs
+        let tabs = store.allTabs.filter { isInView($0) }   // never opens a folded or turned-off group
         if sender.tag == 9, let last = tabs.last { select(last); return }
         if sender.tag - 1 < tabs.count { select(tabs[sender.tag - 1]) }
     }
@@ -645,8 +689,12 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         if let tab = store.selected { store.setPinned(tab, !tab.pinned) }
     }
 
-    /// The group of the tab you're on (or the first group).
-    private var currentGroup: TabGroup? { store.selected?.group ?? store.groups.first }
+    /// The group of the tab you're on; if you're not in one, the group that's open
+    /// (the one you used last, if several are open).
+    private var currentGroup: TabGroup? {
+        if let group = store.selected?.group { return group }
+        return store.groups.filter { !$0.isDisabled && !$0.isCollapsed }.max { $0.lastActive < $1.lastActive }
+    }
 
     @objc func newTabInCurrentGroup(_ sender: Any?) {
         guard let group = store.selected?.group else { NSSound.beep(); return }
@@ -1219,6 +1267,10 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
 
     /// The puzzle-piece button: installed extensions and ways to add more.
     @objc func showExtensionsMenu(_ sender: NSButton) {
+        if #available(macOS 15.4, *) {
+            ExtensionsPanel.show(from: sender, controller: self)
+            return
+        }
         let menu = NSMenu()
         menu.addItem(withTitle: "Import from Chrome…", action: #selector(importFromChrome(_:)), keyEquivalent: "")
         menu.addItem(withTitle: "Add Extension from Folder…", action: #selector(addExtensionFolder(_:)), keyEquivalent: "")

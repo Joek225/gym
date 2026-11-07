@@ -7,14 +7,18 @@ import WebKit
 enum DropTest {
     static func run(in controller: BrowserWindowController) {
         guard let webView = controller.selectedTab?.webView else { NSLog("MyBrowser drop test: no page"); return }
+        // Like Claude/Snapchat: the drop area only appears once a drag arrives, and only
+        // a real (trusted) drop counts.
         let html = """
-        <html><body style="margin:0"><div id="z" style="position:fixed;inset:0">drop here</div><script>
+        <html><body style="margin:0;height:100vh">drop here<div id="z" style="position:fixed;inset:0;display:none"></div><script>
         const z = document.getElementById('z');
+        document.addEventListener('dragenter', () => setTimeout(() => { z.style.display = 'block'; }, 50));
         z.addEventListener('dragover', (e) => e.preventDefault());
         z.addEventListener('drop', (e) => {
           e.preventDefault();
+          z.style.display = 'none';
           const f = e.dataTransfer.files;
-          document.title = 'dropped ' + f.length + (f[0] ? ' ' + f[0].name + ' ' + f[0].size + ' ' + f[0].type : '');
+          document.title = 'dropped ' + f.length + (f[0] ? ' ' + f[0].name + ' ' + f[0].size + ' ' + f[0].type : '') + ' trusted=' + e.isTrusted;
         });
         </script></body></html>
         """

@@ -146,15 +146,19 @@ final class BookmarksBarView: NSView {
 
     private func makeChip(_ group: TabGroup) -> NSButton {
         let title = group.name.isEmpty ? "\(group.tabs.count) tabs" : group.name
-        return styledChip(title: title, style: chipStyle(group.color, disabled: group.isDisabled, closed: false),
-                          tip: group.isDisabled ? "Turned-off tab group: click to see its tabs" : "Tab group: click to see its tabs")
+        let chip = styledChip(title: title, style: chipStyle(group.color, disabled: group.isDisabled, closed: false),
+                              tip: "Click to open this group. Right-click to see its tabs.")
+        chip.menu = groupMenu(group)
+        return chip
     }
 
     /// A closed group: an outline in the group's color instead of a fill.
     private func makeClosedChip(_ saved: SavedGroup) -> NSButton {
         let title = saved.name.isEmpty ? "\(saved.tabs.count) tabs" : saved.name
-        return styledChip(title: title, style: chipStyle(saved.color, disabled: false, closed: true),
-                          tip: "Closed tab group: click to reopen")
+        let chip = styledChip(title: title, style: chipStyle(saved.color, disabled: false, closed: true),
+                              tip: "Closed tab group: click to reopen. Right-click for more.")
+        chip.menu = closedGroupMenu(saved)
+        return chip
     }
 
     private func closedGroupMenu(_ saved: SavedGroup) -> NSMenu {
@@ -190,9 +194,15 @@ final class BookmarksBarView: NSView {
                 open(node)
             }
         case .group(let group):
-            groupMenu(group).popUp(positioning: nil, at: NSPoint(x: 0, y: -4), in: sender)
+            // Click = open the group. Already open = nothing happens. (Right-click lists its tabs.)
+            guard group.isDisabled || group.isCollapsed else { return }
+            let item = NSMenuItem()
+            item.representedObject = group
+            NSApp.sendAction(#selector(BrowserWindowController.openGroupFromBar(_:)), to: nil, from: item)
         case .closedGroup(let saved):
-            closedGroupMenu(saved).popUp(positioning: nil, at: NSPoint(x: 0, y: -4), in: sender)
+            let item = NSMenuItem()
+            item.representedObject = saved.id
+            NSApp.sendAction(#selector(BrowserWindowController.reopenSavedGroup(_:)), to: nil, from: item)
         }
     }
 

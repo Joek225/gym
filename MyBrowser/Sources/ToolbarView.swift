@@ -197,6 +197,15 @@ final class ToolbarView: NSView {
 
     func extensionButton(id: String) -> NSView? { extensionButtons[id] }
 
+    /// Shows a short message in the address bar for a moment.
+    func flash(_ message: String) {
+        addressField.stringValue = message
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            guard let self, self.addressField.stringValue == message else { return }
+            self.showAddress(self.shownURL)
+        }
+    }
+
     @objc private func addressClicked(_ sender: NSClickGestureRecognizer) {
         guard let url = shownURL else { return }
         NSPasteboard.general.clearContents()
@@ -211,7 +220,7 @@ final class ToolbarView: NSView {
     }
 
     /// Chrome's three vertical dots, drawn as a template image (it takes the icon color).
-    private static func verticalDots() -> NSImage {
+    static func verticalDots() -> NSImage {
         let image = NSImage(size: NSSize(width: 16, height: 16), flipped: false) { rect in
             NSColor.black.setFill()
             for y in [3.0, 8.0, 13.0] {
