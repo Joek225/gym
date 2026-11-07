@@ -68,6 +68,24 @@ final class DownloadManager: NSObject, WKDownloadDelegate {
                 return
             }
         }
+        // If macOS is blocking the Downloads folder (permission turned off or reset), ask
+        // where to save instead of failing with "cannot create file".
+        if !Self.canWriteToDownloads() {
+            let panel = NSSavePanel()
+            panel.nameFieldStringValue = suggestedFilename
+            panel.message = "beababrowser isn't allowed to save in your Downloads folder right now. Choose where to save it. (To fix: System Settings → Privacy & Security → Files & Folders → beababrowser → Downloads Folder.)"
+            if panel.runModal() == .OK, let chosen = panel.url {
+                item(download)?.name = chosen.lastPathComponent
+                item(download)?.destination = chosen
+                changed()
+                completionHandler(chosen)
+            } else {
+                items.removeAll { $0.download === download }
+                changed()
+                completionHandler(nil)
+            }
+            return
+        }
         // "photo.jpg", then "photo (1).jpg", "photo (2).jpg"… so nothing is overwritten.
         let base = (suggestedFilename as NSString).deletingPathExtension
         let ext = (suggestedFilename as NSString).pathExtension
@@ -81,6 +99,14 @@ final class DownloadManager: NSObject, WKDownloadDelegate {
         item(download)?.destination = url
         changed()
         completionHandler(url)
+    }
+
+    /// Tries to create (and remove) a small file in Downloads.
+    static func canWriteToDownloads() -> Bool {
+        let probe = folder.appendingPathComponent(".beababrowser-\(UUID().uuidString)")
+        guard FileManager.default.createFile(atPath: probe.path, contents: Data()) else { return false }
+        try? FileManager.default.removeItem(at: probe)
+        return true
     }
 
     func downloadDidFinish(_ download: WKDownload) {
