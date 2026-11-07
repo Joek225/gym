@@ -26,6 +26,11 @@ enum WebKitEnvironment {
         config.preferences.isFraudulentWebsiteWarningEnabled = true
         config.upgradeKnownHostsToHTTPS = true
         config.preferences.javaScriptCanOpenWindowsAutomatically = false
+        // WebKit's old rule "Delete key = go back a page" (Safari and Chrome turned it off long
+        // ago): it threw you out of word games and forms whenever a page used Delete itself.
+        if config.preferences.responds(to: NSSelectorFromString("_setBackspaceKeyNavigationEnabled:")) {
+            config.preferences.setValue(false, forKey: "backspaceKeyNavigationEnabled")
+        }
         config.defaultWebpagePreferences.preferredContentMode = .desktop
         // Identify like Safari so sites (Google etc.) serve their full versions.
         config.applicationNameForUserAgent = "Version/18.5 Safari/605.1.15"

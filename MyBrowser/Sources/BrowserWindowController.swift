@@ -49,7 +49,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         self.store = store
         self.sidebar = SidebarController(store: store)
 
-        let window = NSWindow(
+        let window = BrowserWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1280, height: 820),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered, defer: false)
@@ -1632,5 +1632,16 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         } else {
             completion(alert.runModal())
         }
+    }
+}
+
+
+/// The browser window. Pages that read your typing themselves (games like Minute Cryptic,
+/// editors) often don't mark keys as handled, and macOS then plays its "nothing happened"
+/// sound on every letter. Browsers stay quiet in that case, so this one does too.
+final class BrowserWindow: NSWindow {
+    override func noResponder(for eventSelector: Selector) {
+        if eventSelector == #selector(NSResponder.keyDown(_:)) { return }
+        super.noResponder(for: eventSelector)
     }
 }
