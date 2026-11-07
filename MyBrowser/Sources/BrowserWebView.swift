@@ -91,8 +91,10 @@ final class BrowserWebView: WKWebView {
         // The page answers "do you want this?" a moment after the mouse moves. If you let go
         // quickly, its answer may not be in yet: wait for it (up to about a second) instead of
         // treating the drop as refused. This made drops fail now and then.
-        let deadline = Date().addingTimeInterval(1.2)
-        while pageOperation.isEmpty && Date() < deadline {
+        // Always give the page a moment (many chat sites only show their drop area once a drag
+        // has arrived), and up to about a second if it hasn't said yes yet.
+        let start = Date()
+        while Date().timeIntervalSince(start) < 0.25 || (pageOperation.isEmpty && Date().timeIntervalSince(start) < 1.2) {
             RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.03))
             pageOperation = super.draggingUpdated(stand)
         }
@@ -210,6 +212,10 @@ final class BrowserWebView: WKWebView {
 /// asking the other app to write its promised file.
 @MainActor
 final class StandInDrag: NSObject, NSDraggingInfo {
+    /// Where dropped copies are kept. Pages are never allowed to open these themselves
+    /// (a drop that misses the site's drop area would otherwise replace the page with the picture).
+    static let dropsFolder = FileManager.default.temporaryDirectory.appendingPathComponent("drops", isDirectory: true)
+
     private let original: NSDraggingInfo
     private let pasteboard = NSPasteboard(name: NSPasteboard.Name("beababrowser-drop-\(UUID().uuidString)"))
     private let folder: URL
@@ -218,7 +224,7 @@ final class StandInDrag: NSObject, NSDraggingInfo {
 
     init(_ original: NSDraggingInfo) {
         self.original = original
-        folder = FileManager.default.temporaryDirectory.appendingPathComponent("drops/\(UUID().uuidString)", isDirectory: true)
+        folder = Self.dropsFolder.appendingPathComponent(UUID().uuidString, isDirectory: true)
         super.init()
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let names = Self.names(on: original.draggingPasteboard)

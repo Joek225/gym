@@ -1362,6 +1362,12 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
             decisionHandler(SitePermissions.get(.downloads, host) == .block ? .cancel : .download)
             return
         }
+        // A dropped picture that missed the site's drop area: don't replace the page with it.
+        if let url = navigationAction.request.url, url.isFileURL,
+           url.resolvingSymlinksInPath().path.hasPrefix(StandInDrag.dropsFolder.resolvingSymlinksInPath().path) {
+            decisionHandler(.cancel)
+            return
+        }
         // Links that open another app (zoom:, mailto:, slack:, …): ask first, like Chrome.
         if let url = navigationAction.request.url, let scheme = url.scheme?.lowercased(),
            !["http", "https", "about", "blob", "data", "file", "webkit-extension", "javascript"].contains(scheme) {
