@@ -69,7 +69,7 @@ final class HistoryStore: NSObject {
 
     private func scheduleSave() {
         NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(save), object: nil)
-        perform(#selector(save), with: nil, afterDelay: 3)
+        perform(#selector(save), with: nil, afterDelay: 20)   // also saved when you quit
     }
 
     @objc func save() {

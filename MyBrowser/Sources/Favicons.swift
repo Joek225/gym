@@ -21,6 +21,7 @@ enum Favicons {
 
     static func fetch(for tab: Tab, in webView: WKWebView, completion: @escaping () -> Void) {
         guard let pageURL = webView.url, let host = pageURL.host else { return }
+        if tab.faviconHost == host, tab.favicon != nil { return }   // already have this site's icon
         if let hit = cache[host] {
             tab.favicon = hit.image
             tab.faviconPNG = hit.png

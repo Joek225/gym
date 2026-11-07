@@ -14,7 +14,7 @@ final class SessionSaver: NSObject {
 
     func scheduleSave() {
         NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(saveNow), object: nil)
-        perform(#selector(saveNow), with: nil, afterDelay: 1)
+        perform(#selector(saveNow), with: nil, afterDelay: 4)   // batches many small changes into one write
     }
 
     @objc func saveNow() {

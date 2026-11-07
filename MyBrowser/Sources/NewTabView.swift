@@ -119,7 +119,13 @@ final class NewTabView: SolidView, NSTextFieldDelegate {
 
     // MARK: Typing
 
-    func controlTextDidChange(_ obj: Notification) { update() }
+    func controlTextDidChange(_ obj: Notification) {
+        // Ask for suggestions once you pause typing (not on every key press).
+        NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(updateNow), object: nil)
+        perform(#selector(updateNow), with: nil, afterDelay: 0.15)
+    }
+
+    @objc private func updateNow() { update() }
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
         switch selector {

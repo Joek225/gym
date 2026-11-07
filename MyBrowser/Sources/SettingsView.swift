@@ -190,6 +190,7 @@ final class SettingsView: NSView {
 final class MemoryReadout {
     static let didToggle = Notification.Name("MyBrowserMemoryReadoutToggled")
     private var timer: Timer?
+    private var refreshPending = false
     private let label: NSTextField
     private let pages: () -> [WKWebView]
 
@@ -204,10 +205,21 @@ final class MemoryReadout {
         label.isHidden = !Preferences.showsMemory
         guard Preferences.showsMemory else { return }
         refresh()
-        timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+        // Every 30 seconds (and when you switch tabs) is plenty, and costs almost nothing.
+        timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.refresh() }
         }
-        timer?.tolerance = 2
+        timer?.tolerance = 10
+    }
+
+    /// Updates the number a couple of seconds after a tab change (once the page has loaded).
+    func refreshSoon() {
+        guard Preferences.showsMemory, !refreshPending else { return }
+        refreshPending = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            self?.refreshPending = false
+            self?.refresh()
+        }
     }
 
     private func refresh() {

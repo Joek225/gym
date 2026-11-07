@@ -55,7 +55,6 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         window.isOpaque = true
         window.appearance = Theme.appearance
         window.backgroundColor = Theme.sidebar
-        window.acceptsMouseMovedEvents = true
         window.title = isPrivate ? "Private Window" : "beababrowser"
         window.tabbingMode = .disallowed        // tabs live in our sidebar instead
         window.minSize = NSSize(width: 600, height: 360)
@@ -260,6 +259,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         updateToolbar()
         store.scheduleSave()
         if previous !== tab { ExtensionEvents.tabActivated(tab, previous: previous) }
+        memoryReadout?.refreshSoon()
         refreshExtensionButtons()
         if isBlank(tab) {
             newTabPage.reset()
@@ -379,10 +379,10 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     // MARK: Unloading idle tabs
 
     private func startUnloadTimer() {
-        unloadTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
+        unloadTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.unloadIdleTabs() }
         }
-        unloadTimer?.tolerance = 10
+        unloadTimer?.tolerance = 20
     }
 
     /// Any mouse movement, click or key press (called for every window).
@@ -393,6 +393,8 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
 
     private func setDimmed(_ dimmed: Bool) {
         dimmer.isHidden = !dimmed
+        // Mouse movement is only tracked while blacked out (to wake up); otherwise it costs energy.
+        window?.acceptsMouseMovedEvents = dimmed
         for kind in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
             window?.standardWindowButton(kind)?.isHidden = dimmed
         }
@@ -458,6 +460,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
                 guard let self, let tab, state != .playing, tab !== self.store.selected else { return }
                 tab.unload()
                 self.sidebar.refresh(tab)
+                self.turnOffIfAllUnloaded(tab.group)
             }
         }
     }
@@ -980,6 +983,16 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         if tab === store.selected { return }   // the tab you're looking at stays loaded
         tab.unload()
         sidebar.refresh(tab)
+        turnOffIfAllUnloaded(tab.group)
+    }
+
+    /// When every tab in a group has been unloaded, the group turns off by itself.
+    private func turnOffIfAllUnloaded(_ group: TabGroup?) {
+        guard let group, !group.isDisabled, store.selected?.group !== group,
+              group.tabs.allSatisfy({ !$0.isLoaded }) else { return }
+        group.isDisabled = true
+        group.isCollapsed = true
+        store.changed()
     }
 
     func sidebarNewTab(in group: TabGroup?) {
