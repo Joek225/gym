@@ -14,13 +14,11 @@
 	<!-- Allowed to save into your Downloads folder (used in stage 5). -->
 	<key>com.apple.security.files.downloads.read-write</key>
 	<true/>
-	<!-- Websites can use the camera, microphone and location — only if you allow them
+	<!-- Websites can use the camera and microphone — only if you allow them
 	     (per site, in the site info panel next to the address). -->
 	<key>com.apple.security.device.camera</key>
 	<true/>
 	<key>com.apple.security.device.audio-input</key>
-	<true/>
-	<key>com.apple.security.personal-information.location</key>
 	<true/>
 	<!-- Allowed to READ Chrome's folder (never change it), so "Import from Chrome"
 	     can find your bookmarks, extensions and tab groups in one click. -->

@@ -9,10 +9,6 @@
 	<string>A website you allowed wants to use your microphone.</string>
 	<key>LSFileQuarantineEnabled</key>
 	<true/>
-	<key>NSLocationUsageDescription</key>
-	<string>A website you allowed wants to know your location.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>A website you allowed wants to know your location.</string>
 	<!-- Lets macOS offer beababrowser as your default web browser. -->
 	<key>CFBundleURLTypes</key>
 	<array>

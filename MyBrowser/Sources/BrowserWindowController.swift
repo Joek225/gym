@@ -20,7 +20,6 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     private var sleptAt = Date.distantPast
     /// Becomes true once the window has appeared (see `showWindow`).
     private var isOnScreen = false
-    private var memoryReadout: MemoryReadout?
 
     let store: TabStore
     private let sidebar: SidebarController
@@ -204,13 +203,6 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         toolbar.menuButton.action = #selector(showMainMenu(_:))
         toolbar.siteButton.target = self
         toolbar.siteButton.action = #selector(showSiteInfo(_:))
-        memoryReadout = MemoryReadout(label: toolbar.memoryLabel) {
-            AppDelegate.shared.controllers.flatMap { $0.store.allTabs.compactMap(\.webView) }
-        }
-        memoryReadout?.update()
-        NotificationCenter.default.addObserver(forName: MemoryReadout.didToggle, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.memoryReadout?.update() }
-        }
         NotificationCenter.default.addObserver(forName: DownloadManager.didChange, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { _ = self }
         }
@@ -282,7 +274,6 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         updateToolbar()
         store.scheduleSave()
         if previous !== tab { ExtensionEvents.tabActivated(tab, previous: previous) }
-        memoryReadout?.refreshSoon()
         refreshExtensionButtons()
         if isBlank(tab) {
             newTabPage.reset()
@@ -552,15 +543,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         window?.title = tab.displayTitle
         if let message = tab.errorMessage {
             errorView.show(message: message, address: tab.failedURL?.host ?? "")
-            if let insecure = Security.insecureFallback(for: tab.failedURL) {
-                errorView.offer("Continue to insecure site") { [weak self, weak tab] in
-                    guard let self, let tab, let host = insecure.host else { return }
-                    Security.allowInsecure(host)
-                    self.load(insecure, in: tab)
-                }
-            } else {
-                errorView.offer(nil, action: nil)
-            }
+            errorView.offer(nil, action: nil)
         } else {
             errorView.isHidden = true
         }
@@ -1375,13 +1358,6 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
             confirmExternalApp(url, from: webView.url?.host)
             return
         }
-        // HTTPS-first: always try the secure version of a site before an insecure one.
-        if navigationAction.targetFrame?.isMainFrame ?? true, let url = navigationAction.request.url,
-           let secure = Security.secureVersion(of: url) {
-            decisionHandler(.cancel)
-            webView.load(URLRequest(url: secure))
-            return
-        }
         // ⌘-click or middle-click a link: open it in a new tab (⇧⌘-click switches to it).
         if navigationAction.navigationType == .linkActivated,
            navigationAction.modifierFlags.contains(.command) || navigationAction.buttonNumber == 2,
@@ -1497,9 +1473,6 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         guard let tab = store.tab(for: webView) else { return }
         tab.failedURL = e.userInfo[NSURLErrorFailingURLErrorKey] as? URL ?? tab.failedURL
         tab.errorMessage = e.localizedDescription
-        if Security.insecureFallback(for: tab.failedURL) != nil {
-            tab.errorMessage = "This site doesn't support a secure (encrypted) connection, so it wasn't opened.\nOnly continue if you trust it — anyone on your network could see or change what you send."
-        }
         if logLoads { NSLog("MyBrowser failed: %@", e.localizedDescription) }
         if tab === store.selected { updateToolbar() }
     }
@@ -1550,13 +1523,6 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         default: kinds = [.camera, .microphone]
         }
         askPermission(kinds, host: origin.host, decisionHandler: decisionHandler)
-    }
-
-    /// A site wants your location (WebKit asks apps through this hidden hook).
-    @objc(_webView:requestGeolocationPermissionForOrigin:initiatedByFrame:decisionHandler:)
-    func webViewRequestsLocation(_ webView: WKWebView, origin: WKSecurityOrigin, frame: WKFrameInfo,
-                                 decisionHandler: @escaping (WKPermissionDecision) -> Void) {
-        askPermission([.location], host: origin.host, decisionHandler: decisionHandler)
     }
 
     private func askPermission(_ kinds: [PermissionKind], host: String,

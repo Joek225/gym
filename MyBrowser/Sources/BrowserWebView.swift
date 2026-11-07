@@ -105,10 +105,7 @@ final class BrowserWebView: WKWebView {
             return true
         }
         _ = super.prepareForDragOperation(stand)
-        if super.performDragOperation(stand) { return true }
-        // WebKit said no: hand the page the files another way.
-        deliver(files: files, at: point)
-        return true
+        return super.performDragOperation(stand)
     }
 
     override func concludeDragOperation(_ sender: NSDraggingInfo?) {
@@ -172,43 +169,7 @@ final class BrowserWebView: WKWebView {
             return copy
         }
     }
-
-    /// Gives the files to the page as a real drop at the spot where you let go.
-    private func deliver(files: [URL], at point: NSPoint) {
-        let items: [[String: String]] = files.compactMap { url in
-            guard let data = try? Data(contentsOf: url) else { return nil }
-            let type = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
-            return ["name": url.lastPathComponent, "type": type, "data": data.base64EncodedString()]
-        }
-        guard !items.isEmpty else { return }
-        let scale = max(pageZoom * magnification, 0.01)
-        let x = point.x / scale
-        let y = (isFlipped ? point.y : bounds.height - point.y) / scale
-        let js = """
-        const dt = new DataTransfer();
-        for (const f of files) {
-          const bin = atob(f.data); const bytes = new Uint8Array(bin.length);
-          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-          dt.items.add(new File([bytes], f.name, { type: f.type }));
-        }
-        const fire = (target, type) => target.dispatchEvent(new DragEvent(type, {
-          bubbles: true, cancelable: true, composed: true, dataTransfer: dt, clientX: x, clientY: y }));
-        const first = document.elementFromPoint(x, y) || document.body;
-        fire(first, 'dragenter');
-        fire(first, 'dragover');
-        // Many chat sites show a "drop files here" layer once a drag arrives; give it a
-        // moment to appear, then drop onto whatever is under the pointer now.
-        await new Promise((r) => setTimeout(r, 120));
-        const target = document.elementFromPoint(x, y) || first;
-        if (target !== first) { fire(target, 'dragenter'); }
-        fire(target, 'dragover');
-        fire(target, 'drop');
-        return true;
-        """
-        callAsyncJavaScript(js, arguments: ["files": items, "x": x, "y": y], in: nil, in: .page, completionHandler: nil)
-    }
 }
-
 
 /// The drag as WebKit sees it while we stand in for a drop from another app: the same drag,
 /// except it carries copies of the files in the browser's own folder. While hovering, the

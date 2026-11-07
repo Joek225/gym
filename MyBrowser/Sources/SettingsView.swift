@@ -14,7 +14,6 @@ final class SettingsView: NSView {
     private let searchPopup = NSPopUpButton()
     private let unloadPopup = NSPopUpButton()
     private let adsBox = NSButton(checkboxWithTitle: "Block ads and trackers (makes pages lighter)", target: nil, action: nil)
-    private let memoryBox = NSButton(checkboxWithTitle: "Show memory use in the toolbar", target: nil, action: nil)
     private let groupsPopup = NSPopUpButton()
     private let groupChoices: [(String, Int)] = [("10 minutes", 10), ("30 minutes", 30), ("1 hour", 60),
                                                  ("3 hours", 180), ("Never", 0)]
@@ -53,9 +52,6 @@ final class SettingsView: NSView {
         adsBox.state = Preferences.blocksAds ? .on : .off
         adsBox.target = self
         adsBox.action = #selector(adsChanged(_:))
-        memoryBox.state = Preferences.showsMemory ? .on : .off
-        memoryBox.target = self
-        memoryBox.action = #selector(memoryChanged(_:))
 
         groupChoices.forEach { groupsPopup.addItem(withTitle: $0.0) }
         groupsPopup.selectItem(at: groupChoices.firstIndex { $0.1 == Preferences.disableGroupsMinutes } ?? 1)
@@ -63,9 +59,6 @@ final class SettingsView: NSView {
         groupsPopup.action = #selector(groupsChanged(_:))
 
         let clearButton = button("Clear Browsing Data…", #selector(clearDataClicked(_:)))
-        let touchBox = toggle("Ask for Touch ID before filling a saved password", "touchID", Preferences.touchIDBeforeFill)
-        let quitBox = toggle("Delete cookies, site data and history every time I quit", "clearOnQuit", Preferences.clearOnQuit)
-        let devBox = toggle("Developer tools (right-click → Inspect Element; for new tabs)", "devTools", Preferences.developerTools)
 
         let defaultButton = button("Make beababrowser Your Default Browser", #selector(defaultClicked(_:)))
 
@@ -73,8 +66,8 @@ final class SettingsView: NSView {
             heading("Accent color"), swatches,
             heading("Search"), row("Search with", searchPopup),
             heading("Memory"), row("Unload tabs I haven't used for", unloadPopup),
-            row("Turn off groups I haven't used for", groupsPopup), adsBox, memoryBox,
-            heading("Privacy & security"), securityNote(), touchBox, quitBox, devBox, clearButton, restartNote,
+            row("Turn off groups I haven't used for", groupsPopup), adsBox,
+            heading("Privacy & security"), securityNote(), clearButton, restartNote,
             heading("Default browser"), defaultButton,
         ])
         stack.orientation = .vertical
@@ -144,25 +137,8 @@ final class SettingsView: NSView {
         Preferences.disableGroupsMinutes = groupChoices[max(0, sender.indexOfSelectedItem)].1
     }
 
-    private func toggle(_ title: String, _ id: String, _ on: Bool) -> NSButton {
-        let box = NSButton(checkboxWithTitle: title, target: self, action: #selector(toggleChanged(_:)))
-        box.identifier = NSUserInterfaceItemIdentifier(id)
-        box.state = on ? .on : .off
-        return box
-    }
-
-    @objc private func toggleChanged(_ sender: NSButton) {
-        let on = sender.state == .on
-        switch sender.identifier?.rawValue {
-        case "touchID": Preferences.touchIDBeforeFill = on
-        case "clearOnQuit": Preferences.clearOnQuit = on
-        case "devTools": Preferences.developerTools = on
-        default: break
-        }
-    }
-
     private func securityNote() -> NSTextField {
-        let note = NSTextField(wrappingLabelWithString: "Always on: warnings for scam and malware sites, secure (https) connections first, ad and tracker blocking, cross-site tracking protection, passwords kept in your Keychain, and a check before downloading files that can run programs, downloads marked so macOS checks them before they open, extensions that only work where you allow them, a question before a site opens another app, and passwords that are only filled after you click into the box.")
+        let note = NSTextField(wrappingLabelWithString: "Always on: warnings for scam and malware sites, secure connections for sites that support them, ad and tracker blocking, cross-site tracking protection, passwords kept in your Keychain and only filled after you click into the box, a check before downloading files that can run programs, downloads marked so macOS checks them before they open, extensions that only work where you allow them, and a question before a site opens another app.")
         note.textColor = Theme.mutedText
         note.font = .systemFont(ofSize: 12)
         note.preferredMaxLayoutWidth = 560
@@ -211,11 +187,6 @@ final class SettingsView: NSView {
         if Preferences.blocksAds { ContentBlocker.prepare() }
     }
 
-    @objc private func memoryChanged(_ sender: NSButton) {
-        Preferences.showsMemory = sender.state == .on
-        NotificationCenter.default.post(name: MemoryReadout.didToggle, object: nil)
-    }
-
     @objc private func defaultClicked(_ sender: Any?) {
         let app = Bundle.main.bundleURL
         NSWorkspace.shared.setDefaultApplication(at: app, toOpenURLsWithScheme: "http") { _ in
@@ -224,53 +195,3 @@ final class SettingsView: NSView {
     }
 }
 
-/// Keeps the toolbar's memory label up to date (only while it's switched on).
-@MainActor
-final class MemoryReadout {
-    static let didToggle = Notification.Name("MyBrowserMemoryReadoutToggled")
-    private var timer: Timer?
-    private var refreshPending = false
-    private let label: NSTextField
-    private let pages: () -> [WKWebView]
-
-    init(label: NSTextField, pages: @escaping () -> [WKWebView]) {
-        self.label = label
-        self.pages = pages
-    }
-
-    func update() {
-        timer?.invalidate()
-        timer = nil
-        label.isHidden = !Preferences.showsMemory
-        guard Preferences.showsMemory else { return }
-        refresh()
-        // Every 30 seconds (and when you switch tabs) is plenty, and costs almost nothing.
-        timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refresh() }
-        }
-        timer?.tolerance = 10
-    }
-
-    /// Updates the number a couple of seconds after a tab change (once the page has loaded).
-    func refreshSoon() {
-        guard Preferences.showsMemory, !refreshPending else { return }
-        refreshPending = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
-            self?.refreshPending = false
-            self?.refresh()
-        }
-    }
-
-    private func refresh() {
-        let app = MemoryUse.appMegabytes()
-        let views = pages()
-        let pageSizes = views.compactMap(MemoryUse.pageMegabytes)
-        if pageSizes.count == views.count, !views.isEmpty {
-            label.stringValue = "\(app + pageSizes.reduce(0, +)) MB"
-            label.toolTip = "Browser: \(app) MB + \(views.count) open page\(views.count == 1 ? "" : "s"): \(pageSizes.reduce(0, +)) MB (unloaded tabs use none)"
-        } else {
-            label.stringValue = "\(app) MB · \(views.count) loaded"
-            label.toolTip = "Memory used by the browser app itself, and how many tabs are loaded (unloaded tabs use none). macOS doesn't let the app measure each page's own WebKit process."
-        }
-    }
-}

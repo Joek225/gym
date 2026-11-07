@@ -81,28 +81,3 @@ final class FindBar: SolidView, NSSearchFieldDelegate {
     }
 }
 
-/// The optional memory readout (Settings → Show memory use).
-enum MemoryUse {
-    /// How much memory this app itself is using, in megabytes (the same number Activity Monitor shows).
-    static func appMegabytes() -> Int {
-        var info = task_vm_info_data_t()
-        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
-        let result = withUnsafeMutablePointer(to: &info) {
-            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
-                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
-            }
-        }
-        return result == KERN_SUCCESS ? Int(info.phys_footprint / 1_048_576) : 0
-    }
-
-    /// Memory used by one web page's separate WebKit process, if macOS lets us see it.
-    static func pageMegabytes(_ webView: WKWebView) -> Int? {
-        guard webView.responds(to: NSSelectorFromString("_webProcessIdentifier")),
-              let pid = webView.value(forKey: "_webProcessIdentifier") as? Int32, pid > 0 else { return nil }
-        var usage = rusage_info_v4()
-        let ok = withUnsafeMutablePointer(to: &usage) {
-            $0.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) { proc_pid_rusage(pid, RUSAGE_INFO_V4, $0) }
-        }
-        return ok == 0 ? Int(usage.ri_phys_footprint / 1_048_576) : nil
-    }
-}

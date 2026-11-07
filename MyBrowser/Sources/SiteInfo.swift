@@ -4,24 +4,20 @@ import WebKit
 // MARK: - Per-site permissions
 
 enum PermissionKind: String, CaseIterable {
-    case location, camera, microphone, notifications, downloads
+    case camera, microphone, downloads
 
     var title: String {
         switch self {
-        case .location: "Location"
         case .camera: "Camera"
         case .microphone: "Microphone"
-        case .notifications: "Notifications"
         case .downloads: "Automatic downloads"
         }
     }
 
     var icon: String {
         switch self {
-        case .location: "location"
         case .camera: "video"
         case .microphone: "mic"
-        case .notifications: "bell"
         case .downloads: "arrow.down.to.line"
         }
     }
