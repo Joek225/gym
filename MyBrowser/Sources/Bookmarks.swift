@@ -109,6 +109,24 @@ final class BookmarkStore {
         changed()
     }
 
+    /// Moves a bookmark or folder to a position inside a folder (used by dragging).
+    func move(_ node: BookmarkNode, to folder: BookmarkNode, at index: Int) {
+        guard let from = parent(of: node), node !== folder, !contains(node, folder) else { return }
+        var index = index
+        if from === folder, let old = from.children?.firstIndex(where: { $0 === node }), old < index { index -= 1 }
+        from.children?.removeAll { $0 === node }
+        var list = folder.children ?? []
+        list.insert(node, at: max(0, min(index, list.count)))
+        folder.children = list
+        changed()
+    }
+
+    /// Whether `inner` is inside `outer` (so a folder can't be dropped into itself).
+    private func contains(_ outer: BookmarkNode, _ inner: BookmarkNode) -> Bool {
+        guard let children = outer.children else { return false }
+        return children.contains { $0 === inner || contains($0, inner) }
+    }
+
     func update(_ node: BookmarkNode, title: String, url: URL?, folder: BookmarkNode?) {
         node.title = title
         if !node.isFolder, let url { node.url = url }

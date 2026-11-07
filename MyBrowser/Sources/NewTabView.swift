@@ -296,14 +296,22 @@ final class SuggestionRow: SolidView {
     }
 }
 
+extension NSPasteboard.PasteboardType {
+    static let bookmarkItem = NSPasteboard.PasteboardType("local.mybrowser.bookmark")
+}
+
 /// Your bookmarks and folders, shown above the search box on the new tab page.
-/// Click a bookmark to open it, click a folder to see what's inside, right-click to edit.
+/// Click a bookmark to open it, click a folder to see what's inside, right-click to edit,
+/// and drag to rearrange (drop on a folder to move a bookmark into it).
 final class BookmarkShelf: NSView {
     var onOpen: ((BookmarkNode) -> Void)?
-    private var items: [(button: NSButton, node: BookmarkNode)] = []
+    private var chips: [BookmarkChip] = []
     private var height: NSLayoutConstraint!
     private let hint = NSTextField(labelWithString: "Bookmark pages with ⌘D or the ☆ in the address bar — they'll show up here.")
-    private static let rowHeight: CGFloat = 30
+    private let dropMarker = SolidView(color: Theme.accent)
+    private var dropIndex: Int?
+    private weak var dropFolder: BookmarkChip?
+    private static let rowHeight: CGFloat = 32
     private static let maxRows = 4
 
     override var isFlipped: Bool { true }
@@ -316,82 +324,139 @@ final class BookmarkShelf: NSView {
         hint.font = .systemFont(ofSize: 12)
         hint.alignment = .center
         addSubview(hint)
+        dropMarker.cornerRadius = 1
+        dropMarker.isHidden = true
+        addSubview(dropMarker)
+        registerForDraggedTypes([.bookmarkItem])
         reload()
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
+    /// What's shown: the Bookmarks Bar folder's items, then "Other Bookmarks" if it has any.
+    private var nodes: [BookmarkNode] {
+        var list = BookmarkStore.shared.bar.children ?? []
+        if !(BookmarkStore.shared.other.children ?? []).isEmpty { list.append(BookmarkStore.shared.other) }
+        return list
+    }
+
     func reload() {
-        items.forEach { $0.button.removeFromSuperview() }
-        items = []
-        var nodes = BookmarkStore.shared.bar.children ?? []
-        if !(BookmarkStore.shared.other.children ?? []).isEmpty { nodes.append(BookmarkStore.shared.other) }
-        for node in nodes {
-            let button = NSButton(title: "", target: self, action: #selector(clicked(_:)))
-            button.isBordered = false
-            let title = node.isFolder ? node.displayTitle : node.title
-            button.attributedTitle = NSAttributedString(string: title.isEmpty ? "" : " " + title, attributes: [
-                .foregroundColor: Theme.text, .font: NSFont.systemFont(ofSize: 12.5)])
-            button.image = node.isFolder ? Icons.folder
-                : (node.icon.flatMap(Favicons.image(fromPNG:)) ?? Favicons.cached(for: node.url) ?? Icons.globe)
-            button.imagePosition = title.isEmpty ? .imageOnly : .imageLeading
-            button.contentTintColor = Theme.icon
-            button.lineBreakMode = .byTruncatingTail
-            button.wantsLayer = true
-            button.layer?.backgroundColor = Theme.pageBoxFill.cgColor
-            button.layer?.cornerRadius = 8
-            button.toolTip = node.url?.absoluteString ?? node.displayTitle
-            addSubview(button)
-            items.append((button, node))
+        chips.forEach { $0.removeFromSuperview() }
+        chips = nodes.map { node in
+            let chip = BookmarkChip(node: node)
+            chip.onClick = { [weak self] chip in self?.clicked(chip) }
+            addSubview(chip, positioned: .below, relativeTo: dropMarker)
+            return chip
         }
-        hint.isHidden = !items.isEmpty
+        hint.isHidden = !chips.isEmpty
         needsLayout = true
     }
 
-    /// Lays the buttons out in centered rows (up to 4 rows; the rest are in the Bookmarks menu).
+    /// Lays the chips out in centered rows (up to 4 rows; the rest are in the Bookmarks menu).
     override func layout() {
         super.layout()
-        hint.frame = NSRect(x: 0, y: 6, width: bounds.width, height: 18)
-        var rows: [[(NSButton, CGFloat)]] = [[]]
+        hint.frame = NSRect(x: 0, y: 8, width: bounds.width, height: 18)
+        var rows: [[BookmarkChip]] = [[]]
         var lineWidth: CGFloat = 0
-        for (button, _) in items {
-            button.sizeToFit()
-            let w = min(max(button.frame.width + 18, 34), 190)
+        for chip in chips {
+            let w = chip.preferredWidth
             if lineWidth + w > bounds.width, !rows[rows.count - 1].isEmpty {
                 rows.append([])
                 lineWidth = 0
             }
-            rows[rows.count - 1].append((button, w))
+            rows[rows.count - 1].append(chip)
             lineWidth += w + 8
         }
         var y: CGFloat = 0
         for (index, row) in rows.enumerated() {
-            let total = row.reduce(0) { $0 + $1.1 } + CGFloat(max(0, row.count - 1)) * 8
-            var x = (bounds.width - total) / 2
-            for (button, w) in row {
-                button.isHidden = index >= Self.maxRows
-                button.frame = NSRect(x: x, y: y, width: w, height: Self.rowHeight - 4)
-                x += w + 8
+            let total = row.reduce(0) { $0 + $1.preferredWidth } + CGFloat(max(0, row.count - 1)) * 8
+            var x = ((bounds.width - total) / 2).rounded()
+            for chip in row {
+                chip.isHidden = index >= Self.maxRows
+                chip.frame = NSRect(x: x, y: y, width: chip.preferredWidth, height: Self.rowHeight - 4)
+                x += chip.preferredWidth + 8
             }
             if index < Self.maxRows { y += Self.rowHeight }
         }
-        let wanted = items.isEmpty ? Self.rowHeight : y
+        let wanted = chips.isEmpty ? Self.rowHeight : y
         if height.constant != wanted { height.constant = wanted }
     }
 
-    @objc private func clicked(_ sender: NSButton) {
-        guard let node = items.first(where: { $0.button === sender })?.node else { return }
-        if node.isFolder {
-            BookmarkMenus.menu(for: node).popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
+    private func clicked(_ chip: BookmarkChip) {
+        if chip.node.isFolder {
+            BookmarkMenus.menu(for: chip.node).popUp(positioning: nil, at: NSPoint(x: 0, y: chip.bounds.height + 4), in: chip)
         } else {
-            onOpen?(node)
+            onOpen?(chip.node)
         }
+    }
+
+    // MARK: Dropping (rearranging)
+
+    private func draggedNode(_ info: NSDraggingInfo) -> BookmarkNode? {
+        guard let id = info.draggingPasteboard.string(forType: .bookmarkItem) else { return nil }
+        return chips.first { $0.node.id.uuidString == id }?.node
+    }
+
+    /// Works out where a drop would go: onto a folder (middle of a folder chip), or between chips.
+    private func target(at point: NSPoint, dragging: BookmarkNode) {
+        dropFolder?.isDropTarget = false
+        dropFolder = nil
+        dropIndex = nil
+        let visible = chips.filter { !$0.isHidden }
+        if let folder = visible.first(where: { $0.node.isFolder && $0.node !== dragging
+                                               && $0.frame.insetBy(dx: $0.frame.width * 0.25, dy: 0).contains(point) }) {
+            folder.isDropTarget = true
+            dropFolder = folder
+            dropMarker.isHidden = true
+            return
+        }
+        // Nearest gap: before the first chip on this row whose middle is right of the pointer.
+        let rowChips = visible.filter { point.y >= $0.frame.minY - 4 && point.y <= $0.frame.maxY + 4 }
+        guard let last = (rowChips.isEmpty ? visible : rowChips).last else { dropIndex = 0; return }
+        let before = rowChips.first { point.x < $0.frame.midX }
+        let anchor = before ?? last
+        let x = before == nil ? last.frame.maxX + 4 : anchor.frame.minX - 4
+        dropMarker.frame = NSRect(x: x - 1, y: anchor.frame.minY, width: 2, height: anchor.frame.height)
+        dropMarker.isHidden = false
+        let barCount = BookmarkStore.shared.bar.children?.count ?? 0
+        let chipIndex = chips.firstIndex { $0 === anchor } ?? barCount
+        dropIndex = min(before == nil ? chipIndex + 1 : chipIndex, barCount)
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { draggingUpdated(sender) }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard let node = draggedNode(sender) else { return [] }
+        target(at: convert(sender.draggingLocation, from: nil), dragging: node)
+        return .move
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) { clearDropState() }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        defer { clearDropState() }
+        guard let node = draggedNode(sender) else { return false }
+        let store = BookmarkStore.shared
+        if let folder = dropFolder?.node {
+            store.move(node, to: folder, at: folder.children?.count ?? 0)
+        } else if let index = dropIndex {
+            store.move(node, to: store.bar, at: index)
+        }
+        return true
+    }
+
+    private func clearDropState() {
+        dropFolder?.isDropTarget = false
+        dropFolder = nil
+        dropIndex = nil
+        dropMarker.isHidden = true
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {
         let point = convert(event.locationInWindow, from: nil)
         let menu = NSMenu()
-        if let node = items.first(where: { !$0.button.isHidden && $0.button.frame.contains(point) })?.node {
+        if let node = chips.first(where: { !$0.isHidden && $0.frame.contains(point) })?.node,
+           node !== BookmarkStore.shared.other {
             if !node.isFolder {
                 let newTab = NSMenuItem(title: "Open in New Tab", action: #selector(BrowserWindowController.openBookmarkInNewTab(_:)), keyEquivalent: "")
                 newTab.representedObject = node
@@ -410,5 +475,97 @@ final class BookmarkShelf: NSView {
         menu.addItem(withTitle: "Add Folder…", action: #selector(BrowserWindowController.newBookmarkFolder(_:)), keyEquivalent: "")
         menu.addItem(withTitle: "Import from Chrome…", action: #selector(BrowserWindowController.importChromeBookmarks(_:)), keyEquivalent: "")
         return menu
+    }
+}
+
+/// One bookmark or folder: icon and name centered together, with even padding.
+/// Click to open; drag to move it.
+final class BookmarkChip: SolidView, NSDraggingSource {
+    let node: BookmarkNode
+    var onClick: ((BookmarkChip) -> Void)?
+    var isDropTarget = false { didSet { borderColor = isDropTarget ? Theme.accent : nil } }
+    private let icon = NSImageView()
+    private let label = NSTextField(labelWithString: "")
+    private var mouseDownAt: NSPoint?
+    private var isDragging = false
+    private static let padding: CGFloat = 12
+    private static let iconSize: CGFloat = 16
+    private static let gap: CGFloat = 7
+
+    init(node: BookmarkNode) {
+        self.node = node
+        super.init(color: Theme.pageBoxFill)
+        cornerRadius = 9
+        borderWidth = 2
+        icon.image = node.isFolder ? Icons.folder
+            : (node.icon.flatMap(Favicons.image(fromPNG:)) ?? Favicons.cached(for: node.url) ?? Icons.globe)
+        icon.imageScaling = .scaleProportionallyUpOrDown
+        icon.contentTintColor = Theme.icon
+        label.stringValue = node.isFolder ? node.displayTitle : node.title
+        label.font = .systemFont(ofSize: 12.5)
+        label.textColor = Theme.text
+        label.lineBreakMode = .byTruncatingTail
+        addSubview(icon)
+        addSubview(label)
+        toolTip = node.url?.absoluteString ?? node.displayTitle
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    private var labelWidth: CGFloat {
+        label.stringValue.isEmpty ? 0 : min(ceil(label.intrinsicContentSize.width), 150)
+    }
+
+    /// Padding + icon + gap + name + padding (a chip with no name is a neat square).
+    var preferredWidth: CGFloat {
+        labelWidth == 0 ? Self.iconSize + 2 * 9 : Self.padding * 2 + Self.iconSize + Self.gap + labelWidth
+    }
+
+    /// Icon and name are placed as one block in the exact middle of the chip.
+    override func layout() {
+        super.layout()
+        let content = labelWidth == 0 ? Self.iconSize : Self.iconSize + Self.gap + labelWidth
+        let start = ((bounds.width - content) / 2).rounded()
+        icon.frame = NSRect(x: start, y: ((bounds.height - Self.iconSize) / 2).rounded(),
+                            width: Self.iconSize, height: Self.iconSize)
+        let labelHeight = ceil(label.intrinsicContentSize.height)
+        label.frame = NSRect(x: start + Self.iconSize + Self.gap, y: ((bounds.height - labelHeight) / 2).rounded(),
+                             width: labelWidth, height: labelHeight)
+        label.isHidden = labelWidth == 0
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        mouseDownAt = event.locationInWindow
+        isDragging = false
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let start = mouseDownAt, !isDragging, node !== BookmarkStore.shared.other,
+              hypot(event.locationInWindow.x - start.x, event.locationInWindow.y - start.y) > 4 else { return }
+        isDragging = true
+        let item = NSPasteboardItem()
+        item.setString(node.id.uuidString, forType: .bookmarkItem)
+        let dragItem = NSDraggingItem(pasteboardWriter: item)
+        var picture = NSImage(size: bounds.size)
+        if let rep = bitmapImageRepForCachingDisplay(in: bounds) {
+            cacheDisplay(in: bounds, to: rep)
+            picture = NSImage(size: bounds.size)
+            picture.addRepresentation(rep)
+        }
+        dragItem.setDraggingFrame(bounds, contents: picture)
+        beginDraggingSession(with: [dragItem], event: event, source: self)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        if !isDragging, bounds.contains(convert(event.locationInWindow, from: nil)) { onClick?(self) }
+        mouseDownAt = nil
+    }
+
+    func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
+        context == .withinApplication ? .move : []
+    }
+
+    func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
+        isDragging = false
     }
 }
