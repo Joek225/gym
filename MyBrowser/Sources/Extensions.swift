@@ -57,14 +57,14 @@ final class ExtensionManager: NSObject, WKWebExtensionControllerDelegate {
             let webExtension = try await WKWebExtension(resourceBaseURL: folder)
             let context = WKWebExtensionContext(for: webExtension)
             context.uniqueIdentifier = folder.lastPathComponent
+            #if DEBUG
             context.isInspectable = true
-            // It's your own browser, so give extensions what they ask for up front.
+            #endif
             for permission in webExtension.requestedPermissions {
                 context.setPermissionStatus(.grantedExplicitly, for: permission)
             }
-            for pattern in webExtension.allRequestedMatchPatterns {
-                context.setPermissionStatus(.grantedExplicitly, for: pattern)
-            }
+            // Which websites it may read and change: all of them, or only when you click it.
+            Self.applySiteAccess(context)
             try controller.load(context)
             contexts.append(context)
             folders[context.uniqueIdentifier] = folder
@@ -86,6 +86,8 @@ final class ExtensionManager: NSObject, WKWebExtensionControllerDelegate {
         }
         // Chrome's private signature folder isn't part of the extension.
         try? FileManager.default.removeItem(at: dest.appendingPathComponent("_metadata"))
+        // New extensions start safe: they only touch a site when you click them.
+        Self.setSiteAccess(.onClick, for: dest.lastPathComponent)
         if let failure = await load(folder: dest) {
             try? FileManager.default.removeItem(at: dest)
             return failure
@@ -100,6 +102,37 @@ final class ExtensionManager: NSObject, WKWebExtensionControllerDelegate {
             try? FileManager.default.removeItem(at: folder)
         }
         NotificationCenter.default.post(name: Self.didChange, object: nil)
+    }
+
+    // MARK: Site access (like Chrome's "This can read and change site data")
+
+    enum SiteAccess: String { case allSites, onClick }
+    private static let accessKey = "extensionSiteAccess"
+
+    /// Extensions installed before this setting existed keep working on all sites.
+    static func siteAccess(for id: String) -> SiteAccess {
+        let saved = UserDefaults.standard.dictionary(forKey: accessKey) as? [String: String] ?? [:]
+        return saved[id].flatMap(SiteAccess.init(rawValue:)) ?? .allSites
+    }
+
+    static func setSiteAccess(_ access: SiteAccess, for id: String) {
+        var saved = UserDefaults.standard.dictionary(forKey: accessKey) as? [String: String] ?? [:]
+        saved[id] = access.rawValue
+        UserDefaults.standard.set(saved, forKey: accessKey)
+    }
+
+    static func applySiteAccess(_ context: WKWebExtensionContext) {
+        let all = siteAccess(for: context.uniqueIdentifier) == .allSites
+        for pattern in context.webExtension.allRequestedMatchPatterns {
+            context.setPermissionStatus(all ? .grantedExplicitly : .deniedExplicitly, for: pattern)
+        }
+    }
+
+    /// "On click" mode: clicking the extension lets it work on the current site for an hour.
+    static func allowOnClick(_ context: WKWebExtensionContext, url: URL?) {
+        guard siteAccess(for: context.uniqueIdentifier) == .onClick,
+              let url, url.scheme == "https" || url.scheme == "http" else { return }
+        context.setPermissionStatus(.grantedExplicitly, for: url, expirationDate: Date().addingTimeInterval(3600))
     }
 
     static func name(of context: WKWebExtensionContext) -> String {

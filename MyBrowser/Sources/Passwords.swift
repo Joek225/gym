@@ -3,6 +3,7 @@ import WebKit
 import Security
 import LocalAuthentication
 import UniformTypeIdentifiers
+import CryptoKit
 
 // MARK: - Storage (macOS Keychain)
 
@@ -117,7 +118,18 @@ final class PasswordAgent: NSObject, WKScriptMessageHandler {
         case "username":
             if let name = body["username"] as? String, !name.isEmpty { recentUsernames[site] = name }
         case "form":
-            fill(webView, frame: message.frameInfo, site: site)
+            // A login box inside a frame from a different site (e.g. a hidden ad) gets nothing.
+            guard message.frameInfo.isMainFrame || Self.sameSite(site, webView.url?.host) else { return }
+            if Preferences.touchIDBeforeFill {
+                let context = LAContext()
+                context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "fill your saved password for \(site)") { ok, _ in
+                    DispatchQueue.main.async { [weak self, weak webView] in
+                        if ok, let webView { self?.fill(webView, frame: message.frameInfo, site: site) }
+                    }
+                }
+            } else {
+                fill(webView, frame: message.frameInfo, site: site)
+            }
         case "submit":
             guard let password = body["password"] as? String, !password.isEmpty else { return }
             var username = body["username"] as? String ?? ""
@@ -126,6 +138,13 @@ final class PasswordAgent: NSObject, WKScriptMessageHandler {
         default:
             break
         }
+    }
+
+    /// Same site = same main domain (docs.google.com and accounts.google.com both count as google.com).
+    static func sameSite(_ a: String, _ b: String?) -> Bool {
+        guard let b else { return false }
+        func main(_ h: String) -> String { h.split(separator: ".").suffix(2).joined(separator: ".") }
+        return main(a) == main(b)
     }
 
     private func fill(_ webView: WKWebView, frame: WKFrameInfo, site: String) {
@@ -164,6 +183,7 @@ final class PasswordAgent: NSObject, WKScriptMessageHandler {
             switch response {
             case .alertFirstButtonReturn:
                 PasswordStore.save(site: site, username: userField.stringValue, password: passField.stringValue)
+                Self.warnIfLeaked(passField.stringValue, site: site, window: webView.window)
             case .alertThirdButtonReturn:
                 var never = UserDefaults.standard.stringArray(forKey: Self.neverKey) ?? []
                 never.append(site)
@@ -176,6 +196,18 @@ final class PasswordAgent: NSObject, WKScriptMessageHandler {
             alert.beginSheetModal(for: window, completionHandler: finish)
         } else {
             finish(alert.runModal())
+        }
+    }
+
+    /// Checks a just-saved password against known data leaks and warns you if it's in one.
+    static func warnIfLeaked(_ password: String, site: String, window: NSWindow?) {
+        Task { @MainActor in
+            guard let count = await PasswordSecurity.leakCount(password), count > 0 else { return }
+            let alert = NSAlert()
+            alert.alertStyle = .critical
+            alert.messageText = "This password has been leaked"
+            alert.informativeText = "The password you just used on \(site) appears \(count.formatted()) times in known data leaks, so attackers try it first. Change it on \(site) — use Passwords → Generate Strong Password."
+            if let window { alert.beginSheetModal(for: window, completionHandler: nil) } else { alert.runModal() }
         }
     }
 
@@ -215,17 +247,20 @@ final class PasswordAgent: NSObject, WKScriptMessageHandler {
         if (e.target && looksLikeUser(e.target) && e.target.value) post({ type: 'username', username: e.target.value });
       }, true);
 
-      // Tell the app when you click into a login box, so it can fill a saved password.
-      // (Only reacts to clicks into boxes — it never watches the page, so busy pages like
-      // Google Docs aren't slowed down.)
+      // Tell the app when YOU click or tab into a login box, so it can fill a saved password.
+      // A page can't trigger this by itself: it needs a real click or key press from you
+      // (the browser marks those as "trusted"), and the box must be visible.
+      let lastUserInput = 0;
+      const noteInput = (e) => { if (e.isTrusted) lastUserInput = performance.now(); };
+      document.addEventListener('pointerdown', noteInput, true);
+      document.addEventListener('keydown', noteInput, true);
       const seen = new WeakSet();
-      const offer = (el) => {
-        if (!el || el.tagName !== 'INPUT' || seen.has(el)) return;
+      document.addEventListener('focusin', (e) => {
+        const el = e.target;
+        if (!e.isTrusted || performance.now() - lastUserInput > 800) return;
+        if (!el || el.tagName !== 'INPUT' || seen.has(el) || !visible(el)) return;
         if (el.type === 'password' || looksLikeUser(el)) { seen.add(el); post({ type: 'form' }); }
-      };
-      document.addEventListener('focusin', (e) => offer(e.target), true);
-      // A login box that already has the cursor when the page opens.
-      if (document.activeElement) offer(document.activeElement);
+      }, true);
 
       window.__mybrowserFill = (u, p) => {
         const set = (el, v) => {
@@ -303,6 +338,8 @@ final class PasswordsView: NSView, NSTableViewDataSource, NSTableViewDelegate, N
         let copy = button("Copy Password", #selector(copyClicked(_:)))
         let delete = button("Delete", #selector(deleteClicked(_:)))
         let importButton = button("Import from Chrome…", #selector(importClicked(_:)))
+        let checkButton = button("Password Checkup", #selector(checkupClicked(_:)))
+        let generateButton = button("Generate Strong Password", #selector(generateClicked(_:)))
         offerBox.target = self
         offerBox.action = #selector(offerToggled(_:))
         offerBox.state = PasswordAgent.offersToSave ? .on : .off
@@ -310,7 +347,7 @@ final class PasswordsView: NSView, NSTableViewDataSource, NSTableViewDelegate, N
         status.font = .systemFont(ofSize: 12)
         status.lineBreakMode = .byTruncatingTail
 
-        let buttons = NSStackView(views: [reveal, copy, delete, NSView(), importButton])
+        let buttons = NSStackView(views: [reveal, copy, delete, NSView(), checkButton, generateButton, importButton])
         buttons.spacing = 8
         let bottom = NSStackView(views: [offerBox, NSView(), status])
         let stack = NSStackView(views: [search, scroll, buttons, bottom])
@@ -398,10 +435,48 @@ final class PasswordsView: NSView, NSTableViewDataSource, NSTableViewDelegate, N
         guard let login = selected else { status.stringValue = "Pick a password first."; return }
         unlock { [weak self] in
             guard let password = PasswordStore.password(site: login.site, username: login.username) else { return }
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(password, forType: .string)
-            self?.status.stringValue = "Copied the password for \(login.site)."
+            SecureClipboard.copy(password)
+            self?.status.stringValue = "Copied the password for \(login.site). It's wiped from the clipboard in 1 minute."
         }
+    }
+
+    /// Checks every saved password: leaked in a data breach, used on more than one site, or weak.
+    @objc private func checkupClicked(_ sender: Any?) {
+        unlock { [weak self] in
+            guard let self else { return }
+            self.status.stringValue = "Checking your passwords…"
+            let entries = self.logins.compactMap { login in
+                PasswordStore.password(site: login.site, username: login.username).map { (login, $0) }
+            }
+            var uses: [String: Int] = [:]
+            entries.forEach { uses[$0.1, default: 0] += 1 }
+            Task { @MainActor in
+                var leaked: [String] = [], reused: [String] = [], weak: [String] = []
+                for (login, password) in entries {
+                    let name = login.username.isEmpty ? login.site : "\(login.site) (\(login.username))"
+                    if let n = await PasswordSecurity.leakCount(password), n > 0 { leaked.append(name) }
+                    if (uses[password] ?? 0) > 1 { reused.append(name) }
+                    if PasswordSecurity.isWeak(password) { weak.append(name) }
+                }
+                let alert = NSAlert()
+                alert.messageText = leaked.isEmpty && reused.isEmpty && weak.isEmpty
+                    ? "All \(entries.count) passwords look good" : "Password Checkup"
+                var text: [String] = []
+                if !leaked.isEmpty { text.append("Leaked in data breaches — change these first:\n• " + leaked.joined(separator: "\n• ")) }
+                if !reused.isEmpty { text.append("Used on more than one site:\n• " + reused.joined(separator: "\n• ")) }
+                if !weak.isEmpty { text.append("Weak (short or simple):\n• " + weak.joined(separator: "\n• ")) }
+                alert.informativeText = text.isEmpty ? "None were found in known data leaks, none are reused, and none are weak."
+                    : text.joined(separator: "\n\n") + "\n\nThe check never sends your passwords anywhere."
+                self.status.stringValue = "Checkup done."
+                if let window = self.window { alert.beginSheetModal(for: window, completionHandler: nil) }
+            }
+        }
+    }
+
+    @objc private func generateClicked(_ sender: Any?) {
+        let password = PasswordSecurity.generate()
+        SecureClipboard.copy(password)
+        status.stringValue = "Copied a new strong password: \(password) — paste it into the site's “new password” box. It's wiped from the clipboard in 1 minute."
     }
 
     @objc private func deleteClicked(_ sender: Any?) {
@@ -432,6 +507,15 @@ final class PasswordsView: NSView, NSTableViewDataSource, NSTableViewDelegate, N
                 let count = Self.importCSV(url)
                 self.reload()
                 self.status.stringValue = "Imported \(count) password\(count == 1 ? "" : "s") from Chrome."
+                // That file holds every password in plain text: offer to throw it away.
+                let bin = NSAlert()
+                bin.messageText = "Move the exported passwords file to the Trash?"
+                bin.informativeText = "It contains all your passwords in plain text. After moving it, empty the Trash."
+                bin.addButton(withTitle: "Move to Trash")
+                bin.addButton(withTitle: "Keep")
+                bin.beginSheetModal(for: window) { answer in
+                    if answer == .alertFirstButtonReturn { try? FileManager.default.trashItem(at: url, resultingItemURL: nil) }
+                }
             }
         }
     }

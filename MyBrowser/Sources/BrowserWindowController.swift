@@ -1141,6 +1141,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     private func extensionButtonClicked(_ id: String) {
         guard #available(macOS 15.4, *),
               let context = ExtensionManager.active?.contexts.first(where: { $0.uniqueIdentifier == id }) else { return }
+        ExtensionManager.allowOnClick(context, url: store.selected?.webView?.url)
         context.performAction(for: store.selected)
         refreshExtensionButtons()
     }
@@ -1179,7 +1180,17 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
 
     @objc func runExtension(_ sender: NSMenuItem) {
         guard #available(macOS 15.4, *), let context = sender.representedObject as? WKWebExtensionContext else { return }
+        ExtensionManager.allowOnClick(context, url: store.selected?.webView?.url)
         context.performAction(for: store.selected)
+    }
+
+    @objc func setExtensionSiteAccess(_ sender: NSMenuItem) {
+        guard #available(macOS 15.4, *), let pair = sender.representedObject as? [Any],
+              let context = pair.first as? WKWebExtensionContext, let raw = pair.last as? String,
+              let mode = ExtensionManager.SiteAccess(rawValue: raw) else { return }
+        ExtensionManager.setSiteAccess(mode, for: context.uniqueIdentifier)
+        ExtensionManager.applySiteAccess(context)
+        store.selected?.webView?.reload()
     }
 
     @objc func togglePinExtension(_ sender: NSMenuItem) {
@@ -1243,6 +1254,13 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
             decisionHandler(SitePermissions.get(.downloads, host) == .block ? .cancel : .download)
             return
         }
+        // Links that open another app (zoom:, mailto:, slack:, …): ask first, like Chrome.
+        if let url = navigationAction.request.url, let scheme = url.scheme?.lowercased(),
+           !["http", "https", "about", "blob", "data", "file", "webkit-extension", "javascript"].contains(scheme) {
+            decisionHandler(.cancel)
+            confirmExternalApp(url, from: webView.url?.host)
+            return
+        }
         // HTTPS-first: always try the secure version of a site before an insecure one.
         if navigationAction.targetFrame?.isMainFrame ?? true, let url = navigationAction.request.url,
            let secure = Security.secureVersion(of: url) {
@@ -1259,6 +1277,30 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
             return
         }
         decisionHandler(.allow)
+    }
+
+    private func confirmExternalApp(_ url: URL, from host: String?) {
+        guard let app = NSWorkspace.shared.urlForApplication(toOpen: url), let window else { return }
+        let appName = FileManager.default.displayName(atPath: app.path).replacingOccurrences(of: ".app", with: "")
+        let key = "allowedApps.\(host ?? "")"
+        if (UserDefaults.standard.stringArray(forKey: key) ?? []).contains(url.scheme ?? "") {
+            NSWorkspace.shared.open(url)
+            return
+        }
+        let alert = NSAlert()
+        alert.messageText = "Open \(appName)?"
+        alert.informativeText = "\(host ?? "This page") wants to open the \(appName) app."
+        alert.addButton(withTitle: "Open \(appName)")
+        alert.addButton(withTitle: "Cancel")
+        alert.showsSuppressionButton = true
+        alert.suppressionButton?.title = "Always allow \(host ?? "this site") to open this kind of link"
+        alert.beginSheetModal(for: window) { answer in
+            guard answer == .alertFirstButtonReturn else { return }
+            if alert.suppressionButton?.state == .on, let scheme = url.scheme {
+                UserDefaults.standard.set((UserDefaults.standard.stringArray(forKey: key) ?? []) + [scheme], forKey: key)
+            }
+            NSWorkspace.shared.open(url)
+        }
     }
 
     /// Files the browser can't show (zips, installers, "download" links) are saved to Downloads.

@@ -202,11 +202,10 @@ final class ToolbarView: NSView {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(url.absoluteString, forType: .string)
         // Show "Copied" for a moment.
-        let previous = addressField.stringValue
         addressField.stringValue = "Copied ✓"
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) { [weak self] in
             guard let self, self.addressField.stringValue == "Copied ✓" else { return }
-            self.addressField.stringValue = previous
+            self.showAddress(self.shownURL)
         }
         onAddressClicked?()
     }
@@ -244,7 +243,16 @@ final class ToolbarView: NSView {
         if host.hasPrefix("www.") { host = String(host.dropFirst(4)) }
         var text = host.isEmpty ? url.absoluteString : host + (url.path == "/" ? "" : url.path)
         if let fragment = url.fragment, !fragment.isEmpty, fragment.count < 30 { text += "#" + fragment }
-        addressField.stringValue = text
+        if url.scheme == "http" {
+            // Like Chrome: say plainly that this page isn't private.
+            let shown = NSMutableAttributedString(string: "Not secure  ", attributes: [
+                .foregroundColor: NSColor.systemOrange, .font: NSFont.systemFont(ofSize: 12, weight: .semibold)])
+            shown.append(NSAttributedString(string: text, attributes: [
+                .foregroundColor: addressField.textColor ?? Theme.text, .font: addressField.font ?? .systemFont(ofSize: 13)]))
+            addressField.attributedStringValue = shown
+        } else {
+            addressField.stringValue = text
+        }
         addressField.toolTip = url.absoluteString
     }
 

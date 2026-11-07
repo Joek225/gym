@@ -48,6 +48,24 @@ enum Preferences {
         set { d.set(newValue, forKey: "showMemory2") }
     }
 
+    /// Ask for Touch ID / your Mac password before filling a saved password.
+    static var touchIDBeforeFill: Bool {
+        get { d.bool(forKey: "touchIDBeforeFill") }
+        set { d.set(newValue, forKey: "touchIDBeforeFill") }
+    }
+
+    /// Right-click → Inspect Element. Off by default: it's for web developers.
+    static var developerTools: Bool {
+        get { d.bool(forKey: "developerTools") }
+        set { d.set(newValue, forKey: "developerTools") }
+    }
+
+    /// Delete cookies, site data, cache and history every time the browser quits.
+    static var clearOnQuit: Bool {
+        get { d.bool(forKey: "clearOnQuit") }
+        set { d.set(newValue, forKey: "clearOnQuit") }
+    }
+
     /// Arc-style see-through tinted window (false = solid colors). Applies after a restart.
     static var arcStyle: Bool {
         get { d.object(forKey: "arcStyle") as? Bool ?? true }

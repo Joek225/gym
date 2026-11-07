@@ -77,6 +77,9 @@ final class SettingsView: NSView {
         groupsPopup.action = #selector(groupsChanged(_:))
 
         let clearButton = button("Clear Browsing Data…", #selector(clearDataClicked(_:)))
+        let touchBox = toggle("Ask for Touch ID before filling a saved password", "touchID", Preferences.touchIDBeforeFill)
+        let quitBox = toggle("Delete cookies, site data and history every time I quit", "clearOnQuit", Preferences.clearOnQuit)
+        let devBox = toggle("Developer tools (right-click → Inspect Element; for new tabs)", "devTools", Preferences.developerTools)
 
         let defaultButton = button("Make beababrowser Your Default Browser", #selector(defaultClicked(_:)))
 
@@ -85,7 +88,7 @@ final class SettingsView: NSView {
             heading("Search"), row("Search with", searchPopup),
             heading("Memory"), row("Unload tabs I haven't used for", unloadPopup),
             row("Turn off groups I haven't used for", groupsPopup), adsBox, memoryBox,
-            heading("Privacy & security"), securityNote(), clearButton,
+            heading("Privacy & security"), securityNote(), touchBox, quitBox, devBox, clearButton,
             heading("Default browser"), defaultButton,
         ])
         stack.orientation = .vertical
@@ -161,8 +164,25 @@ final class SettingsView: NSView {
         Preferences.disableGroupsMinutes = groupChoices[max(0, sender.indexOfSelectedItem)].1
     }
 
+    private func toggle(_ title: String, _ id: String, _ on: Bool) -> NSButton {
+        let box = NSButton(checkboxWithTitle: title, target: self, action: #selector(toggleChanged(_:)))
+        box.identifier = NSUserInterfaceItemIdentifier(id)
+        box.state = on ? .on : .off
+        return box
+    }
+
+    @objc private func toggleChanged(_ sender: NSButton) {
+        let on = sender.state == .on
+        switch sender.identifier?.rawValue {
+        case "touchID": Preferences.touchIDBeforeFill = on
+        case "clearOnQuit": Preferences.clearOnQuit = on
+        case "devTools": Preferences.developerTools = on
+        default: break
+        }
+    }
+
     private func securityNote() -> NSTextField {
-        let note = NSTextField(wrappingLabelWithString: "Always on: warnings for scam and malware sites, secure (https) connections first, ad and tracker blocking, cross-site tracking protection, passwords kept in your Keychain, and a check before downloading files that can run programs.")
+        let note = NSTextField(wrappingLabelWithString: "Always on: warnings for scam and malware sites, secure (https) connections first, ad and tracker blocking, cross-site tracking protection, passwords kept in your Keychain, and a check before downloading files that can run programs, downloads marked so macOS checks them before they open, extensions that only work where you allow them, a question before a site opens another app, and passwords that are only filled after you click into the box.")
         note.textColor = Theme.mutedText
         note.font = .systemFont(ofSize: 12)
         note.preferredMaxLayoutWidth = 560

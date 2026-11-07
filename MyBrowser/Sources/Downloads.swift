@@ -14,6 +14,7 @@ final class DownloadManager: NSObject, WKDownloadDelegate {
         var destination: URL?
         var state: State = .running
         var error: String?
+        var source: URL?
         init(_ download: WKDownload) { self.download = download }
         var fraction: Double { download.progress.fractionCompleted }
     }
@@ -36,6 +37,22 @@ final class DownloadManager: NSObject, WKDownloadDelegate {
 
     func download(_ download: WKDownload, decideDestinationUsing response: URLResponse,
                   suggestedFilename: String, completionHandler: @escaping (URL?) -> Void) {
+        // Files sent over an insecure connection could have been swapped on the way.
+        if response.url?.scheme == "http" {
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "“\(suggestedFilename)” is coming over an insecure connection"
+            alert.informativeText = "Someone on your network could replace it with something harmful. Only keep going if you really need it."
+            alert.addButton(withTitle: "Don't Download")
+            alert.addButton(withTitle: "Download Anyway")
+            if alert.runModal() != .alertSecondButtonReturn {
+                items.removeAll { $0.download === download }
+                changed()
+                completionHandler(nil)
+                return
+            }
+        }
+        item(download)?.source = response.url
         // Files that can run programs: ask first (a common way malware gets onto Macs).
         if Security.riskyExtensions.contains((suggestedFilename as NSString).pathExtension.lowercased()) {
             let alert = NSAlert()
@@ -68,6 +85,7 @@ final class DownloadManager: NSObject, WKDownloadDelegate {
 
     func downloadDidFinish(_ download: WKDownload) {
         item(download)?.state = .finished
+        if let entry = item(download), let file = entry.destination { Self.quarantine(file, from: entry.source) }
         changed()
     }
 
@@ -78,6 +96,20 @@ final class DownloadManager: NSObject, WKDownloadDelegate {
             entry?.error = error.localizedDescription
         }
         changed()
+    }
+
+    /// Marks a downloaded file as "from the internet", so macOS checks it (Gatekeeper and
+    /// XProtect malware scan) and asks before opening it — the same as Safari and Chrome.
+    static func quarantine(_ file: URL, from source: URL?) {
+        var values: [String: Any] = [
+            kLSQuarantineTypeKey as String: kLSQuarantineTypeWebDownload,
+            kLSQuarantineAgentNameKey as String: "beababrowser",
+        ]
+        if let source { values[kLSQuarantineDataURLKey as String] = source }
+        var url = file
+        var resource = URLResourceValues()
+        resource.quarantineProperties = values
+        try? url.setResourceValues(resource)
     }
 
     func cancel(_ item: Item) {

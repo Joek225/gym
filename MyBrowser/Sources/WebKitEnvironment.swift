@@ -48,7 +48,7 @@ enum WebKitEnvironment {
         // so it's off. Use Cmd+[ / Cmd+] or the toolbar buttons instead.
         webView.allowsBackForwardNavigationGestures = false
         webView.underPageBackgroundColor = Theme.background
-        webView.isInspectable = true                // right-click → Inspect Element (Chrome's DevTools)
+        webView.isInspectable = Preferences.developerTools   // right-click → Inspect Element (Settings)
         return webView
     }
 }

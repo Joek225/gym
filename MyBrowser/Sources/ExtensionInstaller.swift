@@ -91,7 +91,7 @@ enum ExtensionInstaller {
                                  : "✓ \(ExtensionManager.name(of: context)), but some parts may not work: \(warnings.joined(separator: "; "))")
                 }
             }
-            tell("Extensions", lines.joined(separator: "\n\n") + "\n\nTo make sure they work on every tab, quit the browser (⌘Q) and open it again.", window)
+            tell("Extensions", lines.joined(separator: "\n\n") + "\n\nFor safety, new extensions only work on a site after you click them (puzzle menu or toolbar). To let one work everywhere: puzzle → Manage Extensions → the extension → Can read and change sites → On all sites.\n\nTo make sure they work on every tab, quit the browser (⌘Q) and open it again.", window)
         }
     }
 
@@ -172,6 +172,18 @@ final class ExtensionsMenuDelegate: NSObject, NSMenuDelegate {
             let details = NSMenuItem(title: "Problems & Details…", action: #selector(BrowserWindowController.showExtensionDetails(_:)), keyEquivalent: "")
             details.representedObject = context
             sub.addItem(details)
+            sub.addItem(.separator())
+            let access = NSMenuItem(title: "Can read and change sites", action: nil, keyEquivalent: "")
+            let accessMenu = NSMenu()
+            for (title, mode) in [("On all sites", ExtensionManager.SiteAccess.allSites),
+                                  ("Only when you click it", .onClick)] {
+                let choice = NSMenuItem(title: title, action: #selector(BrowserWindowController.setExtensionSiteAccess(_:)), keyEquivalent: "")
+                choice.representedObject = [context, mode.rawValue] as [Any]
+                choice.state = ExtensionManager.siteAccess(for: context.uniqueIdentifier) == mode ? .on : .off
+                accessMenu.addItem(choice)
+            }
+            access.submenu = accessMenu
+            sub.addItem(access)
             sub.addItem(.separator())
             let remove = NSMenuItem(title: "Remove", action: #selector(BrowserWindowController.removeExtension(_:)), keyEquivalent: "")
             remove.representedObject = context

@@ -1,4 +1,5 @@
 import AppKit
+import WebKit
 
 /// The app's starting point. Builds the menu bar and opens browser windows.
 @main
@@ -126,6 +127,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         SessionSaver.shared.saveNow()
         HistoryStore.shared.save()
+        if Preferences.clearOnQuit {
+            HistoryStore.shared.clear()
+            HistoryStore.shared.save()
+            // Wait (briefly) for WebKit to finish deleting before the app exits.
+            var done = false
+            WKWebsiteDataStore.default().removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(),
+                                                    modifiedSince: .distantPast) { done = true }
+            let deadline = Date().addingTimeInterval(3)
+            while !done && Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.05)) }
+        }
     }
 
     // MARK: Windows
