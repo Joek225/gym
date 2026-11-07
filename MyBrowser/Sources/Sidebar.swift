@@ -83,23 +83,38 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
     /// Narrow sidebar: just icons in one column (hide button on top, groups + search in a
     /// box, pinned tiles, then tab icons and colored group pills). Wider than this = full list.
     static let compactWidth: CGFloat = 64
-    static let compactLimit: CGFloat = 120
-    static var isCompact: Bool {
-        let w = UserDefaults.standard.double(forKey: "sidebarWidth")
-        return w > 0 && CGFloat(w) < compactLimit
-    }
+    /// True while the sidebar is drawn as the icon column (read by the rows when they're built).
+    static var isCompact = false
     private var compactLayout: [NSLayoutConstraint] = []
     private var wideLayout: [NSLayoutConstraint] = []
     private var shownCompact: Bool?
+    private var hoverWork: DispatchWorkItem?
 
-    /// Switches between the icon column and the full list (call after the width changes).
-    func applyWidthMode() {
-        let compact = Self.isCompact
+    /// Mouse moved onto (true) or off (false) the sidebar.
+    var onHover: ((Bool) -> Void)?
+
+    /// Switches between the icon column and the full list.
+    func setCompact(_ compact: Bool) {
+        Self.isCompact = compact
         guard compact != shownCompact else { return }
         shownCompact = compact
         NSLayoutConstraint.deactivate(compact ? wideLayout : compactLayout)
         NSLayoutConstraint.activate(compact ? compactLayout : wideLayout)
         reload()
+    }
+
+    /// While the full sidebar slides out over the page, it gets a solid background and an edge.
+    func setFloating(_ floating: Bool) {
+        view.fillColor = floating ? Theme.sidebar : Theme.sidebarFill
+        view.borderColor = floating ? Theme.hairline : nil
+    }
+
+    func hoverChanged(_ inside: Bool) {
+        // A short pause, so just passing the mouse across doesn't flick it open and shut.
+        hoverWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.onHover?(inside) }
+        hoverWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + (inside ? 0.15 : 0.3), execute: work)
     }
 
     private let store: TabStore
@@ -155,7 +170,7 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
         scroll.contentInsets = NSEdgeInsets(top: 6, left: 0, bottom: 6, right: 0)
 
         // Top: hide-sidebar button on the left; tab groups and tab search on the right (like Chrome).
-        let collapse = headerButton("sidebar.leading", "Hide the tab sidebar (⌃⌘S)", #selector(collapseClicked(_:)))
+        let collapse = headerButton("sidebar.leading", "Shrink or expand the tab sidebar (⌃⌘S)", #selector(collapseClicked(_:)))
         let groupsPill = SolidView(color: Theme.buttonFill)
         let searchPill = SolidView(color: Theme.buttonFill)
         searchPill.cornerRadius = 9
@@ -212,7 +227,18 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
             headerLine.topAnchor.constraint(equalTo: searchPill.bottomAnchor, constant: 12),
         ]
         groupsPill.cornerRadius = 9
-        applyWidthMode()
+        setCompact(false)
+
+        let tracker = HoverTracker()
+        tracker.onChange = { [weak self] inside in self?.hoverChanged(inside) }
+        tracker.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(tracker, positioned: .below, relativeTo: nil)
+        NSLayoutConstraint.activate([
+            tracker.topAnchor.constraint(equalTo: view.topAnchor),
+            tracker.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            tracker.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            tracker.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+        ])
     }
 
     // MARK: Refreshing
@@ -984,4 +1010,18 @@ final class PinnedTile: SolidView, NSDraggingSource {
     override func otherMouseDown(with event: NSEvent) {}
     override func otherMouseUp(with event: NSEvent) { actions.close(tab) }
     override func menu(for event: NSEvent) -> NSMenu? { actions.menu(tab) }
+}
+
+/// An invisible layer behind the sidebar that notices the mouse arriving and leaving.
+final class HoverTracker: NSView {
+    var onChange: ((Bool) -> Void)?
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+                                       owner: self, userInfo: nil))
+    }
+    override func mouseEntered(with event: NSEvent) { onChange?(true) }
+    override func mouseExited(with event: NSEvent) { onChange?(false) }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }

@@ -10,14 +10,20 @@ import UniformTypeIdentifiers
 final class BrowserWebView: WKWebView {
     private var handlingDropOurselves = false
 
-    /// Pictures from other apps that aren't real files yet (the floating screenshot
-    /// thumbnail, Photos, Preview, Messages…). WebKit says "yes" to these but then hands the
-    /// page nothing, so we take them ourselves. Real files (from Finder) and drags inside
-    /// the page are left to WebKit, which handles those properly.
+    /// Anything dropped from another app (Finder files, the floating screenshot thumbnail,
+    /// Photos, Preview, Messages…) is collected by the browser itself and handed to the page
+    /// as a normal file drop. WebKit's own handling accepted some of these and then gave the
+    /// page nothing, and could stop working after the first drop. Drags inside the page, and
+    /// very large files (videos), are still left to WebKit.
     private func shouldHandleOurselves(_ info: NSDraggingInfo) -> Bool {
         if info.draggingSource != nil { return false }                        // dragged within the browser
         let pb = info.draggingPasteboard
-        if pb.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) { return false }
+        if let files = pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL],
+           !files.isEmpty {
+            let total = files.reduce(0) { $0 + ((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) }
+            let folders = files.contains { $0.hasDirectoryPath }
+            return total < 80_000_000 && !folders
+        }
         if pb.canReadObject(forClasses: [NSFilePromiseReceiver.self], options: nil) { return true }
         return pb.canReadObject(forClasses: [NSImage.self], options: nil)
     }
@@ -49,7 +55,14 @@ final class BrowserWebView: WKWebView {
         let point = convert(sender.draggingLocation, from: nil)
         let pb = sender.draggingPasteboard
 
-        // 1. Promised files (screenshot thumbnail, Photos): ask for them to be written into a temporary folder.
+        // 1. Real files (Finder, the desktop, a saved screenshot).
+        if let files = pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL],
+           !files.isEmpty {
+            deliver(files: files, at: point)
+            return true
+        }
+
+        // 2. Promised files (screenshot thumbnail, Photos): ask for them to be written into a temporary folder.
         if let promises = pb.readObjects(forClasses: [NSFilePromiseReceiver.self], options: nil) as? [NSFilePromiseReceiver],
            !promises.isEmpty {
             let folder = FileManager.default.temporaryDirectory.appendingPathComponent("drops-\(UUID().uuidString)", isDirectory: true)
@@ -58,21 +71,28 @@ final class BrowserWebView: WKWebView {
             var collected: [URL] = []
             let group = DispatchGroup()
             for promise in promises {
-                for _ in promise.fileNames { group.enter() }
+                // Some apps don't say how many files they'll write, so count at least one,
+                // and ignore any extra "done" calls (otherwise the drop silently never arrives).
+                var remaining = max(1, promise.fileNames.count)
+                group.enter()
                 promise.receivePromisedFiles(atDestination: folder, options: [:], operationQueue: queue) { url, error in
-                    if error == nil { DispatchQueue.main.async { collected.append(url) } }
-                    DispatchQueue.main.async { group.leave() }
+                    DispatchQueue.main.async {
+                        if error == nil { collected.append(url) }
+                        guard remaining > 0 else { return }
+                        remaining -= 1
+                        if remaining == 0 { group.leave() }
+                    }
                 }
             }
             group.notify(queue: .main) { [weak self] in self?.deliver(files: collected, at: point) }
             return true
         }
 
-        // 2. A plain picture on the clipboard of the drag: save it as a PNG.
+        // 3. A plain picture on the clipboard of the drag: save it as a PNG.
         if let image = (pb.readObjects(forClasses: [NSImage.self], options: nil) as? [NSImage])?.first,
            let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
            let png = rep.representation(using: .png, properties: [:]) {
-            let url = FileManager.default.temporaryDirectory.appendingPathComponent("Image \(Int(Date().timeIntervalSince1970)).png")
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("Image \(UUID().uuidString.prefix(6)).png")
             try? png.write(to: url)
             deliver(files: [url], at: point)
             return true
@@ -98,11 +118,18 @@ final class BrowserWebView: WKWebView {
           for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
           dt.items.add(new File([bytes], f.name, { type: f.type }));
         }
-        const target = document.elementFromPoint(x, y) || document.body;
-        for (const type of ['dragenter', 'dragover', 'drop']) {
-          target.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, composed: true,
-                                                     dataTransfer: dt, clientX: x, clientY: y }));
-        }
+        const fire = (target, type) => target.dispatchEvent(new DragEvent(type, {
+          bubbles: true, cancelable: true, composed: true, dataTransfer: dt, clientX: x, clientY: y }));
+        const first = document.elementFromPoint(x, y) || document.body;
+        fire(first, 'dragenter');
+        fire(first, 'dragover');
+        // Many chat sites show a "drop files here" layer once a drag arrives; give it a
+        // moment to appear, then drop onto whatever is under the pointer now.
+        await new Promise((r) => setTimeout(r, 120));
+        const target = document.elementFromPoint(x, y) || first;
+        if (target !== first) { fire(target, 'dragenter'); }
+        fire(target, 'dragover');
+        fire(target, 'drop');
         return true;
         """
         callAsyncJavaScript(js, arguments: ["files": items, "x": x, "y": y], in: nil, in: .page, completionHandler: nil)

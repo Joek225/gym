@@ -111,6 +111,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         for view in window.contentView?.subviews ?? [] {
                             NSLog("MyBrowser min width of %@: %d", String(describing: type(of: view)), Int(view.fittingSize.width))
                         }
+                        // The narrow sidebar, then slid out as if the mouse were over it.
+                        guard let controller = self.frontController else { return }
+                        controller.testSidebar(peek: false)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                            Self.saveSnapshot(of: window, name: "narrow")
+                            controller.testSidebar(peek: true)
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                                Self.saveSnapshot(of: window, name: "peek")
+                                controller.testSidebarReset()
+                            }
+                        }
                     }
                 }
             }
@@ -118,13 +129,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Used by the automatic test: saves a picture of the window's top part so the layout can be checked.
-    private static func saveSnapshot(of window: NSWindow) {
+    private static func saveSnapshot(of window: NSWindow, name: String = "toolbar") {
         guard let view = window.contentView else { return }
         let rect = view.bounds
         guard let rep = view.bitmapImageRepForCachingDisplay(in: rect) else { return }
         view.cacheDisplay(in: rect, to: rep)
         guard let png = rep.representation(using: .png, properties: [:]) else { return }
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("toolbar.png")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(name).png")
         try? png.write(to: url)
         NSLog("MyBrowser snapshot: %@", url.path)
     }

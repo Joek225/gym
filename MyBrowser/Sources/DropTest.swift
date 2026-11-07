@@ -20,8 +20,13 @@ enum DropTest {
         """
         webView.loadHTMLString(html, baseURL: URL(string: "https://example.com/"))
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            // Several drops in a row, mixing both kinds (one working and then stopping was a real problem).
             runCase("file", webView: webView) {
-                runCase("image", webView: webView) {}
+                runCase("image", webView: webView) {
+                    runCase("file again", webView: webView) {
+                        runCase("image again", webView: webView) {}
+                    }
+                }
             }
         }
     }
@@ -38,8 +43,8 @@ enum DropTest {
         let pb = NSPasteboard(name: NSPasteboard.Name("beababrowser-drop-test-\(name)"))
         pb.clearContents()
         let png = picture()
-        if name == "file" {
-            let url = FileManager.default.temporaryDirectory.appendingPathComponent("Screenshot test.png")
+        if name.hasPrefix("file") {
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("Screenshot \(name).png")
             try? png.write(to: url)
             pb.writeObjects([url as NSURL])
         } else {

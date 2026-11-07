@@ -113,19 +113,22 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
             errorView.layer?.masksToBounds = true
         }
 
-        for v in [toolbar, bookmarksBar, side, webContainer, errorView, newTabPage, findBar, resizeHandle, loadingDots, dimmer] as [NSView] {
+        // The sidebar is above the page so it can slide out over it from the narrow column.
+        for v in [toolbar, bookmarksBar, webContainer, errorView, newTabPage, findBar, loadingDots, side, resizeHandle, dimmer] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             content.addSubview(v)
         }
         errorView.isHidden = true
 
-        // One-time switch to the narrow icon sidebar (drag its edge to widen it again).
-        if !UserDefaults.standard.bool(forKey: "sidebar.compactDefault") {
-            UserDefaults.standard.set(true, forKey: "sidebar.compactDefault")
-            UserDefaults.standard.set(Double(SidebarController.compactWidth), forKey: "sidebarWidth")
+        // Undo the previous version's narrow default: the full sidebar is the normal look.
+        if UserDefaults.standard.double(forKey: "sidebarWidth") < 160 {
+            UserDefaults.standard.removeObject(forKey: "sidebarWidth")
         }
-        let savedWidth = UserDefaults.standard.double(forKey: "sidebarWidth")
-        sidebarWidth = side.widthAnchor.constraint(equalToConstant: savedWidth > 0 ? savedWidth : 250)
+        UserDefaults.standard.removeObject(forKey: "sidebarHidden")
+        sidebarWidth = side.widthAnchor.constraint(equalToConstant: fullSidebarWidth)
+        // How much room the page leaves for the sidebar. When the narrow sidebar slides
+        // out on hover it floats over the page instead of pushing it.
+        sidebarSpace = webContainer.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: fullSidebarWidth)
         barHeight = bookmarksBar.heightAnchor.constraint(equalToConstant: showsBookmarksBar ? BookmarksBarView.height : 0)
         bookmarksBar.isHidden = !showsBookmarksBar
 
@@ -146,7 +149,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
             sidebarWidth,
 
             webContainer.topAnchor.constraint(equalTo: bookmarksBar.bottomAnchor),
-            webContainer.leadingAnchor.constraint(equalTo: side.trailingAnchor),
+            sidebarSpace,
             webContainer.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -margin),
             webContainer.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -margin),
 
@@ -224,16 +227,13 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         toolbar.sidebarButton.action = #selector(toggleSidebar(_:))
         toolbar.puzzleButton.target = self
         toolbar.puzzleButton.action = #selector(showExtensionsMenu(_:))
+        sidebar.onHover = { [weak self] inside in self?.sidebarHovered(inside) }
         applySidebarVisibility()
 
         resizeHandle.onDrag = { [weak self] x in
             guard let self else { return }
-            // Below 120 it snaps to the narrow icon column.
-            let width = x < SidebarController.compactLimit ? SidebarController.compactWidth : min(max(x, 160), 480)
-            self.sidebarWidth.constant = width
-            UserDefaults.standard.set(Double(width), forKey: "sidebarWidth")
-            for controller in AppDelegate.shared.controllers where controller !== self { controller.applySidebarVisibility() }
-            self.sidebar.applyWidthMode()
+            UserDefaults.standard.set(Double(min(max(x, 160), 480)), forKey: "sidebarWidth")
+            self.applySidebarVisibility()
         }
         resizeHandle.onDragEnd = { [weak self] in
             guard let self else { return }
@@ -829,19 +829,62 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
 
     @objc func toggleSidebar(_ sender: Any?) { sidebarToggleCollapse() }
 
-    private var sidebarHidden: Bool {
-        get { UserDefaults.standard.bool(forKey: "sidebarHidden") }
-        set { UserDefaults.standard.set(newValue, forKey: "sidebarHidden") }
+    /// The sidebar button shrinks the sidebar to a column of icons (and back).
+    private var sidebarCompact: Bool {
+        get { UserDefaults.standard.bool(forKey: "sidebarCompact") }
+        set { UserDefaults.standard.set(newValue, forKey: "sidebarCompact") }
+    }
+    /// The narrow sidebar is slid out to full size because the mouse is over it.
+    private var sidebarPeeking = false
+    private var sidebarSpace: NSLayoutConstraint!
+
+    private var fullSidebarWidth: CGFloat {
+        let saved = UserDefaults.standard.double(forKey: "sidebarWidth")
+        return saved >= 160 ? saved : 250
     }
 
-    private func applySidebarVisibility() {
-        let hidden = sidebarHidden
-        sidebar.view.isHidden = hidden
-        resizeHandle.isHidden = hidden
-        let saved = UserDefaults.standard.double(forKey: "sidebarWidth")
-        sidebarWidth.constant = hidden ? 0 : (saved > 0 ? saved : 250)
-        toolbar.sidebarButton.isHidden = !hidden
-        sidebar.applyWidthMode()
+    private func applySidebarVisibility(animated: Bool = false) {
+        let compact = sidebarCompact
+        let narrow = compact && !sidebarPeeking
+        sidebar.setCompact(narrow)
+        sidebar.setFloating(compact && sidebarPeeking)
+        resizeHandle.isHidden = compact
+        toolbar.sidebarButton.isHidden = true
+        sidebarSpace.constant = compact ? SidebarController.compactWidth : fullSidebarWidth
+        let width = narrow ? SidebarController.compactWidth : fullSidebarWidth
+        if animated {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.16
+                context.allowsImplicitAnimation = true
+                sidebarWidth.animator().constant = width
+                window?.contentView?.layoutSubtreeIfNeeded()
+            }
+        } else {
+            sidebarWidth.constant = width
+        }
+    }
+
+    /// Used by the automatic test: narrow sidebar, then slid out.
+    func testSidebar(peek: Bool) {
+        sidebarCompact = true
+        sidebarPeeking = peek
+        applySidebarVisibility()
+        window?.contentView?.layoutSubtreeIfNeeded()
+    }
+
+    func testSidebarReset() {
+        sidebarCompact = false
+        sidebarPeeking = false
+        applySidebarVisibility()
+    }
+
+    /// Mouse over the narrow sidebar: slide the full one out over the page; mouse gone: back in.
+    private func sidebarHovered(_ inside: Bool) {
+        guard sidebarCompact, inside != sidebarPeeking else { return }
+        // Keep it open while a menu or the group editor from it is showing.
+        if !inside, Overlay.current != nil { return }
+        sidebarPeeking = inside
+        applySidebarVisibility(animated: true)
     }
 
     @objc func goBack(_ sender: Any?) { store.selected?.webView?.goBack() }
@@ -999,8 +1042,9 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     func sidebarOpenTools() { openTools(nil) }
 
     func sidebarToggleCollapse() {
-        sidebarHidden.toggle()
-        applySidebarVisibility()
+        sidebarCompact.toggle()
+        sidebarPeeking = false
+        applySidebarVisibility(animated: true)
     }
 
     /// The grid button: every tab group (open and closed), like Chrome's.
