@@ -55,9 +55,9 @@ enum DragPayload {
 /// A tab container's pinned tabs, shown as a row of square tiles (like Chrome).
 @MainActor
 final class PinnedStrip: NSObject {
-    static let columns = 4
-    static let tileHeight: CGFloat = 34
-    static let gap: CGFloat = 6
+    static var columns: Int { SidebarController.isCompact ? 1 : 4 }
+    static var tileHeight: CGFloat { SidebarController.isCompact ? 42 : 34 }
+    static var gap: CGFloat { SidebarController.isCompact ? 8 : 6 }
 
     weak var group: TabGroup?
     let isTopLevel: Bool
@@ -79,6 +79,28 @@ final class PinnedStrip: NSObject {
 final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegate, NSMenuDelegate {
     let view = SolidView(color: Theme.sidebarFill)
     weak var delegate: SidebarDelegate?
+
+    /// Narrow sidebar: just icons in one column (hide button on top, groups + search in a
+    /// box, pinned tiles, then tab icons and colored group pills). Wider than this = full list.
+    static let compactWidth: CGFloat = 64
+    static let compactLimit: CGFloat = 120
+    static var isCompact: Bool {
+        let w = UserDefaults.standard.double(forKey: "sidebarWidth")
+        return w > 0 && CGFloat(w) < compactLimit
+    }
+    private var compactLayout: [NSLayoutConstraint] = []
+    private var wideLayout: [NSLayoutConstraint] = []
+    private var shownCompact: Bool?
+
+    /// Switches between the icon column and the full list (call after the width changes).
+    func applyWidthMode() {
+        let compact = Self.isCompact
+        guard compact != shownCompact else { return }
+        shownCompact = compact
+        NSLayoutConstraint.deactivate(compact ? wideLayout : compactLayout)
+        NSLayoutConstraint.activate(compact ? compactLayout : wideLayout)
+        reload()
+    }
 
     private let store: TabStore
     private let outline = SidebarOutlineView()
@@ -135,9 +157,9 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
         // Top: hide-sidebar button on the left; tab groups and tab search on the right (like Chrome).
         let collapse = headerButton("sidebar.leading", "Hide the tab sidebar (⌃⌘S)", #selector(collapseClicked(_:)))
         let groupsPill = SolidView(color: Theme.buttonFill)
-        groupsPill.cornerRadius = 9
         let searchPill = SolidView(color: Theme.buttonFill)
         searchPill.cornerRadius = 9
+        groupsPill.cornerRadius = 9
         let groupsButton = headerButton("square.grid.2x2", "Tab groups", #selector(groupsClicked(_:)))
         let searchButton = headerButton("text.magnifyingglass", "Search tabs (⇧⌘A)", #selector(searchClicked(_:)))
         let headerLine = SolidView(color: Theme.buttonFill)
@@ -147,7 +169,22 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
             v.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(v)
         }
+        // Always the same, wide or narrow: the list under the header line.
         NSLayoutConstraint.activate([
+            headerLine.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 10),
+            headerLine.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -10),
+            headerLine.heightAnchor.constraint(equalToConstant: 1),
+            groupsButton.centerXAnchor.constraint(equalTo: groupsPill.centerXAnchor),
+            groupsButton.centerYAnchor.constraint(equalTo: groupsPill.centerYAnchor),
+            searchButton.centerXAnchor.constraint(equalTo: searchPill.centerXAnchor),
+            searchButton.centerYAnchor.constraint(equalTo: searchPill.centerYAnchor),
+            scroll.topAnchor.constraint(equalTo: headerLine.bottomAnchor, constant: 2),
+            scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            scroll.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -6),
+        ])
+        // Wide: hide button on the left; tab groups and tab search on the right (like Chrome).
+        wideLayout = [
             collapse.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12),
             collapse.centerYAnchor.constraint(equalTo: view.topAnchor, constant: 22),
             searchPill.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -10),
@@ -158,20 +195,24 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
             groupsPill.centerYAnchor.constraint(equalTo: collapse.centerYAnchor),
             groupsPill.widthAnchor.constraint(equalToConstant: 34),
             groupsPill.heightAnchor.constraint(equalToConstant: 30),
-            groupsButton.centerXAnchor.constraint(equalTo: groupsPill.centerXAnchor),
-            groupsButton.centerYAnchor.constraint(equalTo: groupsPill.centerYAnchor),
-            searchButton.centerXAnchor.constraint(equalTo: searchPill.centerXAnchor),
-            searchButton.centerYAnchor.constraint(equalTo: searchPill.centerYAnchor),
             headerLine.topAnchor.constraint(equalTo: view.topAnchor, constant: 44),
-            headerLine.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 10),
-            headerLine.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -10),
-            headerLine.heightAnchor.constraint(equalToConstant: 1),
-
-            scroll.topAnchor.constraint(equalTo: headerLine.bottomAnchor, constant: 2),
-            scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            scroll.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -6),
-        ])
+        ]
+        // Narrow: hide button centered on top, then groups and search stacked in one box.
+        compactLayout = [
+            collapse.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            collapse.centerYAnchor.constraint(equalTo: view.topAnchor, constant: 22),
+            groupsPill.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            groupsPill.topAnchor.constraint(equalTo: view.topAnchor, constant: 44),
+            groupsPill.widthAnchor.constraint(equalToConstant: 42),
+            groupsPill.heightAnchor.constraint(equalToConstant: 36),
+            searchPill.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            searchPill.topAnchor.constraint(equalTo: groupsPill.bottomAnchor, constant: 2),
+            searchPill.widthAnchor.constraint(equalToConstant: 42),
+            searchPill.heightAnchor.constraint(equalToConstant: 36),
+            headerLine.topAnchor.constraint(equalTo: searchPill.bottomAnchor, constant: 12),
+        ]
+        groupsPill.cornerRadius = 9
+        applyWidthMode()
     }
 
     // MARK: Refreshing
@@ -329,6 +370,7 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
 
     func outlineView(_ outlineView: NSOutlineView, heightOfRowByItem item: Any) -> CGFloat {
         if let strip = item as? PinnedStrip { return strip.height }
+        if Self.isCompact { return item is TabGroup ? 34 : 38 }
         return item is TabGroup ? 28 : 30
     }
 
@@ -631,13 +673,19 @@ final class TabCellView: NSTableCellView {
     private let groupLine = SolidView(color: .clear)
     private let pinIcon = NSImageView()
     private var isPinned = false
+    private var compact = false
+    private var iconLeading: NSLayoutConstraint!
+    private var iconCentered: NSLayoutConstraint!
+    private var iconWidth: NSLayoutConstraint!
+    private var iconHeight: NSLayoutConstraint!
 
     var showsClose = false { didSet { updateTrailing() } }
 
     private func updateTrailing() {
         // Pinned tabs show a pin; hovering shows the close button instead.
-        closeButton.isHidden = !showsClose
-        pinIcon.isHidden = !isPinned || showsClose
+        // The narrow sidebar shows only the icon (middle-click or ⌘W closes).
+        closeButton.isHidden = !showsClose || compact
+        pinIcon.isHidden = !isPinned || showsClose || compact
     }
 
     init(target: AnyObject, closeAction: Selector) {
@@ -665,16 +713,19 @@ final class TabCellView: NSTableCellView {
             v.translatesAutoresizingMaskIntoConstraints = false
             addSubview(v)
         }
+        iconLeading = icon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20)
+        iconCentered = icon.centerXAnchor.constraint(equalTo: centerXAnchor)
+        iconWidth = icon.widthAnchor.constraint(equalToConstant: 16)
+        iconHeight = icon.heightAnchor.constraint(equalToConstant: 16)
         NSLayoutConstraint.activate([
             groupLine.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
             groupLine.widthAnchor.constraint(equalToConstant: 2),
             groupLine.topAnchor.constraint(equalTo: topAnchor, constant: -1),
             groupLine.bottomAnchor.constraint(equalTo: bottomAnchor, constant: 1),
 
-            icon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
+            iconLeading,
             icon.centerYAnchor.constraint(equalTo: centerYAnchor),
-            icon.widthAnchor.constraint(equalToConstant: 16),
-            icon.heightAnchor.constraint(equalToConstant: 16),
+            iconWidth, iconHeight,
 
             label.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 8),
             label.centerYAnchor.constraint(equalTo: centerYAnchor),
@@ -692,12 +743,19 @@ final class TabCellView: NSTableCellView {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     func configure(_ tab: Tab, selected: Bool) {
+        compact = SidebarController.isCompact
+        iconLeading.isActive = !compact
+        iconCentered.isActive = compact
+        iconWidth.constant = compact ? 20 : 16
+        iconHeight.constant = compact ? 20 : 16
+        label.isHidden = compact
+        icon.alphaValue = (compact && !tab.isLoaded && !selected) ? 0.55 : 1
         icon.image = tab.favicon ?? Icons.globe
         icon.contentTintColor = Theme.mutedText
         label.stringValue = tab.displayTitle
         // Unloaded (sleeping) tabs are shown slightly dimmer.
         label.textColor = (tab.isLoaded || selected) ? Theme.text : Theme.mutedText
-        if let group = tab.group {
+        if let group = tab.group, !compact {
             groupLine.fillColor = group.color.color
             groupLine.isHidden = false
         } else {
@@ -732,21 +790,35 @@ final class GroupCellView: NSTableCellView {
             addSubview(v)
         }
         NSLayoutConstraint.activate([
-            chip.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
-            chip.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
             chip.topAnchor.constraint(equalTo: topAnchor, constant: 2),
             chip.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -2),
             label.leadingAnchor.constraint(equalTo: chip.leadingAnchor, constant: 10),
             label.centerYAnchor.constraint(equalTo: chip.centerYAnchor),
             label.trailingAnchor.constraint(lessThanOrEqualTo: chevron.leadingAnchor, constant: -6),
-            chevron.trailingAnchor.constraint(equalTo: chip.trailingAnchor, constant: -10),
             chevron.centerYAnchor.constraint(equalTo: chip.centerYAnchor),
         ])
+        chevronTrailing = chevron.trailingAnchor.constraint(equalTo: chip.trailingAnchor, constant: -10)
+        chevronCentered = chevron.centerXAnchor.constraint(equalTo: chip.centerXAnchor)
+        chipLeading = chip.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6)
+        chipTrailing = chip.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6)
+        NSLayoutConstraint.activate([chevronTrailing, chipLeading, chipTrailing])
     }
+
+    private var chevronTrailing: NSLayoutConstraint!
+    private var chevronCentered: NSLayoutConstraint!
+    private var chipLeading: NSLayoutConstraint!
+    private var chipTrailing: NSLayoutConstraint!
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
     func configure(_ group: TabGroup) {
+        let compact = SidebarController.isCompact
+        chevronTrailing.isActive = !compact
+        chevronCentered.isActive = compact
+        chipLeading.constant = compact ? 10 : 6
+        chipTrailing.constant = compact ? -10 : -6
+        chip.cornerRadius = compact ? 10 : 7
+        label.isHidden = compact
         // A turned-off group is grey until you click it.
         chip.fillColor = group.isDisabled ? group.color.offColor : group.color.color
         label.textColor = group.isDisabled ? NSColor(white: 1, alpha: 0.92) : Theme.sidebarText
@@ -761,8 +833,9 @@ final class GroupCellView: NSTableCellView {
             label.stringValue = group.isCollapsed ? "\(group.name)  ·  \(countText)" : group.name
         }
         chevron.image = Icons.symbol(group.isCollapsed ? "chevron.down" : "chevron.up", size: 11, weight: .semibold)
-        toolTip = group.isDisabled ? "Turned off to save memory. Click to turn it back on."
-            : "Click to \(group.isCollapsed ? "expand" : "collapse"). Right-click to edit or turn off the group."
+        let title = group.name.isEmpty ? "" : "\(group.name) — \(count) tab\(count == 1 ? "" : "s")\n"
+        toolTip = title + (group.isDisabled ? "Turned off to save memory. Click to turn it back on."
+            : "Click to \(group.isCollapsed ? "expand" : "collapse"). Right-click to edit or turn off the group.")
     }
 }
 
@@ -805,7 +878,7 @@ final class PinnedStripCellView: NSTableCellView {
 
     override func layout() {
         super.layout()
-        let inset: CGFloat = 8
+        let inset: CGFloat = SidebarController.isCompact ? 10 : 8
         let gap = PinnedStrip.gap
         let columns = CGFloat(PinnedStrip.columns)
         let width = (bounds.width - inset * 2 - gap * (columns - 1)) / columns

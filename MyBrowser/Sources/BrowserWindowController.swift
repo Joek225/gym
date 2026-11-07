@@ -119,6 +119,11 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         }
         errorView.isHidden = true
 
+        // One-time switch to the narrow icon sidebar (drag its edge to widen it again).
+        if !UserDefaults.standard.bool(forKey: "sidebar.compactDefault") {
+            UserDefaults.standard.set(true, forKey: "sidebar.compactDefault")
+            UserDefaults.standard.set(Double(SidebarController.compactWidth), forKey: "sidebarWidth")
+        }
         let savedWidth = UserDefaults.standard.double(forKey: "sidebarWidth")
         sidebarWidth = side.widthAnchor.constraint(equalToConstant: savedWidth > 0 ? savedWidth : 250)
         barHeight = bookmarksBar.heightAnchor.constraint(equalToConstant: showsBookmarksBar ? BookmarksBarView.height : 0)
@@ -222,7 +227,13 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         applySidebarVisibility()
 
         resizeHandle.onDrag = { [weak self] x in
-            self?.sidebarWidth.constant = min(max(x, 160), 480)
+            guard let self else { return }
+            // Below 120 it snaps to the narrow icon column.
+            let width = x < SidebarController.compactLimit ? SidebarController.compactWidth : min(max(x, 160), 480)
+            self.sidebarWidth.constant = width
+            UserDefaults.standard.set(Double(width), forKey: "sidebarWidth")
+            for controller in AppDelegate.shared.controllers where controller !== self { controller.applySidebarVisibility() }
+            self.sidebar.applyWidthMode()
         }
         resizeHandle.onDragEnd = { [weak self] in
             guard let self else { return }
@@ -830,6 +841,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         let saved = UserDefaults.standard.double(forKey: "sidebarWidth")
         sidebarWidth.constant = hidden ? 0 : (saved > 0 ? saved : 250)
         toolbar.sidebarButton.isHidden = !hidden
+        sidebar.applyWidthMode()
     }
 
     @objc func goBack(_ sender: Any?) { store.selected?.webView?.goBack() }

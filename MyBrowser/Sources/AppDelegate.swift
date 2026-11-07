@@ -93,6 +93,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate()
 
         // Used by the automatic test: make the window very wide and check it stays that size.
+        if CommandLine.arguments.contains("--test-drop"), let controller = frontController {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4) { DropTest.run(in: controller) }
+        }
         if CommandLine.arguments.contains("--test-resize"), let window = frontController?.window {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                 window.setFrame(NSRect(x: 0, y: 0, width: 1900, height: 1000), display: true)
@@ -117,7 +120,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Used by the automatic test: saves a picture of the window's top part so the layout can be checked.
     private static func saveSnapshot(of window: NSWindow) {
         guard let view = window.contentView else { return }
-        let rect = NSRect(x: 0, y: view.bounds.height - 140, width: view.bounds.width, height: 140)
+        let rect = view.bounds
         guard let rep = view.bitmapImageRepForCachingDisplay(in: rect) else { return }
         view.cacheDisplay(in: rect, to: rep)
         guard let png = rep.representation(using: .png, properties: [:]) else { return }
