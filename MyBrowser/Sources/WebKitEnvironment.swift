@@ -14,6 +14,17 @@ enum WebKitEnvironment {
     static let dataStore = WKWebsiteDataStore.default()
 
     /// `store` is a private window's own throwaway storage (nil = normal browsing).
+    /// Safari's version on this Mac: read from Safari itself, or worked out from the macOS version.
+    static let safariVersion: String = {
+        if let info = NSDictionary(contentsOfFile: "/Applications/Safari.app/Contents/Info.plist"),
+           let version = info["CFBundleShortVersionString"] as? String, !version.isEmpty {
+            return version
+        }
+        let mac = ProcessInfo.processInfo.operatingSystemVersion
+        if mac.majorVersion >= 26 { return "\(mac.majorVersion).\(mac.minorVersion)" }   // macOS 26 ships Safari 26
+        return "\(mac.majorVersion + 3).\(mac.minorVersion)"                                // macOS 15 → Safari 18
+    }()
+
     static func makeConfiguration(store: WKWebsiteDataStore? = nil) -> WKWebViewConfiguration {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = store ?? dataStore
@@ -33,7 +44,10 @@ enum WebKitEnvironment {
         }
         config.defaultWebpagePreferences.preferredContentMode = .desktop
         // Identify like Safari so sites (Google etc.) serve their full versions.
-        config.applicationNameForUserAgent = "Version/18.5 Safari/605.1.15"
+        // The Safari version that comes with this macOS (an old-looking version makes Google's
+        // sign-in treat the browser as outdated and refuse some verification steps).
+        config.applicationNameForUserAgent = "Version/\(Self.safariVersion) Safari/605.1.15"
+        if CommandLine.arguments.contains("--log-loads") { NSLog("MyBrowser identifies as Safari %@", Self.safariVersion) }
         // Saving and filling passwords, and skipping passkey screens that can't work here.
         config.userContentController.addUserScript(PasskeyFallback.script)
         PasswordAgent.shared.install(in: config.userContentController)
