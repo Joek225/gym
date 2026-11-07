@@ -134,7 +134,9 @@ final class BrowserWebView: WKWebView {
         box.focus();
         return true;
         """
+        let testing = CommandLine.arguments.contains("--test-drop")
         callAsyncJavaScript(js, arguments: ["x": x, "y": y], in: nil, in: .page) { [weak self] result in
+            if testing { NSLog("MyBrowser paste-instead: box found = %@", String(describing: result)) }
             guard let self, case .success(let value) = result, (value as? Bool) == true else { return }
             self.window?.makeFirstResponder(self)
             let general = NSPasteboard.general
@@ -149,7 +151,11 @@ final class BrowserWebView: WKWebView {
                 }
                 general.writeObjects([item])
             }
-            NSApp.sendAction(#selector(NSText.paste(_:)), to: self, from: nil)
+            let sent = NSApp.sendAction(#selector(NSText.paste(_:)), to: self, from: nil)
+            if testing {
+                NSLog("MyBrowser paste-instead: paste sent = %d, first responder = %@, key window = %d",
+                      sent ? 1 : 0, String(describing: self.window?.firstResponder), (self.window?.isKeyWindow ?? false) ? 1 : 0)
+            }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
                 general.clearContents()
                 if !saved.isEmpty { general.writeObjects(saved) }

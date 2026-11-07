@@ -41,7 +41,7 @@ jobs:
           fi
           echo "App is still running after 20s (good)"
           grep -q "MyBrowser loaded: https://example.com" app.log && echo "Page loaded (good)"
-          grep "drop test\|drop registration" app.log || echo "(no drop test output)"
+          grep "drop test\|drop registration\|paste-instead" app.log || echo "(no drop test output)"
           grep -q "drop registration: pages 2, visible taking drops 1, hidden taking drops 0" app.log && echo "HIDDEN TAB DROP TEST PASSED" || { echo "!!! HIDDEN TAB DROP TEST FAILED"; exit 1; }
           for c in "file:" "image:" "file again:" "image again:" "quick file:" "photo:" "refused drop:"; do
             grep "drop test $c" app.log | grep "page got: dropped 1 " | grep -v " 0 image" | grep -q "trusted=true" && echo "DROP TEST PASSED ($c)" || { echo "!!! DROP TEST FAILED ($c)"; exit 1; }
