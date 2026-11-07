@@ -39,7 +39,6 @@ enum SitePermissions {
     static func standard(_ kind: PermissionKind) -> PermissionValue {
         switch kind {
         case .downloads: .allow
-        case .notifications: .block
         default: .ask
         }
     }
@@ -151,10 +150,6 @@ final class SiteInfoPanel: NSObject, NSWindowDelegate {
             popup.target = self
             popup.action = #selector(permissionChanged(_:))
             popup.controlSize = .small
-            if kind == .notifications {
-                popup.isEnabled = false
-                popup.toolTip = "Web notifications aren't supported by apps built on WebKit (only Safari has them)."
-            }
             popups.append((kind, popup))
             permissionRows.append(row(icon: kind.icon, title: kind.title, detail: nil, control: popup))
         }
