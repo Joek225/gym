@@ -110,7 +110,7 @@ final class BrowserWebView: WKWebView {
                 }
                 general.writeObjects([item])
             }
-            self.paste(nil)
+            NSApp.sendAction(#selector(NSText.paste(_:)), to: self, from: nil)
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
                 general.clearContents()
                 if !saved.isEmpty { general.writeObjects(saved) }
