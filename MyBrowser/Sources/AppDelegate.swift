@@ -52,6 +52,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     NSLog("MyBrowser extension install: %@", failure ?? "OK")
                     if CommandLine.arguments.contains("--quit-after-install") { NSApp.terminate(nil); return }
                 }
+                if CommandLine.arguments.contains("--extensions-all-sites") {   // used by the automatic test
+                    let dirs = (try? FileManager.default.contentsOfDirectory(at: ExtensionManager.folder, includingPropertiesForKeys: nil)) ?? []
+                    for dir in dirs { ExtensionManager.setSiteAccess(.allSites, for: dir.lastPathComponent) }
+                }
                 if ExtensionManager.hasInstalledExtensions {
                     await ExtensionManager.shared.loadInstalled()
                     for context in ExtensionManager.shared.contexts {
