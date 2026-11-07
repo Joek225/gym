@@ -97,10 +97,10 @@ final class NewTabView: SolidView, NSTextFieldDelegate {
 
         ])
         let shelfWidth = shelf.widthAnchor.constraint(equalTo: box.widthAnchor, constant: 120)
-        shelfWidth.priority = .defaultHigh
+        shelfWidth.priority = NSLayoutConstraint.Priority(490)   // a wish only: never holds the window open
         shelfWidth.isActive = true
         let wide = box.widthAnchor.constraint(equalToConstant: 620)
-        wide.priority = .defaultHigh
+        wide.priority = NSLayoutConstraint.Priority(490)
         wide.isActive = true
     }
 

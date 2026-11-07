@@ -88,10 +88,10 @@ jobs:
           sleep 24
           grep MyBrowser ext2.log | grep -v "min width" || true
           kill -9 $PID || true
-          grep -q "title: Extension works" ext2.log && echo "EXTENSION TEST PASSED"
-          grep -q "window width after resize: 1900" ext2.log && echo "RESIZE TEST PASSED"
+          grep -q "title: Extension works" ext2.log && echo "EXTENSION TEST PASSED" || { echo "!!! EXTENSION TEST FAILED"; exit 1; }
+          grep -q "window width after resize: 1900" ext2.log && echo "RESIZE TEST PASSED" || { echo "!!! RESIZE TEST FAILED"; exit 1; }
           grep -E "after shrink|min width" ext2.log || true
-          grep -q "window width after shrink: 1000" ext2.log && echo "SHRINK TEST PASSED"
+          grep -q "window width after shrink: 1000" ext2.log && echo "SHRINK TEST PASSED" || { echo "!!! SHRINK TEST FAILED"; exit 1; }
           grep "page sharpness" ext2.log || true
           if grep "page sharpness" ext2.log | grep -q "outerWidth 0,"; then echo "!!! pages see a 0-wide window (blurry Google Docs)"; exit 1; fi
           SNAP=$(grep -o "snapshot: .*" ext2.log | sed 's/snapshot: //' | head -1)

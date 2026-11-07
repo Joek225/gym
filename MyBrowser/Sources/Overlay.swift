@@ -69,8 +69,8 @@ final class Overlay: NSObject {
         // The panel's preferred size gives way when the window is smaller.
         let preferredWidth = card.widthAnchor.constraint(equalToConstant: size.width)
         let preferredHeight = card.heightAnchor.constraint(equalToConstant: size.height)
-        preferredWidth.priority = .defaultHigh
-        preferredHeight.priority = .defaultHigh
+        preferredWidth.priority = NSLayoutConstraint.Priority(490)   // never holds the window open
+        preferredHeight.priority = NSLayoutConstraint.Priority(490)
         NSLayoutConstraint.activate([
             card.centerXAnchor.constraint(equalTo: root.centerXAnchor),
             card.centerYAnchor.constraint(equalTo: root.centerYAnchor),
