@@ -1014,10 +1014,20 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     /// Shows the Chrome-style group editor next to the group's header.
     func sidebarEditGroup(_ group: TabGroup, anchor: NSView?) {
         guard let window else { return }
-        sidebar.reload()
-        let anchorView = anchor ?? sidebar.rowView(for: group) ?? sidebar.view
-        let rect = anchorView.window == nil ? window.frame
-            : window.convertToScreen(anchorView.convert(anchorView.bounds, to: nil))
+        // Use the group's row on screen right now (the one you clicked, or its current row).
+        var anchorView: NSView? = anchor?.window != nil ? anchor : nil
+        if anchorView == nil {
+            sidebar.reload()
+            anchorView = sidebar.rowView(for: group)
+        }
+        let rect: NSRect
+        if let anchorView, anchorView.window != nil {
+            rect = window.convertToScreen(anchorView.convert(anchorView.bounds, to: nil))
+        } else {
+            // Fallback: just below the top of the sidebar (always on screen).
+            let side = sidebar.view
+            rect = window.convertToScreen(side.convert(NSRect(x: 8, y: side.bounds.height - 80, width: side.bounds.width - 16, height: 28), to: nil))
+        }
         GroupEditor.show(for: group, actions: self, anchor: rect, in: window)
     }
 
