@@ -215,23 +215,17 @@ final class PasswordAgent: NSObject, WKScriptMessageHandler {
         if (e.target && looksLikeUser(e.target) && e.target.value) post({ type: 'username', username: e.target.value });
       }, true);
 
-      // Tell the app when a new login box shows up, so it can fill a saved password.
-      // (Covers sites that ask for the email first and the password on the next screen.)
+      // Tell the app when you click into a login box, so it can fill a saved password.
+      // (Only reacts to clicks into boxes — it never watches the page, so busy pages like
+      // Google Docs aren't slowed down.)
       const seen = new WeakSet();
-      let sentUserOnly = false, timer = null;
-      const check = () => {
-        timer = null;
-        const fresh = passwords().filter((p) => !seen.has(p));
-        fresh.forEach((p) => seen.add(p));
-        const userOnly = !sentUserOnly && userInputs().some((i) => /username|email/i.test(i.autocomplete || '') && visible(i));
-        if (fresh.length || userOnly) {
-          if (userOnly) sentUserOnly = true;
-          post({ type: 'form' });
-        }
+      const offer = (el) => {
+        if (!el || el.tagName !== 'INPUT' || seen.has(el)) return;
+        if (el.type === 'password' || looksLikeUser(el)) { seen.add(el); post({ type: 'form' }); }
       };
-      new MutationObserver(() => { if (!timer) timer = setTimeout(check, 400); })
-        .observe(document.documentElement, { childList: true, subtree: true });
-      check();
+      document.addEventListener('focusin', (e) => offer(e.target), true);
+      // A login box that already has the cursor when the page opens.
+      if (document.activeElement) offer(document.activeElement);
 
       window.__mybrowserFill = (u, p) => {
         const set = (el, v) => {

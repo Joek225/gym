@@ -92,6 +92,8 @@ jobs:
           grep -q "window width after resize: 1900" ext2.log && echo "RESIZE TEST PASSED"
           grep -E "after shrink|min width" ext2.log || true
           grep -q "window width after shrink: 1000" ext2.log && echo "SHRINK TEST PASSED"
+          grep "page sharpness" ext2.log || true
+          if grep "page sharpness" ext2.log | grep -q "outerWidth 0,"; then echo "!!! pages see a 0-wide window (blurry Google Docs)"; exit 1; fi
           SNAP=$(grep -o "snapshot: .*" ext2.log | sed 's/snapshot: //' | head -1)
           if [ -n "$SNAP" ] && [ -f "$SNAP" ]; then
             sips -Z 1400 "$SNAP" --out small.png >/dev/null 2>&1 || cp "$SNAP" small.png

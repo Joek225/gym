@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private(set) var controllers: [BrowserWindowController] = []
     private var windowsOpen = false
+    private var isRebuilding = false
     private var pendingURLs: [URL] = []
 
     static func main() {
@@ -121,7 +122,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSLog("MyBrowser snapshot: %@", url.path)
     }
 
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { !isRebuilding }
 
     func applicationWillTerminate(_ notification: Notification) {
         SessionSaver.shared.saveNow()
@@ -141,7 +142,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return controller
     }
 
+    /// Re-creates every window with the current colors (used by Settings). Tabs, groups and
+    /// pages come back as they were; pages reload when you look at them.
+    func rebuildWindows(thenShowSettings: Bool) {
+        // Wait a moment: this is usually called from a button inside one of the windows being replaced.
+        DispatchQueue.main.async { [weak self] in self?.performRebuild(thenShowSettings: thenShowSettings) }
+    }
+
+    private func performRebuild(thenShowSettings: Bool) {
+        SessionSaver.shared.saveNow()
+        Theme.reload()
+        let old = controllers
+        let frontWasIndex = old.firstIndex { $0 === frontController } ?? 0
+        isRebuilding = true
+        var fresh: [BrowserWindowController] = []
+        for controller in old where !controller.isPrivate {
+            let replacement = BrowserWindowController(session: controller.store.snapshot())
+            if let frame = controller.window?.frame { replacement.window?.setFrame(frame, display: false) }
+            fresh.append(replacement)
+        }
+        if fresh.isEmpty { fresh.append(BrowserWindowController(session: nil)) }
+        // Open the new windows first, then close the old ones (so the app never has zero windows).
+        for c in fresh { controllers.append(c); c.showWindow(nil) }
+        for c in old {
+            controllers.removeAll { $0 === c }
+            c.window?.close()
+        }
+        isRebuilding = false
+        let front = fresh[min(frontWasIndex, fresh.count - 1)]
+        front.window?.makeKeyAndOrderFront(nil)
+        if thenShowSettings { front.openSettings(nil) }
+        SessionSaver.shared.saveNow()
+    }
+
     func windowDidClose(_ controller: BrowserWindowController) {
+        if isRebuilding { return }
         if #available(macOS 15.4, *) { ExtensionManager.active?.controller.didCloseWindow(controller) }
         // Keep the very last window in the saved session so its tabs come back next time.
         guard controllers.count > 1 else { SessionSaver.shared.saveNow(); return }

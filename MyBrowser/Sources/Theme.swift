@@ -4,32 +4,35 @@ import AppKit
 /// the rest are worked out from those. Changes apply after a restart.
 @MainActor
 enum Theme {
-    private static let saved = ThemeColors.load()
+    /// Your saved colors. `reload()` picks up changes from Settings (windows are then rebuilt).
+    private static var saved = ThemeColors.load()
+    static func reload() { saved = ThemeColors.load() }
 
-    static let sidebar     = saved.sidebar
-    static let toolbar     = saved.toolbar
-    static let background  = saved.background
-    static let accent      = saved.accent
-    static let field       = Preferences.arcStyle ? NSColor(white: isDark ? 1 : 0, alpha: 0.12)
-                                                  : mix(saved.sidebar, saved.toolbar, 0.15)
+    static var sidebar: NSColor { saved.sidebar }
+    static var toolbar: NSColor { saved.toolbar }
+    static var background: NSColor { saved.background }
+    static var accent: NSColor { saved.accent }
+    static var isDark: Bool { (saved.sidebar.usingColorSpace(.sRGB)?.brightnessComponent ?? 0) < 0.55 }
     /// Arc style: the window is a see-through tinted gradient and pages sit on a rounded card.
-    static let arcStyle    = Preferences.arcStyle
-    static let selectedTab = arcStyle ? NSColor(white: isDark ? 1 : 0, alpha: 0.16) : saved.toolbar
-    static let hoverTab    = arcStyle ? NSColor(white: isDark ? 1 : 0, alpha: 0.08) : mix(saved.sidebar, saved.toolbar, 0.45)
-    /// Background of the toolbar, bookmarks bar and sidebar (clear in Arc style, so the tint shows).
+    static var arcStyle: Bool { Preferences.arcStyle }
+    private static var overlayTint: NSColor { NSColor(white: isDark ? 1 : 0, alpha: 1) }
+
+    static var field: NSColor { arcStyle ? overlayTint.withAlphaComponent(0.12) : mix(saved.sidebar, saved.toolbar, 0.15) }
+    static var selectedTab: NSColor { arcStyle ? overlayTint.withAlphaComponent(0.16) : saved.toolbar }
+    static var hoverTab: NSColor { arcStyle ? overlayTint.withAlphaComponent(0.08) : mix(saved.sidebar, saved.toolbar, 0.45) }
     /// Dark text used on top of the bright group colors.
     static let sidebarText = NSColor(hex: 0x1C1E30)
-    static let chromeFill  = arcStyle ? NSColor.clear : saved.toolbar
-    static let sidebarFill = arcStyle ? NSColor.clear : saved.sidebar
+    /// Background of the toolbar, bookmarks bar and sidebar (clear in Arc style, so the tint shows).
+    static var chromeFill: NSColor { arcStyle ? .clear : saved.toolbar }
+    static var sidebarFill: NSColor { arcStyle ? .clear : saved.sidebar }
     /// Small surfaces in the sidebar (pinned tiles, the Tools button).
-    static let tileFill    = arcStyle ? NSColor(white: isDark ? 1 : 0, alpha: 0.07) : saved.sidebar
-    static let buttonFill  = arcStyle ? NSColor(white: isDark ? 1 : 0, alpha: 0.12) : saved.toolbar
-    static let isDark      = (saved.sidebar.usingColorSpace(.sRGB)?.brightnessComponent ?? 0) < 0.55
-    static let text        = isDark ? NSColor(hex: 0xE3E4EE) : NSColor(hex: 0x1F1F1F)
-    static let mutedText   = isDark ? NSColor(hex: 0x9C9EB2) : NSColor(hex: 0x5F6368)
-    static let icon        = isDark ? NSColor(hex: 0xC2C4D1) : NSColor(hex: 0x3C4043)
+    static var tileFill: NSColor { arcStyle ? overlayTint.withAlphaComponent(0.07) : saved.sidebar }
+    static var buttonFill: NSColor { arcStyle ? overlayTint.withAlphaComponent(0.12) : saved.toolbar }
+    static var text: NSColor { isDark ? NSColor(hex: 0xE3E4EE) : NSColor(hex: 0x1F1F1F) }
+    static var mutedText: NSColor { isDark ? NSColor(hex: 0x9C9EB2) : NSColor(hex: 0x5F6368) }
+    static var icon: NSColor { isDark ? NSColor(hex: 0xC2C4D1) : NSColor(hex: 0x3C4043) }
     /// System controls (menus, alerts, text fields) in light or dark to match.
-    static let appearance  = NSAppearance(named: isDark ? .darkAqua : .aqua)
+    static var appearance: NSAppearance? { NSAppearance(named: isDark ? .darkAqua : .aqua) }
 
     private static func mix(_ a: NSColor, _ b: NSColor, _ amount: CGFloat) -> NSColor {
         a.usingColorSpace(.sRGB)?.blended(withFraction: amount, of: b.usingColorSpace(.sRGB) ?? b) ?? a

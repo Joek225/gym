@@ -52,7 +52,7 @@ final class SettingsView: NSView {
         colorGrid.rowSpacing = 10
         restartNote.textColor = Theme.accent
         restartNote.font = .systemFont(ofSize: 12)
-        let restart = button("Restart Now to Apply", #selector(restartClicked(_:)))
+        let restart = button("Apply Colors", #selector(restartClicked(_:)))
 
         // Browsing
         Preferences.SearchEngine.allCases.forEach { searchPopup.addItem(withTitle: $0.rawValue) }
@@ -133,7 +133,7 @@ final class SettingsView: NSView {
 
     private func colorsEdited() {
         colors.save()
-        restartNote.stringValue = "Saved. New colors show after a restart."
+        restartNote.stringValue = "Click Apply Colors to see them."
     }
 
     @objc private func presetChosen(_ sender: NSPopUpButton) {
@@ -143,7 +143,8 @@ final class SettingsView: NSView {
         toolbarWell.color = colors.toolbar
         backgroundWell.color = colors.background
         accentWell.color = colors.accent
-        colorsEdited()
+        colors.save()
+        AppDelegate.shared.rebuildWindows(thenShowSettings: true)   // a preset applies straight away
     }
 
     @objc private func colorChanged(_ sender: NSColorWell) {
@@ -153,17 +154,13 @@ final class SettingsView: NSView {
     }
 
     @objc private func restartClicked(_ sender: Any?) {
-        SessionSaver.shared.saveNow()
-        let config = NSWorkspace.OpenConfiguration()
-        config.createsNewApplicationInstance = true
-        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: config) { _, _ in
-            DispatchQueue.main.async { NSApp.terminate(nil) }
-        }
+        colors.save()
+        AppDelegate.shared.rebuildWindows(thenShowSettings: true)
     }
 
     @objc private func arcChanged(_ sender: NSButton) {
         Preferences.arcStyle = sender.state == .on
-        restartNote.stringValue = "Saved. Click Restart Now to see it."
+        AppDelegate.shared.rebuildWindows(thenShowSettings: true)   // applies straight away
     }
 
     @objc private func groupsChanged(_ sender: NSPopUpButton) {
@@ -180,7 +177,7 @@ final class SettingsView: NSView {
 
     @objc private func adsChanged(_ sender: NSButton) {
         Preferences.blocksAds = sender.state == .on
-        restartNote.stringValue = "Ad blocking changes apply to new tabs (or after a restart)."
+        restartNote.stringValue = "Ad blocking changes apply to pages you open from now on."
         if Preferences.blocksAds { ContentBlocker.prepare() }
     }
 

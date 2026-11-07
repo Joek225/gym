@@ -795,7 +795,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     /// Numbers that help track down display problems (like blurry text).
     @objc func showPageInfo(_ sender: Any?) {
         guard let webView = store.selected?.webView, let window else { NSSound.beep(); return }
-        let js = "[window.devicePixelRatio, window.innerWidth, (window.visualViewport ? window.visualViewport.scale : 1)].join(',')"
+        let js = "[window.devicePixelRatio, window.innerWidth, (window.visualViewport ? window.visualViewport.scale : 1), window.outerWidth].join(',')"
         webView.evaluateJavaScript(js) { [weak self] result, _ in
             let parts = ((result as? String) ?? "?,?,?").split(separator: ",").map(String.init)
             let alert = NSAlert()
@@ -806,7 +806,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
             Pinch-zoom: \(String(format: "%.2f", webView.magnification))x
             Page zoom (⌘+/⌘-): \(String(format: "%.2f", webView.pageZoom))x
             Page pinch scale: \(parts.count > 2 ? parts[2] : "?")
-            Page width: \(parts.count > 1 ? parts[1] : "?") points
+            Page width: \(parts.count > 1 ? parts[1] : "?") points (window width the page sees: \(parts.count > 3 ? parts[3] : "?"))
             Arc-style background: \(Theme.arcStyle ? "on" : "off")
             """
             self?.present(alert) { _ in }
@@ -1216,7 +1216,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         if logLoads {   // used by the automatic test
             let address = webView.url?.absoluteString ?? ""
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak webView] in
-                webView?.evaluateJavaScript("document.title + ' | dpr ' + window.devicePixelRatio") { title, _ in
+                webView?.evaluateJavaScript("document.title + ' | dpr ' + window.devicePixelRatio + ', outerWidth ' + window.outerWidth + ', innerWidth ' + window.innerWidth") { title, _ in
                     let text = (title as? String) ?? ""
                     NSLog("MyBrowser loaded: %@ — title: %@ (window scale %.1f)", address,
                           String(text.split(separator: "|").first ?? "").trimmingCharacters(in: .whitespaces),
@@ -1276,6 +1276,18 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         store.insert(tab, after: source)
         select(tab)
         return newWebView
+    }
+
+    /// WebKit asks this to fill in `window.outerWidth/outerHeight` for pages. Without an
+    /// answer they're 0, and Google Docs/Sheets/Slides then draw their text at a fraction of
+    /// your screen's sharpness (blurry). We answer with the page's own area (plus a toolbar's
+    /// height), so pages also don't mistake the sidebar for browser zoom.
+    @objc(_webView:getWindowFrameWithCompletionHandler:)
+    func webViewWindowFrame(_ webView: WKWebView, completionHandler: @escaping (CGRect) -> Void) {
+        guard let window = webView.window else { completionHandler(.zero); return }
+        var frame = window.convertToScreen(webView.convert(webView.bounds, to: nil))
+        frame.size.height += 80
+        completionHandler(frame)
     }
 
     func webViewDidClose(_ webView: WKWebView) {
