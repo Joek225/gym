@@ -90,7 +90,6 @@ private final class FakeDrag: NSObject, NSDraggingInfo {
     var draggingSource: Any? { nil }
     var draggingSequenceNumber: Int { 4242 }
     func slideDraggedImage(to screenPoint: NSPoint) {}
-    func namesOfPromisedFilesDropped(atDestination dropDestination: URL) -> [String]? { nil }
     var draggingFormation: NSDraggingFormation = .default
     var animatesToDestination = false
     var numberOfValidItemsForDrop = 1
