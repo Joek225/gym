@@ -42,6 +42,8 @@ jobs:
           echo "App is still running after 20s (good)"
           grep -q "MyBrowser loaded: https://example.com" app.log && echo "Page loaded (good)"
           grep "drop test" app.log || echo "(no drop test output)"
+          grep "drop test file" app.log | grep -q "page got: dropped 1 " && echo "FILE DROP TEST PASSED" || { echo "!!! FILE DROP TEST FAILED"; exit 1; }
+          grep "drop test image" app.log | grep -q "page got: dropped 1 " && echo "PICTURE DROP TEST PASSED" || { echo "!!! PICTURE DROP TEST FAILED"; exit 1; }
           echo "--- Memory footprint ---"
           perl -e 'alarm 20; exec @ARGV' footprint $PID 2>/dev/null | head -n 8 || true
           perl -e 'alarm 20; exec @ARGV' footprint -p WebContent 2>/dev/null | grep -i "footprint" | head -n 5 || true

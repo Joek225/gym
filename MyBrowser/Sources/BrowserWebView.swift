@@ -10,28 +10,42 @@ import UniformTypeIdentifiers
 final class BrowserWebView: WKWebView {
     private var handlingDropOurselves = false
 
-    private func hasDroppableContent(_ info: NSDraggingInfo) -> Bool {
+    /// Pictures from other apps that aren't real files yet (the floating screenshot
+    /// thumbnail, Photos, Preview, Messages…). WebKit says "yes" to these but then hands the
+    /// page nothing, so we take them ourselves. Real files (from Finder) and drags inside
+    /// the page are left to WebKit, which handles those properly.
+    private func shouldHandleOurselves(_ info: NSDraggingInfo) -> Bool {
+        if info.draggingSource != nil { return false }                        // dragged within the browser
         let pb = info.draggingPasteboard
+        if pb.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) { return false }
         if pb.canReadObject(forClasses: [NSFilePromiseReceiver.self], options: nil) { return true }
         return pb.canReadObject(forClasses: [NSImage.self], options: nil)
     }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        let operation = super.draggingEntered(sender)
-        handlingDropOurselves = operation == [] && hasDroppableContent(sender)
-        return handlingDropOurselves ? .copy : operation
+        handlingDropOurselves = shouldHandleOurselves(sender)
+        return handlingDropOurselves ? .copy : super.draggingEntered(sender)
     }
 
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
-        let operation = super.draggingUpdated(sender)
-        if operation != [] { handlingDropOurselves = false; return operation }
-        handlingDropOurselves = hasDroppableContent(sender)
-        return handlingDropOurselves ? .copy : []
+        handlingDropOurselves ? .copy : super.draggingUpdated(sender)
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        if handlingDropOurselves { handlingDropOurselves = false } else { super.draggingExited(sender) }
+    }
+
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        handlingDropOurselves ? true : super.prepareForDragOperation(sender)
+    }
+
+    override func concludeDragOperation(_ sender: NSDraggingInfo?) {
+        if !handlingDropOurselves { super.concludeDragOperation(sender) }
     }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         guard handlingDropOurselves else { return super.performDragOperation(sender) }
-        handlingDropOurselves = false
+        DispatchQueue.main.async { [weak self] in self?.handlingDropOurselves = false }
         let point = convert(sender.draggingLocation, from: nil)
         let pb = sender.draggingPasteboard
 
