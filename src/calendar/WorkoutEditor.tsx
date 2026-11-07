@@ -11,13 +11,15 @@
 //   reps or partial: Enter        → another set of the same exercise, on a new line below
 //   Backspace in an empty box     → back one box
 // A line whose exercise name is left empty disappears when you leave it.
+// From 6 Nov 2026, Upper/Lower days are fixed: no renaming, adding or deleting lines (or the
+// whole workout); you only fill in weight, reps and partials.
 // Some exercises (e.g. Lateral Raise) first ask which kind — "Cable | Dumbbell" — and the
 // choice becomes the name ("Cable Lateral Raise"); then the normal boxes appear.
 // You can't close the sheet while a line is half done: once a line is started it needs
 // reps AND weight (partial reps can stay empty). Untouched template lines are fine.
 import { useEffect, useRef, useState, type FocusEvent, type KeyboardEvent } from 'react';
 import { db, type WorkoutRecord, type WorkoutRow } from '../db';
-import { GYM_COLOR, VARIANTS, saveWorkout, workoutLabel } from '../gym/workouts';
+import { GYM_COLOR, NEW_SPLIT_FROM, VARIANTS, saveWorkout, workoutLabel } from '../gym/workouts';
 import { formatLongDate } from './dates';
 import Modal from './Modal';
 
@@ -35,6 +37,9 @@ export default function WorkoutEditor({ workout, onClose }: Props) {
   const inputs = useRef(new Map<string, HTMLInputElement>()); // "row:field" → input box
   const [focusNext, setFocusNext] = useState<string | null>(null);
   const isCustom = w.type === 'custom';
+  // From the new split on, Upper/Lower days are fixed: the exercises can't be renamed, added or
+  // removed (only weight, reps and partials are typed in), so every session is the same movements.
+  const locked = !isCustom && w.date >= NEW_SPLIT_FROM;
 
   // Places you've trained before, offered as suggestions in the location box.
   const [places, setPlaces] = useState<string[]>([]);
@@ -99,7 +104,7 @@ export default function WorkoutEditor({ workout, onClose }: Props) {
 
   const nextLine = (i: number) => {
     if (i + 1 < w.rows.length) go(i + 1, w.rows[i + 1].name ? 'weight' : 'name');
-    else addRow(w.rows.length);
+    else if (!locked) addRow(w.rows.length);
   };
 
   const onKey = (e: KeyboardEvent<HTMLInputElement>, i: number, field: Field) => {
@@ -111,7 +116,7 @@ export default function WorkoutEditor({ workout, onClose }: Props) {
     if (e.key === 'Backspace' && value === '') {
       e.preventDefault();
       const f = FIELDS.indexOf(field);
-      if (f > 0) go(i, FIELDS[f - 1]);
+      if (f > (locked ? 1 : 0)) go(i, FIELDS[f - 1]); // fixed days have no name box to go back to
       else if (i > 0) go(i - 1, 'partial');
     } else if (field === 'name') {
       if (e.key === 'Enter' || (e.key === '-' && value.endsWith(' '))) {
@@ -124,9 +129,10 @@ export default function WorkoutEditor({ workout, onClose }: Props) {
         else e.preventDefault(); // nothing typed yet: ignore
       }
     } else if (e.key === 'Enter') {
-      // reps or partial: another set of the same exercise
+      // reps or partial: another set of the same exercise (on fixed days, just the next line)
       e.preventDefault();
-      if (w.rows[i].reps) addRow(i + 1, w.rows[i].name);
+      if (locked) nextLine(i);
+      else if (w.rows[i].reps) addRow(i + 1, w.rows[i].name);
     } else if (isSeparator(e.key)) {
       e.preventDefault();
       if (field === 'reps') {
@@ -208,14 +214,18 @@ export default function WorkoutEditor({ workout, onClose }: Props) {
             key={i}
             onBlur={(e) => onRowBlur(e, i)}
           >
-            <input
-              className="wl-name"
-              placeholder="exercise"
-              value={row.name}
-              ref={boxRef(i, 'name')}
-              onChange={(e) => updateRow(i, { name: e.target.value })}
-              onKeyDown={(e) => onKey(e, i, 'name')}
-            />
+            {locked ? (
+              <span className="wl-name wl-static">{row.name}</span>
+            ) : (
+              <input
+                className="wl-name"
+                placeholder="exercise"
+                value={row.name}
+                ref={boxRef(i, 'name')}
+                onChange={(e) => updateRow(i, { name: e.target.value })}
+                onKeyDown={(e) => onKey(e, i, 'name')}
+              />
+            )}
             <span className="wl-dash">-</span>
             <input
               className="wl-num wl-weight"
@@ -250,9 +260,11 @@ export default function WorkoutEditor({ workout, onClose }: Props) {
           </div>
           ),
         )}
-        <button className="link-btn add-line" onClick={() => addRow(w.rows.length)}>
-          + Add line
-        </button>
+        {!locked && (
+          <button className="link-btn add-line" onClick={() => addRow(w.rows.length)}>
+            + Add line
+          </button>
+        )}
       </div>
 
       {showMissing && missing.includes(true) && (
@@ -260,9 +272,11 @@ export default function WorkoutEditor({ workout, onClose }: Props) {
       )}
 
       <div className="editor-footer">
-        <button className="danger-btn" onClick={remove}>
-          Delete workout
-        </button>
+        {!locked && (
+          <button className="danger-btn" onClick={remove}>
+            Delete workout
+          </button>
+        )}
         <button className="check-btn" onClick={tryClose} title="Done">
           ✓
         </button>
