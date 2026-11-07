@@ -36,6 +36,21 @@ final class DownloadManager: NSObject, WKDownloadDelegate {
 
     func download(_ download: WKDownload, decideDestinationUsing response: URLResponse,
                   suggestedFilename: String, completionHandler: @escaping (URL?) -> Void) {
+        // Files that can run programs: ask first (a common way malware gets onto Macs).
+        if Security.riskyExtensions.contains((suggestedFilename as NSString).pathExtension.lowercased()) {
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Download “\(suggestedFilename)”?"
+            alert.informativeText = "This kind of file can install or run programs on your Mac. Only download it if you trust \(response.url?.host ?? "this site")."
+            alert.addButton(withTitle: "Don't Download")
+            alert.addButton(withTitle: "Download")
+            if alert.runModal() != .alertSecondButtonReturn {
+                items.removeAll { $0.download === download }
+                changed()
+                completionHandler(nil)
+                return
+            }
+        }
         // "photo.jpg", then "photo (1).jpg", "photo (2).jpg"… so nothing is overwritten.
         let base = (suggestedFilename as NSString).deletingPathExtension
         let ext = (suggestedFilename as NSString).pathExtension

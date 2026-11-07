@@ -513,7 +513,8 @@ final class BookmarkChip: SolidView, NSDraggingSource {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     private var labelWidth: CGFloat {
-        label.stringValue.isEmpty ? 0 : min(ceil(label.intrinsicContentSize.width), 150)
+        // The text's real width plus the few points a label needs around it (or it cuts off with "…").
+        label.stringValue.isEmpty ? 0 : min(ceil(label.attributedStringValue.size().width) + 6, 156)
     }
 
     /// Padding + icon + gap + name + padding (a chip with no name is a neat square).

@@ -20,6 +20,12 @@ enum WebKitEnvironment {
         config.mediaTypesRequiringUserActionForPlayback = .all
         config.allowsAirPlayForMediaPlayback = false
         config.preferences.isElementFullscreenEnabled = true
+        // Security: warn before opening known scam/phishing and malware sites (Safe Browsing),
+        // use secure (https) versions of sites that are known to have one, and don't let
+        // pages open new windows on their own.
+        config.preferences.isFraudulentWebsiteWarningEnabled = true
+        config.upgradeKnownHostsToHTTPS = true
+        config.preferences.javaScriptCanOpenWindowsAutomatically = false
         config.defaultWebpagePreferences.preferredContentMode = .desktop
         // Identify like Safari so sites (Google etc.) serve their full versions.
         config.applicationNameForUserAgent = "Version/18.5 Safari/605.1.15"
@@ -36,7 +42,7 @@ enum WebKitEnvironment {
 
     /// Pass `configuration` only when WebKit hands us one (pop-up windows).
     static func makeWebView(configuration: WKWebViewConfiguration? = nil, store: WKWebsiteDataStore? = nil) -> WKWebView {
-        let webView = WKWebView(frame: .zero, configuration: configuration ?? makeConfiguration(store: store))
+        let webView = BrowserWebView(frame: .zero, configuration: configuration ?? makeConfiguration(store: store))
         webView.allowsMagnification = true          // pinch to zoom
         // Swipe-to-go-back keeps screenshots of previous pages in memory,
         // so it's off. Use Cmd+[ / Cmd+] or the toolbar buttons instead.

@@ -76,6 +76,8 @@ final class SettingsView: NSView {
         groupsPopup.target = self
         groupsPopup.action = #selector(groupsChanged(_:))
 
+        let clearButton = button("Clear Browsing Data…", #selector(clearDataClicked(_:)))
+
         let defaultButton = button("Make beababrowser Your Default Browser", #selector(defaultClicked(_:)))
 
         let stack = NSStackView(views: [
@@ -83,6 +85,7 @@ final class SettingsView: NSView {
             heading("Search"), row("Search with", searchPopup),
             heading("Memory"), row("Unload tabs I haven't used for", unloadPopup),
             row("Turn off groups I haven't used for", groupsPopup), adsBox, memoryBox,
+            heading("Privacy & security"), securityNote(), clearButton,
             heading("Default browser"), defaultButton,
         ])
         stack.orientation = .vertical
@@ -156,6 +159,42 @@ final class SettingsView: NSView {
 
     @objc private func groupsChanged(_ sender: NSPopUpButton) {
         Preferences.disableGroupsMinutes = groupChoices[max(0, sender.indexOfSelectedItem)].1
+    }
+
+    private func securityNote() -> NSTextField {
+        let note = NSTextField(wrappingLabelWithString: "Always on: warnings for scam and malware sites, secure (https) connections first, ad and tracker blocking, cross-site tracking protection, passwords kept in your Keychain, and a check before downloading files that can run programs.")
+        note.textColor = Theme.mutedText
+        note.font = .systemFont(ofSize: 12)
+        note.preferredMaxLayoutWidth = 560
+        return note
+    }
+
+    @objc private func clearDataClicked(_ sender: Any?) {
+        guard let window else { return }
+        let alert = NSAlert()
+        alert.messageText = "Clear browsing data"
+        alert.informativeText = "Choose what to delete from all time."
+        let history = NSButton(checkboxWithTitle: "History", target: nil, action: nil)
+        let cookies = NSButton(checkboxWithTitle: "Cookies and site data (signs you out of sites)", target: nil, action: nil)
+        let cache = NSButton(checkboxWithTitle: "Cached images and files", target: nil, action: nil)
+        [history, cache].forEach { $0.state = .on }
+        let stack = NSStackView(views: [history, cookies, cache])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.frame = NSRect(origin: .zero, size: stack.fittingSize)
+        alert.accessoryView = stack
+        alert.addButton(withTitle: "Clear")
+        alert.addButton(withTitle: "Cancel")
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn else { return }
+            if history.state == .on { HistoryStore.shared.clear() }
+            var types = Set<String>()
+            if cookies.state == .on { types.formUnion(WKWebsiteDataStore.allWebsiteDataTypes()) }
+            if cache.state == .on { types.formUnion([WKWebsiteDataTypeDiskCache, WKWebsiteDataTypeMemoryCache]) }
+            WKWebsiteDataStore.default().removeData(ofTypes: types, modifiedSince: .distantPast) {
+                self?.restartNote.stringValue = "Cleared."
+            }
+        }
     }
 
     @objc private func searchChanged(_ sender: NSPopUpButton) {

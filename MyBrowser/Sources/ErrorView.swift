@@ -6,6 +6,8 @@ final class ErrorView: NSView {
     private let background = SolidView(color: Theme.background)
     private let titleLabel = NSTextField(labelWithString: "This page couldn't be opened")
     private let messageLabel = NSTextField(wrappingLabelWithString: "")
+    private let actionButton = NSButton(title: "", target: nil, action: nil)
+    private var action: (() -> Void)?
 
     init() {
         super.init(frame: .zero)
@@ -16,7 +18,11 @@ final class ErrorView: NSView {
         messageLabel.alignment = .center
         messageLabel.preferredMaxLayoutWidth = 420
 
-        let stack = NSStackView(views: [titleLabel, messageLabel])
+        actionButton.bezelStyle = .rounded
+        actionButton.target = self
+        actionButton.action = #selector(actionClicked(_:))
+        actionButton.isHidden = true
+        let stack = NSStackView(views: [titleLabel, messageLabel, actionButton])
         stack.orientation = .vertical
         stack.spacing = 8
         for v in [background, stack] as [NSView] {
@@ -35,6 +41,15 @@ final class ErrorView: NSView {
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
+
+    /// An extra button under the message (e.g. "Continue to insecure site"), or none.
+    func offer(_ title: String?, action: (() -> Void)?) {
+        actionButton.title = title ?? ""
+        actionButton.isHidden = title == nil
+        self.action = action
+    }
+
+    @objc private func actionClicked(_ sender: Any?) { action?() }
 
     func show(message: String, address: String) {
         messageLabel.stringValue = address.isEmpty ? message : "\(address): \(message)\n\nPress Cmd+R to try again."
