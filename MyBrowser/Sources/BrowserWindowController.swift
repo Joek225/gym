@@ -1641,7 +1641,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
 /// sound on every letter. Browsers stay quiet in that case, so this one does too.
 final class BrowserWindow: NSWindow {
     override func noResponder(for eventSelector: Selector) {
-        if eventSelector == #selector(NSResponder.keyDown(_:)) { return }
+        if eventSelector == #selector(NSResponder.keyDown(with:)) { return }
         super.noResponder(for: eventSelector)
     }
 }
