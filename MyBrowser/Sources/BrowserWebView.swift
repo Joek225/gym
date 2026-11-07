@@ -177,7 +177,9 @@ final class StandInDrag: NSObject, NSDraggingInfo {
     func enumerateDraggingItems(options enumOpts: NSDraggingItemEnumerationOptions = [], for view: NSView?,
                                 classes classArray: [AnyClass], searchOptions: [NSPasteboard.ReadingOptionKey: Any] = [:],
                                 using block: (NSDraggingItem, Int, UnsafeMutablePointer<ObjCBool>) -> Void) {
-        original.enumerateDraggingItems(options: enumOpts, for: view, classes: classArray, searchOptions: searchOptions, using: block)
+        withoutActuallyEscaping(block) { block in
+            original.enumerateDraggingItems(options: enumOpts, for: view, classes: classArray, searchOptions: searchOptions, using: block)
+        }
     }
     var springLoadingHighlight: NSSpringLoadingHighlight { original.springLoadingHighlight }
     func resetSpringLoading() { original.resetSpringLoading() }
