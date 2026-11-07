@@ -1,7 +1,7 @@
 import AppKit
 
-/// The bar under the toolbar. On the left: your tab groups as colored chips
-/// (like Chrome's saved groups). Then your bookmarks and folders.
+/// The bar under the toolbar: your tab groups as colored chips (open, turned off
+/// and closed ones). Bookmarks live on the new tab page.
 /// Items that don't fit go into a » menu on the right.
 @MainActor
 final class BookmarksBarView: NSView {
@@ -21,7 +21,7 @@ final class BookmarksBarView: NSView {
     private let background = SolidView(color: Theme.chromeFill)
     private var entries: [(button: NSButton, entry: Entry)] = []
     private let overflowButton = NSButton()
-    private let emptyHint = NSTextField(labelWithString: "Bookmark pages with ⌘D or the ☆ star. To bring over Chrome's, choose Import from Chrome in the ⋮ menu.")
+    private let emptyHint = NSTextField(labelWithString: "Your tab groups show here. Right-click a tab → Add Tab to New Group. Bookmarks are on the new tab page (⌘T).")
 
     init() {
         super.init(frame: .zero)
@@ -45,7 +45,6 @@ final class BookmarksBarView: NSView {
         entries = []
         for group in groups() { entries.append((makeChip(group), .group(group))) }
         for saved in closedGroups() { entries.append((makeClosedChip(saved), .closedGroup(saved))) }
-        for node in BookmarkStore.shared.bar.children ?? [] { entries.append((makeButton(node), .node(node))) }
         entries.forEach { addSubview($0.button) }
         emptyHint.isHidden = !entries.isEmpty
         needsLayout = true
@@ -235,9 +234,7 @@ final class BookmarksBarView: NSView {
             }
             menu.addItem(.separator())
         }
-        menu.addItem(withTitle: "Add Folder…", action: #selector(BrowserWindowController.newBookmarkFolder(_:)), keyEquivalent: "")
-        menu.addItem(withTitle: "Import from Chrome…", action: #selector(BrowserWindowController.importChromeBookmarks(_:)), keyEquivalent: "")
-        menu.addItem(withTitle: "Hide Bookmarks Bar", action: #selector(BrowserWindowController.toggleBookmarksBar(_:)), keyEquivalent: "")
+        menu.addItem(withTitle: "Hide Groups Bar", action: #selector(BrowserWindowController.toggleBookmarksBar(_:)), keyEquivalent: "")
         return menu
     }
 }

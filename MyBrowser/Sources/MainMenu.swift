@@ -63,7 +63,7 @@ enum MainMenu {
             .keyEquivalentModifierMask = [.command, .shift]
 
         let view = submenu(in: main, title: "View")
-        view.addItem(withTitle: "Hide Bookmarks Bar", action: #selector(W.toggleBookmarksBar(_:)), keyEquivalent: "b")
+        view.addItem(withTitle: "Hide Groups Bar", action: #selector(W.toggleBookmarksBar(_:)), keyEquivalent: "b")
             .keyEquivalentModifierMask = [.command, .shift]
         view.addItem(withTitle: "Show/Hide Tab Sidebar", action: #selector(W.toggleSidebar(_:)), keyEquivalent: "s")
             .keyEquivalentModifierMask = [.command, .control]

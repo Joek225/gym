@@ -14,7 +14,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     private let findBar = FindBar()
     /// Covers the whole window in black after 5 idle minutes on a new tab.
     private let dimmer = SolidView(color: .black)
-    private var lastActivity = Date()
+    private var sleptAt = Date.distantPast
     /// Becomes true once the window has appeared (see `showWindow`).
     private var isOnScreen = false
     private var memoryReadout: MemoryReadout?
@@ -222,6 +222,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         NotificationCenter.default.addObserver(forName: BookmarkStore.didChange, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.bookmarksBar.reload()
+                self?.newTabPage.bookmarksChanged()
                 self?.updateToolbar()
             }
         }
@@ -387,8 +388,15 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
 
     /// Any mouse movement, click or key press (called for every window).
     func userActed() {
-        lastActivity = Date()
-        if !dimmer.isHidden { setDimmed(false) }
+        // Ignore the first moment after Sleep is clicked (the mouse is still moving from the click).
+        guard !dimmer.isHidden, Date().timeIntervalSince(sleptAt) > 1 else { return }
+        setDimmed(false)
+    }
+
+    /// The new tab page's Sleep button: the window goes black until you move the mouse or press a key.
+    func newTabSleep() {
+        sleptAt = Date()
+        setDimmed(true)
     }
 
     private func setDimmed(_ dimmed: Bool) {
@@ -444,11 +452,6 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
                 && now.timeIntervalSince(group.lastActive) > TimeInterval(minutes * 60) {
                 disableGroup(group)
             }
-        }
-        // Sitting on a blank new tab for 5 minutes: black out the window until the mouse moves.
-        if dimmer.isHidden, let tab = store.selected, isBlank(tab), now.timeIntervalSince(lastActivity) > 300,
-           window?.isVisible == true {
-            setDimmed(true)
         }
         for tab in store.allTabs where tab !== store.selected && tab.isLoaded
             && Preferences.unloadMinutes > 0
@@ -524,6 +527,10 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     }
 
     func newTabImportFromChrome() { importFromChrome(nil) }
+
+    func newTabOpenBookmark(_ node: BookmarkNode) {
+        if let url = node.url { newTabOpen(url) }
+    }
 
     @objc func importFromChrome(_ sender: Any?) {
         if let window { ChromeImportOverlay.show(in: window) }
@@ -900,7 +907,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         case #selector(newTabInCurrentGroup(_:)), #selector(closeCurrentGroup(_:)):
             return store.selected?.group != nil
         case #selector(toggleBookmarksBar(_:)):
-            item.title = showsBookmarksBar ? "Hide Bookmarks Bar" : "Show Bookmarks Bar"
+            item.title = showsBookmarksBar ? "Hide Groups Bar" : "Show Groups Bar"
             return true
         default: return true
         }

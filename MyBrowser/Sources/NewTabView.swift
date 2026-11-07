@@ -5,6 +5,8 @@ import AppKit
 protocol NewTabDelegate: AnyObject {
     func newTabOpen(_ url: URL)
     func newTabImportFromChrome()
+    func newTabSleep()
+    func newTabOpenBookmark(_ node: BookmarkNode)
 }
 
 /// The new tab page: a search box in the middle, with suggestions underneath.
@@ -22,6 +24,7 @@ final class NewTabView: SolidView, NSTextFieldDelegate {
     }
 
     private let box = SolidView(color: Theme.pageBoxFill)
+    private let shelf = BookmarkShelf()
     private let field = NSTextField()
     private let list = SolidView(color: Theme.background)
     private let rows = NSStackView()
@@ -54,7 +57,19 @@ final class NewTabView: SolidView, NSTextFieldDelegate {
         rows.spacing = 0
         rows.alignment = .leading
 
-        for v in [box, glass, field, list, rows] as [NSView] { v.translatesAutoresizingMaskIntoConstraints = false }
+        let sleepButton = NSButton(title: "Sleep", image: Icons.symbol("moon.zzz", size: 12) ?? NSImage(),
+                                   target: self, action: #selector(sleepClicked(_:)))
+        sleepButton.isBordered = false
+        sleepButton.imagePosition = .imageLeading
+        sleepButton.contentTintColor = Theme.mutedText
+        sleepButton.attributedTitle = NSAttributedString(string: " Sleep", attributes: [
+            .foregroundColor: Theme.mutedText, .font: NSFont.systemFont(ofSize: 13)])
+        sleepButton.toolTip = "Turn the window black until you move the mouse or press a key"
+        shelf.onOpen = { [weak self] node in self?.delegate?.newTabOpenBookmark(node) }
+
+        for v in [shelf, box, glass, field, sleepButton, list, rows] as [NSView] { v.translatesAutoresizingMaskIntoConstraints = false }
+        addSubview(shelf)
+        addSubview(sleepButton)   // below the suggestion box, which covers it while showing
         addSubview(box)
         box.addSubview(glass)
         box.addSubview(field)
@@ -84,7 +99,17 @@ final class NewTabView: SolidView, NSTextFieldDelegate {
             rows.leadingAnchor.constraint(equalTo: list.leadingAnchor, constant: 6),
             rows.trailingAnchor.constraint(equalTo: list.trailingAnchor, constant: -6),
 
+            // Bookmarks sit above the search box; Sleep sits under it.
+            shelf.bottomAnchor.constraint(equalTo: box.topAnchor, constant: -26),
+            shelf.centerXAnchor.constraint(equalTo: centerXAnchor),
+            shelf.widthAnchor.constraint(lessThanOrEqualTo: widthAnchor, constant: -40),
+            sleepButton.topAnchor.constraint(equalTo: box.bottomAnchor, constant: 22),
+            sleepButton.centerXAnchor.constraint(equalTo: centerXAnchor),
+
         ])
+        let shelfWidth = shelf.widthAnchor.constraint(equalTo: box.widthAnchor, constant: 120)
+        shelfWidth.priority = .defaultHigh
+        shelfWidth.isActive = true
         let wide = box.widthAnchor.constraint(equalToConstant: 620)
         wide.priority = .defaultHigh
         wide.isActive = true
@@ -94,12 +119,18 @@ final class NewTabView: SolidView, NSTextFieldDelegate {
 
     /// Clears the box and puts the cursor in it.
     func reset() {
+        shelf.reload()
         field.stringValue = ""
         show([])
         window?.makeFirstResponder(field)
     }
 
     func focus() { window?.makeFirstResponder(field) }
+
+    @objc private func sleepClicked(_ sender: Any?) { delegate?.newTabSleep() }
+
+    /// Keeps the bookmarks up to date while the page is showing.
+    func bookmarksChanged() { shelf.reload() }
 
     /// Private windows say so on their new tab page.
     func showPrivateNote() {
@@ -274,5 +305,122 @@ final class SuggestionRow: SolidView {
     override func mouseDown(with event: NSEvent) {}
     override func mouseUp(with event: NSEvent) {
         if bounds.contains(convert(event.locationInWindow, from: nil)) { action() }
+    }
+}
+
+/// Your bookmarks and folders, shown above the search box on the new tab page.
+/// Click a bookmark to open it, click a folder to see what's inside, right-click to edit.
+final class BookmarkShelf: NSView {
+    var onOpen: ((BookmarkNode) -> Void)?
+    private var items: [(button: NSButton, node: BookmarkNode)] = []
+    private var height: NSLayoutConstraint!
+    private let hint = NSTextField(labelWithString: "Bookmark pages with ⌘D or the ☆ in the address bar — they'll show up here.")
+    private static let rowHeight: CGFloat = 30
+    private static let maxRows = 4
+
+    override var isFlipped: Bool { true }
+
+    init() {
+        super.init(frame: .zero)
+        height = heightAnchor.constraint(equalToConstant: Self.rowHeight)
+        height.isActive = true
+        hint.textColor = Theme.mutedText
+        hint.font = .systemFont(ofSize: 12)
+        hint.alignment = .center
+        addSubview(hint)
+        reload()
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    func reload() {
+        items.forEach { $0.button.removeFromSuperview() }
+        items = []
+        var nodes = BookmarkStore.shared.bar.children ?? []
+        if !(BookmarkStore.shared.other.children ?? []).isEmpty { nodes.append(BookmarkStore.shared.other) }
+        for node in nodes {
+            let button = NSButton(title: "", target: self, action: #selector(clicked(_:)))
+            button.isBordered = false
+            let title = node.isFolder ? node.displayTitle : node.title
+            button.attributedTitle = NSAttributedString(string: title.isEmpty ? "" : " " + title, attributes: [
+                .foregroundColor: Theme.text, .font: NSFont.systemFont(ofSize: 12.5)])
+            button.image = node.isFolder ? Icons.folder
+                : (node.icon.flatMap(Favicons.image(fromPNG:)) ?? Favicons.cached(for: node.url) ?? Icons.globe)
+            button.imagePosition = title.isEmpty ? .imageOnly : .imageLeading
+            button.contentTintColor = Theme.icon
+            button.lineBreakMode = .byTruncatingTail
+            button.wantsLayer = true
+            button.layer?.backgroundColor = Theme.pageBoxFill.cgColor
+            button.layer?.cornerRadius = 8
+            button.toolTip = node.url?.absoluteString ?? node.displayTitle
+            addSubview(button)
+            items.append((button, node))
+        }
+        hint.isHidden = !items.isEmpty
+        needsLayout = true
+    }
+
+    /// Lays the buttons out in centered rows (up to 4 rows; the rest are in the Bookmarks menu).
+    override func layout() {
+        super.layout()
+        hint.frame = NSRect(x: 0, y: 6, width: bounds.width, height: 18)
+        var rows: [[(NSButton, CGFloat)]] = [[]]
+        var lineWidth: CGFloat = 0
+        for (button, _) in items {
+            button.sizeToFit()
+            let w = min(max(button.frame.width + 18, 34), 190)
+            if lineWidth + w > bounds.width, !rows[rows.count - 1].isEmpty {
+                rows.append([])
+                lineWidth = 0
+            }
+            rows[rows.count - 1].append((button, w))
+            lineWidth += w + 8
+        }
+        var y: CGFloat = 0
+        for (index, row) in rows.enumerated() {
+            let total = row.reduce(0) { $0 + $1.1 } + CGFloat(max(0, row.count - 1)) * 8
+            var x = (bounds.width - total) / 2
+            for (button, w) in row {
+                button.isHidden = index >= Self.maxRows
+                button.frame = NSRect(x: x, y: y, width: w, height: Self.rowHeight - 4)
+                x += w + 8
+            }
+            if index < Self.maxRows { y += Self.rowHeight }
+        }
+        let wanted = items.isEmpty ? Self.rowHeight : y
+        if height.constant != wanted { height.constant = wanted }
+    }
+
+    @objc private func clicked(_ sender: NSButton) {
+        guard let node = items.first(where: { $0.button === sender })?.node else { return }
+        if node.isFolder {
+            BookmarkMenus.menu(for: node).popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
+        } else {
+            onOpen?(node)
+        }
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let point = convert(event.locationInWindow, from: nil)
+        let menu = NSMenu()
+        if let node = items.first(where: { !$0.button.isHidden && $0.button.frame.contains(point) })?.node {
+            if !node.isFolder {
+                let newTab = NSMenuItem(title: "Open in New Tab", action: #selector(BrowserWindowController.openBookmarkInNewTab(_:)), keyEquivalent: "")
+                newTab.representedObject = node
+                menu.addItem(newTab)
+                menu.addItem(.separator())
+            }
+            let edit = NSMenuItem(title: node.isFolder ? "Edit Folder…" : "Edit…",
+                                  action: #selector(BrowserWindowController.editBookmarkItem(_:)), keyEquivalent: "")
+            edit.representedObject = node
+            menu.addItem(edit)
+            let delete = NSMenuItem(title: "Delete", action: #selector(BrowserWindowController.deleteBookmarkItem(_:)), keyEquivalent: "")
+            delete.representedObject = node
+            menu.addItem(delete)
+            menu.addItem(.separator())
+        }
+        menu.addItem(withTitle: "Add Folder…", action: #selector(BrowserWindowController.newBookmarkFolder(_:)), keyEquivalent: "")
+        menu.addItem(withTitle: "Import from Chrome…", action: #selector(BrowserWindowController.importChromeBookmarks(_:)), keyEquivalent: "")
+        return menu
     }
 }
