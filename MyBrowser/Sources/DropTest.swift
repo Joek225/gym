@@ -12,14 +12,22 @@ enum DropTest {
         let html = """
         <html><body style="margin:0;height:100vh">drop here<div id="z" style="position:fixed;inset:0;display:none"></div><script>
         const z = document.getElementById('z');
-        document.addEventListener('dragenter', () => setTimeout(() => { z.style.display = 'block'; }, 50));
-        z.addEventListener('dragover', (e) => e.preventDefault());
+        // Like react-dropzone (used by many chat sites): only react while hovering if the drag
+        // says it carries files; otherwise refuse it.
+        let hoverTypes = '';
+        const hasFiles = (e) => Array.from(e.dataTransfer.types || []).includes('Files');
+        document.addEventListener('dragenter', (e) => {
+          hoverTypes = Array.from(e.dataTransfer.types || []).join(',');
+          if (hasFiles(e)) setTimeout(() => { z.style.display = 'block'; }, 50);
+        });
+        z.addEventListener('dragover', (e) => { if (hasFiles(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
         z.addEventListener('drop', (e) => {
           e.preventDefault();
           z.style.display = 'none';
           const f = e.dataTransfer.files;
-          document.title = 'dropped ' + f.length + (f[0] ? ' ' + f[0].name + ' ' + f[0].size + ' ' + f[0].type : '') + ' trusted=' + e.isTrusted;
+          document.title = 'dropped ' + f.length + (f[0] ? ' ' + f[0].name + ' ' + f[0].size + ' ' + f[0].type : '') + ' trusted=' + e.isTrusted + ' hover=' + hoverTypes;
         });
+        document.addEventListener('dragover', () => { if (!document.title.startsWith('dropped')) document.title = 'hovering, types=' + hoverTypes; });
         </script></body></html>
         """
         webView.loadHTMLString(html, baseURL: URL(string: "https://example.com/"))
