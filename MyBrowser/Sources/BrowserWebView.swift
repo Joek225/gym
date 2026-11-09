@@ -49,6 +49,9 @@ final class BrowserWebView: WKWebView {
         info.draggingSource == nil && StandInDrag.hasContent(info.draggingPasteboard)
     }
 
+    /// Used by the automatic test to measure drops without the short wait.
+    static var testSkipDropWait = false
+
     /// What the page itself last said about the drag (nothing = it doesn't want it here).
     private var pageOperation: NSDragOperation = []
 
@@ -122,7 +125,7 @@ final class BrowserWebView: WKWebView {
         // Always give the page a moment (many chat sites only show their drop area once a drag
         // has arrived), and up to about a second if it hasn't said yes yet.
         let start = Date()
-        while Date().timeIntervalSince(start) < 0.4 || (pageOperation.isEmpty && Date().timeIntervalSince(start) < 1.5) {
+        while !Self.testSkipDropWait && (Date().timeIntervalSince(start) < 0.4 || (pageOperation.isEmpty && Date().timeIntervalSince(start) < 1.5)) {
             RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.03))
             pageOperation = super.draggingUpdated(stand)
         }
