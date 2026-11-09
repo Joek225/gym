@@ -54,22 +54,37 @@ enum DragReport {
       const post = (m) => { try { window.webkit.messageHandlers.mybrowserDragProbe.postMessage(m); } catch (e) {} };
       const where = window === window.top ? 'page' : 'frame ' + location.host;
       let last = '';
-      const describe = (e) => {
-        const dt = e.dataTransfer;
-        const t = e.target;
-        const tag = t && t.tagName ? t.tagName.toLowerCase() + (t.id ? '#' + t.id : '') : '?';
-        return e.type + ' on ' + tag + ' accepted=' + e.defaultPrevented +
-          ' effect=' + (dt ? dt.dropEffect : '?') + ' types=[' + (dt ? Array.from(dt.types).join(',') : '') + ']' +
-          (e.type === 'drop' && dt ? ' files=' + dt.files.length : '') + ' trusted=' + e.isTrusted + ' (' + where + ')';
-      };
       for (const type of ['dragenter', 'dragover', 'dragleave', 'drop']) {
+        // Listen first (capture), so sites that stop the event can't hide it; read the page's
+        // decision just after it has handled the event.
         window.addEventListener(type, (e) => {
-          const line = describe(e);
-          if (type === 'dragover' && line === last) return;   // only when something changes
-          last = line;
-          post(line);
-        }, false);
+          const dt = e.dataTransfer;
+          const t = e.target;
+          const tag = t && t.tagName ? t.tagName.toLowerCase() + (t.id ? '#' + t.id : '') : '?';
+          const types = dt ? Array.from(dt.types).join(',') : '';
+          const files = type === 'drop' && dt ? Array.from(dt.files) : [];
+          setTimeout(() => {
+            const line = type + ' on ' + tag + ' accepted=' + e.defaultPrevented + ' types=[' + types + ']' +
+              (type === 'drop' ? ' files=' + files.length : '') + ' trusted=' + e.isTrusted + ' (' + where + ')';
+            if (type === 'dragover' && line === last) return;   // only when something changes
+            last = line;
+            post(line);
+          }, 0);
+          // Can the dropped file actually be read? (now, and again a few seconds later)
+          for (const f of files) {
+            const check = (label) => f.arrayBuffer()
+              .then((b) => post('file "' + f.name + '" ' + label + ': readable, ' + b.byteLength + ' of ' + f.size + ' bytes, type ' + (f.type || '?')))
+              .catch((err) => post('file "' + f.name + '" ' + label + ': NOT readable: ' + err));
+            check('at drop');
+            setTimeout(() => check('5s later'), 5000);
+          }
+        }, true);
       }
+      // Errors the page runs into soon after a drop (e.g. a failed upload).
+      let watchUntil = 0;
+      window.addEventListener('drop', () => { watchUntil = Date.now() + 15000; }, true);
+      window.addEventListener('error', (e) => { if (Date.now() < watchUntil) post('page error: ' + (e.message || e.type)); }, true);
+      window.addEventListener('unhandledrejection', (e) => { if (Date.now() < watchUntil) post('page error (promise): ' + String(e.reason).slice(0, 200)); });
     })();
     """#
 
