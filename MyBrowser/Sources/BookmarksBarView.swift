@@ -22,6 +22,7 @@ final class BookmarksBarView: NSView {
     private var entries: [(button: NSButton, entry: Entry)] = []
     private let overflowButton = NSButton()
     private let sleepButton = NSButton(title: "Sleep", target: nil, action: #selector(BrowserWindowController.sleepWindow(_:)))
+    private let toolsButton = ToolsDropButton(title: "Tools", target: nil, action: #selector(BrowserWindowController.openTools(_:)))
     private let emptyHint = NSTextField(labelWithString: "Your tab groups show here. Right-click a tab → Add Tab to New Group. Bookmarks are on the new tab page (⌘T).")
 
     init() {
@@ -34,7 +35,8 @@ final class BookmarksBarView: NSView {
         overflowButton.action = #selector(showOverflow(_:))
         overflowButton.toolTip = "More bookmarks"
         addSubview(overflowButton)
-        for (button, symbol, tip) in [(sleepButton, "moon.zzz", "Turn the window black until you move the mouse or press a key")] {
+        for (button, symbol, tip) in [(toolsButton, "wrench.and.screwdriver", "Drop a picture here (or click) to convert it, remove its background, or copy it"),
+                                      (sleepButton, "moon.zzz", "Turn the window black until you move the mouse or press a key")] {
             button.isBordered = false
             button.image = Icons.symbol(symbol, size: 11)
             button.imagePosition = .imageLeading
@@ -66,11 +68,13 @@ final class BookmarksBarView: NSView {
         background.frame = bounds
         let h: CGFloat = 22
         let y = (bounds.height - h) / 2
-        // Sleep sits at the right end, under the toolbar's icons.
+        // Tools and Sleep sit at the right end, under the toolbar's icons.
         sleepButton.sizeToFit()
-        let sleepW = sleepButton.frame.width + 8
+        toolsButton.sizeToFit()
+        let sleepW = sleepButton.frame.width + 8, toolsW = toolsButton.frame.width + 8
         sleepButton.frame = NSRect(x: bounds.width - 12 - sleepW, y: y, width: sleepW, height: h)
-        let limit = sleepButton.frame.minX - 34
+        toolsButton.frame = NSRect(x: sleepButton.frame.minX - 6 - toolsW, y: y, width: toolsW, height: h)
+        let limit = toolsButton.frame.minX - 34
         var x: CGFloat = 10
         var overflowing = false
         for (button, entry) in entries {
@@ -87,11 +91,11 @@ final class BookmarksBarView: NSView {
             }
         }
         overflowButton.isHidden = !overflowing
-        overflowButton.frame = NSRect(x: sleepButton.frame.minX - 30, y: y, width: 22, height: h)
+        overflowButton.frame = NSRect(x: toolsButton.frame.minX - 30, y: y, width: 22, height: h)
         emptyHint.sizeToFit()
         emptyHint.lineBreakMode = .byTruncatingTail
         emptyHint.frame = NSRect(x: 12, y: (bounds.height - emptyHint.frame.height) / 2,
-                                 width: min(emptyHint.frame.width, max(0, sleepButton.frame.minX - 24)),
+                                 width: min(emptyHint.frame.width, max(0, toolsButton.frame.minX - 24)),
                                  height: emptyHint.frame.height)
     }
 
