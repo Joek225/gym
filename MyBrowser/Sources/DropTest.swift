@@ -17,7 +17,8 @@ enum DropTest {
         let hoverTypes = '';
         const hasFiles = (e) => Array.from(e.dataTransfer.types || []).includes('Files');
         document.addEventListener('dragenter', (e) => {
-          hoverTypes = Array.from(e.dataTransfer.types || []).join(',');
+          hoverTypes = Array.from(e.dataTransfer.types || []).join(',') + ' items=' +
+            Array.from(e.dataTransfer.items || []).map((i) => i.kind + ':' + (i.type || '?')).join(',');
           if (hasFiles(e)) setTimeout(() => { z.style.display = 'block'; }, 50);
         });
         z.addEventListener('dragover', (e) => { if (hasFiles(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });

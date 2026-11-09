@@ -84,9 +84,10 @@ final class BrowserWebView: WKWebView {
         guard canTakeDrops else { return false }
         guard let stand else { return super.performDragOperation(sender) }
         // Now get the real picture (a promised file is only written when you let go).
+        // Fill the placeholder files with the real data. What the page was shown while hovering
+        // stays exactly the same (changing it at this point made sites refuse quick drops).
         let files = stand.collectCopies()
         guard !files.isEmpty else { return false }
-        stand.use(files)
         let point = convert(sender.draggingLocation, from: nil)
         // The page answers "do you want this?" a moment after the mouse moves. If you let go
         // quickly, its answer may not be in yet: wait for it (up to about a second) instead of
@@ -195,11 +196,21 @@ final class StandInDrag: NSObject, @preconcurrency NSDraggingInfo {
         super.init()
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let names = Self.names(on: original.draggingPasteboard)
-        use(names.enumerated().map { i, name in
+        placeholders = names.enumerated().map { i, name in
             let url = slot(i).appendingPathComponent(name)
             FileManager.default.createFile(atPath: url.path, contents: Data())
             return url
-        })
+        }
+        use(placeholders)
+    }
+
+    /// The (at first empty) files the page is told about; filled in when you let go.
+    private var placeholders: [URL] = []
+
+    /// Writes data into placeholder number i.
+    private func fill(_ i: Int, with data: Data) -> URL? {
+        guard i < placeholders.count else { return nil }
+        return (try? data.write(to: placeholders[i])) != nil ? placeholders[i] : nil
     }
 
     /// Whether a drag from another app carries anything we can turn into files.
@@ -265,14 +276,12 @@ final class StandInDrag: NSObject, @preconcurrency NSDraggingInfo {
             return files.enumerated().compactMap { i, file in
                 let size = (try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
                 guard size <= Self.maxBytes, let data = try? Data(contentsOf: file) else { return nil }
-                let copy = slot(i).appendingPathComponent(file.lastPathComponent)
-                return (try? data.write(to: copy)) != nil ? copy : nil
+                return fill(i, with: data)
             }
         }
         // 2. A picture carried as data.
         if let picture = Self.pictureData(pb), picture.data.count <= Self.maxBytes {
-            let copy = slot(0).appendingPathComponent("Image.\(picture.ext)")
-            if (try? picture.data.write(to: copy)) != nil { return [copy] }
+            if let copy = fill(0, with: picture.data) { return [copy] }
         }
         // 3. Last resort: ask the other app to write its promised file.
         if let promise = (pb.readObjects(forClasses: [NSFilePromiseReceiver.self], options: nil) as? [NSFilePromiseReceiver])?.first {
@@ -288,7 +297,7 @@ final class StandInDrag: NSObject, @preconcurrency NSDraggingInfo {
             }
             let deadline = Date().addingTimeInterval(5)
             while !finished && Date() < deadline { RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02)) }
-            if let received { return [received] }
+            if let received, let data = try? Data(contentsOf: received), let copy = fill(0, with: data) { return [copy] }
         }
         return []
     }
