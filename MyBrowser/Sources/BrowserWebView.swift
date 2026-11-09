@@ -178,7 +178,7 @@ final class BrowserWebView: WKWebView {
 /// then a picture's "promised file" data, then any picture on the drag, then (last resort)
 /// asking the other app to write its promised file.
 @MainActor
-final class StandInDrag: NSObject, NSDraggingInfo {
+final class StandInDrag: NSObject, @preconcurrency NSDraggingInfo {
     /// Where dropped copies are kept. Pages are never allowed to open these themselves
     /// (a drop that misses the site's drop area would otherwise replace the page with the picture).
     static let dropsFolder = FileManager.default.temporaryDirectory.appendingPathComponent("drops", isDirectory: true)
@@ -299,7 +299,7 @@ final class StandInDrag: NSObject, NSDraggingInfo {
     var draggingSourceOperationMask: NSDragOperation { original.draggingSourceOperationMask.union(.copy) }
     var draggingLocation: NSPoint { original.draggingLocation }
     var draggedImageLocation: NSPoint { original.draggedImageLocation }
-    var draggedImage: NSImage? { original.draggedImage }
+    var draggedImage: NSImage? { nil }
     var draggingPasteboard: NSPasteboard { pasteboard }
     var draggingSource: Any? { nil }
     var draggingSequenceNumber: Int { original.draggingSequenceNumber }

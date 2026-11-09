@@ -119,7 +119,7 @@ final class PasswordAgent: NSObject, WKScriptMessageHandler {
             if let name = body["username"] as? String, !name.isEmpty { recentUsernames[site] = name }
         case "form":
             // A login box inside a frame from a different site (e.g. a hidden ad) gets nothing.
-            guard message.frameInfo.isMainFrame || Self.sameSite(site, webView.url?.host) else { return }
+            guard message.frameInfo.isMainFrame || site == webView.url?.host else { return }
             fill(webView, frame: message.frameInfo, site: site)
         case "submit":
             guard let password = body["password"] as? String, !password.isEmpty else { return }
@@ -129,13 +129,6 @@ final class PasswordAgent: NSObject, WKScriptMessageHandler {
         default:
             break
         }
-    }
-
-    /// Same site = same main domain (docs.google.com and accounts.google.com both count as google.com).
-    static func sameSite(_ a: String, _ b: String?) -> Bool {
-        guard let b else { return false }
-        func main(_ h: String) -> String { h.split(separator: ".").suffix(2).joined(separator: ".") }
-        return main(a) == main(b)
     }
 
     private func fill(_ webView: WKWebView, frame: WKFrameInfo, site: String) {
@@ -262,6 +255,14 @@ final class PasswordAgent: NSObject, WKScriptMessageHandler {
 /// they aren't available. Then sites like Google go straight to your password
 /// instead of showing a passkey screen that fails.
 enum PasskeyFallback {
+    /// True once Apple has granted this browser its passkey permission (and it's in the
+    /// app's entitlements). Then passkeys and security keys work, exactly as in Safari.
+    static let passkeysAllowed: Bool = {
+        guard let task = SecTaskCreateFromSelf(nil) else { return false }
+        let value = SecTaskCopyValueForEntitlement(task, "com.apple.developer.web-browser.public-key-credential" as CFString, nil)
+        return (value as? Bool) == true
+    }()
+
     static let script = WKUserScript(source: """
         try { Object.defineProperty(window, 'PublicKeyCredential', { value: undefined, configurable: true }); } catch (e) {}
         """, injectionTime: .atDocumentStart, forMainFrameOnly: false)

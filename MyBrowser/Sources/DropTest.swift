@@ -128,7 +128,7 @@ enum DropTest {
 
 /// Stands in for macOS's description of an ongoing drag.
 @MainActor
-private final class FakeDrag: NSObject, NSDraggingInfo {
+private final class FakeDrag: NSObject, @preconcurrency NSDraggingInfo {
     let pasteboard: NSPasteboard
     let location: NSPoint
     weak var window: NSWindow?

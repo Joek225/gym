@@ -157,12 +157,13 @@ final class ExtensionManager: NSObject, WKWebExtensionControllerDelegate {
 
     func webExtensionController(_ controller: WKWebExtensionController,
                                 openWindowsFor extensionContext: WKWebExtensionContext) -> [any WKWebExtensionWindow] {
-        AppDelegate.shared.controllers
+        AppDelegate.shared.controllers.filter { !$0.isPrivate }   // private windows are invisible to extensions
     }
 
     func webExtensionController(_ controller: WKWebExtensionController,
                                 focusedWindowFor extensionContext: WKWebExtensionContext) -> (any WKWebExtensionWindow)? {
-        AppDelegate.shared.frontController
+        guard let front = AppDelegate.shared.frontController, !front.isPrivate else { return nil }
+        return front
     }
 
     func webExtensionController(_ controller: WKWebExtensionController,
@@ -260,21 +261,30 @@ extension Tab: WKWebExtensionTab {
 /// (only when extensions are running).
 @MainActor
 enum ExtensionEvents {
+    /// Nothing that happens in a private window is reported to extensions.
+    private static func isPrivate(_ tab: Tab) -> Bool {
+        AppDelegate.shared.controller(containing: tab)?.isPrivate ?? false
+    }
+
     static func tabOpened(_ tab: Tab) {
+        guard !isPrivate(tab) else { return }
         if #available(macOS 15.4, *) { ExtensionManager.active?.controller.didOpenTab(tab) }
     }
 
     static func tabClosed(_ tab: Tab) {
+        guard !isPrivate(tab) else { return }
         if #available(macOS 15.4, *) { ExtensionManager.active?.controller.didCloseTab(tab, windowIsClosing: false) }
     }
 
     static func tabActivated(_ tab: Tab, previous: Tab?) {
+        guard !isPrivate(tab) else { return }
         if #available(macOS 15.4, *) {
             ExtensionManager.active?.controller.didActivateTab(tab, previousActiveTab: previous)
         }
     }
 
     static func windowFocused(_ window: BrowserWindowController) {
+        guard !window.isPrivate else { return }
         if #available(macOS 15.4, *) { ExtensionManager.active?.controller.didFocusWindow(window) }
     }
 }

@@ -49,11 +49,12 @@ enum WebKitEnvironment {
         config.applicationNameForUserAgent = "Version/\(Self.safariVersion) Safari/605.1.15"
         if CommandLine.arguments.contains("--log-loads") { NSLog("MyBrowser identifies as Safari %@", Self.safariVersion) }
         // Saving and filling passwords, and skipping passkey screens that can't work here.
-        config.userContentController.addUserScript(PasskeyFallback.script)
+        if !PasskeyFallback.passkeysAllowed { config.userContentController.addUserScript(PasskeyFallback.script) }
         PasswordAgent.shared.install(in: config.userContentController)
         ContentBlocker.apply(to: config.userContentController)
         // Lets installed extensions see and change pages (only when any are installed).
-        if #available(macOS 15.4, *), let extensions = ExtensionManager.active {
+        // Private windows run without extensions (like Chrome), so nothing private leaks to them.
+        if #available(macOS 15.4, *), (store ?? dataStore).isPersistent, let extensions = ExtensionManager.active {
             config.webExtensionController = extensions.controller
         }
         return config

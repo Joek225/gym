@@ -16,7 +16,7 @@ final class DownloadManager: NSObject, WKDownloadDelegate {
         var error: String?
         var source: URL?
         init(_ download: WKDownload) { self.download = download }
-        var fraction: Double { download.progress.fractionCompleted }
+        @MainActor var fraction: Double { download.progress.fractionCompleted }
     }
 
     private(set) var items: [Item] = []
@@ -36,7 +36,13 @@ final class DownloadManager: NSObject, WKDownloadDelegate {
     private func changed() { NotificationCenter.default.post(name: Self.didChange, object: nil) }
 
     func download(_ download: WKDownload, decideDestinationUsing response: URLResponse,
-                  suggestedFilename: String, completionHandler: @escaping (URL?) -> Void) {
+                  suggestedFilename rawName: String, completionHandler: @escaping (URL?) -> Void) {
+        // The site picks the name: keep only a plain file name (no folders like "../",
+        // no hidden ".name" files), so a download can only ever land in Downloads.
+        var suggestedFilename = (rawName as NSString).lastPathComponent
+            .replacingOccurrences(of: ":", with: "-")
+        while suggestedFilename.hasPrefix(".") { suggestedFilename.removeFirst() }
+        if suggestedFilename.isEmpty { suggestedFilename = "download" }
         // Files sent over an insecure connection could have been swapped on the way.
         if response.url?.scheme == "http" {
             let alert = NSAlert()

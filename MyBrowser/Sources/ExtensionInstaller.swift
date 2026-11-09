@@ -5,11 +5,6 @@ import WebKit
 @available(macOS 15.4, *)
 @MainActor
 enum ExtensionInstaller {
-    private static var realHome: String {
-        if let pw = getpwuid(getuid()), let dir = pw.pointee.pw_dir { return String(cString: dir) }
-        return NSHomeDirectory()
-    }
-
     /// For an unpacked extension folder (one that contains manifest.json).
     static func addFolder(window: NSWindow?) {
         let panel = NSOpenPanel()
