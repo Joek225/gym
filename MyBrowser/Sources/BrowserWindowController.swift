@@ -442,6 +442,12 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     /// The Sleep button (top right): the window goes black until you move the mouse or press a key.
     @objc func sleepWindow(_ sender: Any?) { newTabSleep() }
 
+    @objc func copyDragReport(_ sender: Any?) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(DragReport.text, forType: .string)
+        toolbar.flash("Drag report copied — paste it in your chat with Claude")
+    }
+
     /// The Tools panel: change a picture's file type, remove its background, or copy it.
     @objc func openTools(_ sender: Any?) {
         if let window { ToolsOverlay.show(in: window) }
@@ -722,6 +728,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         add("Downloads", #selector(showDownloads(_:)), "j", [.command, .shift])
         add("Passwords", #selector(openPasswords(_:)), "p", [.command, .option])
         add("Tools (convert, remove background, copy)", #selector(openTools(_:)))
+        add("Copy Drag-and-Drop Report", #selector(copyDragReport(_:)))
         add("Bookmark This Page…", #selector(bookmarkThisPage(_:)), "d")
         menu.addItem(.separator())
         add("Find…", #selector(findInPage(_:)), "f")

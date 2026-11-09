@@ -51,6 +51,7 @@ enum WebKitEnvironment {
         // Saving and filling passwords, and skipping passkey screens that can't work here.
         if !PasskeyFallback.passkeysAllowed { config.userContentController.addUserScript(PasskeyFallback.script) }
         PasswordAgent.shared.install(in: config.userContentController)
+        DragReport.install(in: config.userContentController)
         ContentBlocker.apply(to: config.userContentController)
         // Lets installed extensions see and change pages (only when any are installed).
         // Private windows run without extensions (like Chrome), so nothing private leaks to them.

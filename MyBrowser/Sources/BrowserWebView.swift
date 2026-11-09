@@ -49,10 +49,17 @@ final class BrowserWebView: WKWebView {
     /// What the page itself last said about the drag (nothing = it doesn't want it here).
     private var pageOperation: NSDragOperation = []
 
+    private var lastReported: NSDragOperation?
+
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        guard canTakeDrops else { return [] }
+        let fullScreen = window?.styleMask.contains(.fullScreen) ?? false
+        DragReport.add("— drag entered \(url?.host ?? "page")\(fullScreen ? " (full screen)" : "") from \(sender.draggingSource == nil ? "another app" : "this browser"), seq \(sender.draggingSequenceNumber)")
+        DragReport.add("  carries: \(DragReport.types(sender.draggingPasteboard)); source allows \(DragReport.names(sender.draggingSourceOperationMask))")
+        guard canTakeDrops else { DragReport.add("  ignored: this page isn't the visible one"); return [] }
         stand?.cleanUp()
         stand = needsStandIn(sender) ? StandInDrag(sender) : nil
+        DragReport.add(stand != nil ? "  route: browser copies it first (\(stand!.placeholderNames))" : "  route: straight to WebKit")
+        lastReported = nil
         return answer(super.draggingEntered(stand ?? sender))
     }
 
@@ -65,12 +72,17 @@ final class BrowserWebView: WKWebView {
     /// For drags we're carrying, show the green + anyway; if the page still says no when
     /// you let go over a text box, the picture is pasted into that box instead.
     private func answer(_ operation: NSDragOperation) -> NSDragOperation {
+        if operation != lastReported {
+            lastReported = operation
+            DragReport.add("  WebKit says: \(DragReport.names(operation))")
+        }
         guard stand != nil else { return operation }
         pageOperation = operation
         return operation.isEmpty ? .copy : operation
     }
 
     override func draggingExited(_ sender: NSDraggingInfo?) {
+        DragReport.add("  drag left the page")
         super.draggingExited(stand ?? sender)
         stand?.cleanUp()
         stand = nil
@@ -82,12 +94,18 @@ final class BrowserWebView: WKWebView {
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         guard canTakeDrops else { return false }
-        guard let stand else { return super.performDragOperation(sender) }
+        guard let stand else {
+            let ok = super.performDragOperation(sender)
+            DragReport.add("  dropped straight to WebKit: \(ok ? "accepted" : "refused")")
+            return ok
+        }
         // Now get the real picture (a promised file is only written when you let go).
         // Fill the placeholder files with the real data. What the page was shown while hovering
         // stays exactly the same (changing it at this point made sites refuse quick drops).
         let files = stand.collectCopies()
-        guard !files.isEmpty else { return false }
+        let sizes = files.map { (try? $0.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? -1 }
+        DragReport.add("  let go: copied \(files.count) file(s), sizes \(sizes)")
+        guard !files.isEmpty else { DragReport.add("  nothing could be copied: drop cancelled"); return false }
         let point = convert(sender.draggingLocation, from: nil)
         // The page answers "do you want this?" a moment after the mouse moves. If you let go
         // quickly, its answer may not be in yet: wait for it (up to about a second) instead of
@@ -99,14 +117,18 @@ final class BrowserWebView: WKWebView {
             RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.03))
             pageOperation = super.draggingUpdated(stand)
         }
+        DragReport.add("  page's answer at drop time: \(DragReport.names(pageOperation))")
         if pageOperation.isEmpty {
             // The page refused the drop: tell WebKit the drag is over, then paste instead.
+            DragReport.add("  page refused: trying paste into the text box instead")
             super.draggingExited(stand)
             pasteInstead(files, at: point)
             return true
         }
         _ = super.prepareForDragOperation(stand)
-        return super.performDragOperation(stand)
+        let ok = super.performDragOperation(stand)
+        DragReport.add("  handed to WebKit as a real drop: \(ok ? "accepted" : "refused")")
+        return ok
     }
 
     override func concludeDragOperation(_ sender: NSDraggingInfo?) {
@@ -135,6 +157,7 @@ final class BrowserWebView: WKWebView {
         let testing = CommandLine.arguments.contains("--test-drop")
         callAsyncJavaScript(js, arguments: ["x": x, "y": y], in: nil, in: .page) { [weak self] result in
             if testing { NSLog("MyBrowser paste-instead: box found = %@", String(describing: result)) }
+            if case .success(let v) = result { DragReport.add("  paste route: text box under the pointer = \((v as? Bool) == true ? "yes" : "no (nothing pasted)")") }
             guard let self, case .success(let value) = result, (value as? Bool) == true else { return }
             self.window?.makeFirstResponder(self)
             let general = NSPasteboard.general
@@ -261,6 +284,8 @@ final class StandInDrag: NSObject, @preconcurrency NSDraggingInfo {
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
     }
+
+    var placeholderNames: String { placeholders.map(\.lastPathComponent).joined(separator: ", ") }
 
     func use(_ files: [URL]) {
         pasteboard.clearContents()
