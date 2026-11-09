@@ -15,7 +15,6 @@ protocol SidebarDelegate: AnyObject {
     func sidebarNewTab(in group: TabGroup?)
     func sidebarEditGroup(_ group: TabGroup, anchor: NSView?)
     func sidebarTogglePin(_ tab: Tab)
-    func sidebarOpenTools()
     func sidebarToggleCollapse()
     func sidebarShowGroups(anchor: NSView)
     func sidebarSearchTabs()
@@ -273,7 +272,6 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
     // MARK: Clicks
 
     @objc private func newTabClicked(_ sender: Any?) { delegate?.sidebarNewTab(in: nil) }
-    @objc private func toolsClicked(_ sender: Any?) { delegate?.sidebarOpenTools() }
     @objc private func collapseClicked(_ sender: Any?) { delegate?.sidebarToggleCollapse() }
     @objc private func groupsClicked(_ sender: NSButton) { delegate?.sidebarShowGroups(anchor: sender) }
     @objc private func searchClicked(_ sender: Any?) { delegate?.sidebarSearchTabs() }

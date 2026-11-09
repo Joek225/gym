@@ -700,9 +700,6 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         if sender.tag - 1 < tabs.count { select(tabs[sender.tag - 1]) } else { NSSound.beep() }
     }
 
-    @objc func openTools(_ sender: Any?) {
-        if let window { ToolsOverlay.show(in: window) }
-    }
 
     /// Chrome's ⋮ menu.
     @objc func showMainMenu(_ sender: NSButton) {
@@ -725,7 +722,6 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         add("Print…", #selector(printPage(_:)), "p")
         add("Zoom In", #selector(zoomInPage(_:)), "=")
         add("Zoom Out", #selector(zoomOutPage(_:)), "-")
-        add("Tools", #selector(openTools(_:)))
         menu.addItem(.separator())
         add("Page Info", #selector(showPageInfo(_:)))
         add("Settings", #selector(openSettings(_:)), ",")
@@ -1071,7 +1067,6 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     }
 
     func sidebarTogglePin(_ tab: Tab) { store.setPinned(tab, !tab.pinned) }
-    func sidebarOpenTools() { openTools(nil) }
 
     func sidebarToggleCollapse() {
         sidebarCompact.toggle()

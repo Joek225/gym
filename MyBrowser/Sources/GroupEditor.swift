@@ -11,14 +11,13 @@ final class PopupPanel: NSPanel {
 @MainActor
 protocol GroupEditorActions: AnyObject {
     var store: TabStore { get }
-    func sidebarNewTab(in group: TabGroup?)
-    func moveGroupToNewWindow(_ group: TabGroup)
     func closeGroup(_ group: TabGroup, keepSaved: Bool)
     func disableGroup(_ group: TabGroup)
     func sidebarEnableGroup(_ group: TabGroup)
 }
 
-/// Chrome's group editor: name field, color dots, and group actions.
+/// The group editor: name, one of the four colors, and turn off / close.
+/// (A group disappears by itself once its last tab is closed.)
 /// Opens when you make a new group or right-click a group's header.
 @MainActor
 final class GroupEditor: NSObject, NSWindowDelegate, NSTextFieldDelegate {
@@ -107,16 +106,11 @@ final class GroupEditor: NSObject, NSWindowDelegate, NSTextFieldDelegate {
         updateDots()
 
         let rows: [NSView] = [
-            PopupRow(icon: "plus.square.on.square", title: "New tab in group", shortcut: "^⌘C") { [weak self] in self?.newTab() },
-            PopupRow(icon: "macwindow.badge.plus", title: "Move group to new window", shortcut: "") { [weak self] in self?.moveToNewWindow() },
             PopupRow(icon: group.isDisabled ? "power" : "moon.zzz",
                      title: group.isDisabled ? "Turn group on" : "Disable group (free its memory)", shortcut: "") { [weak self] in
                 self?.toggleDisabled()
             },
             PopupRow(icon: "xmark.square", title: "Close group", shortcut: "^⌘W") { [weak self] in self?.closeGroup() },
-            Self.separator(),
-            PopupRow(icon: "rectangle.dashed", title: "Ungroup", shortcut: "") { [weak self] in self?.ungroup() },
-            PopupRow(icon: "trash", title: "Delete group", shortcut: "") { [weak self] in self?.deleteGroup() },
         ]
 
         let stack = NSStackView(views: [fieldBox, dotRow, Self.separator()] + rows)
@@ -205,11 +199,7 @@ final class GroupEditor: NSObject, NSWindowDelegate, NSTextFieldDelegate {
 
     @objc private func nameEntered(_ sender: Any?) { close() }
 
-    private func newTab() { close(); actions?.sidebarNewTab(in: group) }
-    private func moveToNewWindow() { close(); actions?.moveGroupToNewWindow(group) }
     private func closeGroup() { close(); actions?.closeGroup(group, keepSaved: true) }
-    private func deleteGroup() { close(); actions?.closeGroup(group, keepSaved: false) }
-    private func ungroup() { close(); actions?.store.ungroup(group) }
     private func toggleDisabled() {
         close()
         if group.isDisabled { actions?.sidebarEnableGroup(group) } else { actions?.disableGroup(group) }
@@ -219,7 +209,6 @@ final class GroupEditor: NSObject, NSWindowDelegate, NSTextFieldDelegate {
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         guard mods == [.control, .command] else { return false }
         switch event.charactersIgnoringModifiers?.lowercased() {
-        case "c": newTab(); return true
         case "w": closeGroup(); return true
         default: return false
         }

@@ -41,7 +41,6 @@ enum MainMenu {
         file.addItem(.separator())
         file.addItem(withTitle: "Print…", action: #selector(W.printPage(_:)), keyEquivalent: "p")
         file.addItem(.separator())
-        file.addItem(withTitle: "Tools (Converter & Background Remover)…", action: #selector(W.openTools(_:)), keyEquivalent: "")
         file.addItem(withTitle: "Passwords…", action: #selector(W.openPasswords(_:)), keyEquivalent: "")
 
         let edit = submenu(in: main, title: "Edit")

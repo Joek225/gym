@@ -185,9 +185,9 @@ final class NewTabView: SolidView, NSTextFieldDelegate {
 
         var local: [Suggestion] = []
         if let url = AddressParser.url(from: text) {
-            let isSearch = Preferences.searchEngine.isResultsPage(url)
+            let isSearch = Preferences.isSearchPage(url)
             local.append(Suggestion(kind: isSearch ? .search : .address, text: text,
-                                    detail: isSearch ? "\(Preferences.searchEngine.rawValue) Search" : "Go to site", url: url))
+                                    detail: isSearch ? "Google Search" : "Go to site", url: url))
         }
         let lower = text.lowercased()
         for entry in HistoryStore.shared.matches(text, limit: 3) where !local.contains(where: { $0.url == entry.url }) {

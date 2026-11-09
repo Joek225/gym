@@ -11,15 +11,8 @@ enum SettingsOverlay {
 
 final class SettingsView: NSView {
     private let restartNote = NSTextField(labelWithString: "")
-    private let searchPopup = NSPopUpButton()
-    private let unloadPopup = NSPopUpButton()
     private let adsBox = NSButton(checkboxWithTitle: "Block ads and trackers (makes pages lighter)", target: nil, action: nil)
     private let memoryBox = NSButton(checkboxWithTitle: "Show memory use in the toolbar", target: nil, action: nil)
-    private let groupsPopup = NSPopUpButton()
-    private let groupChoices: [(String, Int)] = [("10 minutes", 10), ("30 minutes", 30), ("1 hour", 60),
-                                                 ("3 hours", 180), ("Never", 0)]
-    private let unloadChoices: [(String, Int)] = [("1 minute", 1), ("3 minutes", 3), ("5 minutes", 5),
-                                                  ("10 minutes", 10), ("30 minutes", 30), ("Never", 0)]
 
     init() {
         super.init(frame: .zero)
@@ -40,16 +33,8 @@ final class SettingsView: NSView {
         restartNote.font = .systemFont(ofSize: 12)
 
         // Browsing
-        Preferences.SearchEngine.allCases.forEach { searchPopup.addItem(withTitle: $0.rawValue) }
-        searchPopup.selectItem(withTitle: Preferences.searchEngine.rawValue)
-        searchPopup.target = self
-        searchPopup.action = #selector(searchChanged(_:))
 
         // Memory
-        unloadChoices.forEach { unloadPopup.addItem(withTitle: $0.0) }
-        unloadPopup.selectItem(at: unloadChoices.firstIndex { $0.1 == Preferences.unloadMinutes } ?? 2)
-        unloadPopup.target = self
-        unloadPopup.action = #selector(unloadChanged(_:))
         adsBox.state = Preferences.blocksAds ? .on : .off
         adsBox.target = self
         adsBox.action = #selector(adsChanged(_:))
@@ -57,10 +42,6 @@ final class SettingsView: NSView {
         memoryBox.target = self
         memoryBox.action = #selector(memoryChanged(_:))
 
-        groupChoices.forEach { groupsPopup.addItem(withTitle: $0.0) }
-        groupsPopup.selectItem(at: groupChoices.firstIndex { $0.1 == Preferences.disableGroupsMinutes } ?? 1)
-        groupsPopup.target = self
-        groupsPopup.action = #selector(groupsChanged(_:))
 
         let clearButton = button("Clear Browsing Data…", #selector(clearDataClicked(_:)))
 
@@ -68,9 +49,7 @@ final class SettingsView: NSView {
 
         let stack = NSStackView(views: [
             heading("Tint color"), swatches,
-            heading("Search"), row("Search with", searchPopup),
-            heading("Memory"), row("Unload tabs I haven't used for", unloadPopup),
-            row("Turn off groups I haven't used for", groupsPopup), adsBox, memoryBox,
+            heading("Memory"), memoryNote(), adsBox, memoryBox,
             heading("Privacy & security"), securityNote(), clearButton, restartNote,
             heading("Default browser"), defaultButton,
         ])
@@ -137,8 +116,12 @@ final class SettingsView: NSView {
         AppDelegate.shared.rebuildWindows(thenShowSettings: true)   // applies straight away
     }
 
-    @objc private func groupsChanged(_ sender: NSPopUpButton) {
-        Preferences.disableGroupsMinutes = groupChoices[max(0, sender.indexOfSelectedItem)].1
+    private func memoryNote() -> NSTextField {
+        let note = NSTextField(wrappingLabelWithString: "Tabs you haven't used for 5 minutes are unloaded to free memory (they reload when you click them), and tab groups you haven't used for 30 minutes are turned off. Searches use Google.")
+        note.textColor = Theme.mutedText
+        note.font = .systemFont(ofSize: 12)
+        note.preferredMaxLayoutWidth = 560
+        return note
     }
 
     private func securityNote() -> NSTextField {
@@ -175,14 +158,6 @@ final class SettingsView: NSView {
                 self?.restartNote.stringValue = "Cleared."
             }
         }
-    }
-
-    @objc private func searchChanged(_ sender: NSPopUpButton) {
-        if let engine = Preferences.SearchEngine(rawValue: sender.titleOfSelectedItem ?? "") { Preferences.searchEngine = engine }
-    }
-
-    @objc private func unloadChanged(_ sender: NSPopUpButton) {
-        Preferences.unloadMinutes = unloadChoices[max(0, sender.indexOfSelectedItem)].1
     }
 
     @objc private func adsChanged(_ sender: NSButton) {

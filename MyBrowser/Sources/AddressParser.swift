@@ -25,6 +25,6 @@ enum AddressParser {
         }
 
         // Otherwise, search for it.
-        return Preferences.searchEngine.url(for: text)
+        return Preferences.searchURL(for: text)
     }
 }
