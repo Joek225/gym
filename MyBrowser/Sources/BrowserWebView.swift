@@ -40,6 +40,9 @@ final class BrowserWebView: WKWebView {
     /// Only the page you can see takes drops.
     private var canTakeDrops: Bool { window != nil && !isHiddenOrHasHiddenAncestor }
 
+    /// The window's safety net, which hands a drop to the visible page.
+    private var relay: ArcBackgroundView? { window?.contentView as? ArcBackgroundView }
+
     /// Anything from another app that carries files or a picture. Drags within the page
     /// (selected text, links, images moved inside a site) go straight to WebKit.
     private func needsStandIn(_ info: NSDraggingInfo) -> Bool {
@@ -55,7 +58,11 @@ final class BrowserWebView: WKWebView {
         let fullScreen = window?.styleMask.contains(.fullScreen) ?? false
         DragReport.add("— drag entered \(url?.host ?? "page")\(fullScreen ? " (full screen)" : "") from \(sender.draggingSource == nil ? "another app" : "this browser"), seq \(sender.draggingSequenceNumber)")
         DragReport.add("  carries: \(DragReport.types(sender.draggingPasteboard)); source allows \(DragReport.names(sender.draggingSourceOperationMask))")
-        guard canTakeDrops else { DragReport.add("  ignored: this page isn't the visible one"); return [] }
+        guard canTakeDrops else {
+            // A hidden background tab got it: pass it to the page you're looking at.
+            DragReport.add("  a hidden tab got this drag: passing it to the visible page")
+            return relay?.draggingEntered(sender) ?? []
+        }
         stand?.cleanUp()
         stand = needsStandIn(sender) ? StandInDrag(sender) : nil
         DragReport.add(stand != nil ? "  route: browser copies it first (\(stand!.placeholderNames))" : "  route: straight to WebKit")
@@ -64,7 +71,7 @@ final class BrowserWebView: WKWebView {
     }
 
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
-        guard canTakeDrops else { return [] }
+        guard canTakeDrops else { return relay?.draggingUpdated(sender) ?? [] }
         return answer(super.draggingUpdated(stand ?? sender))
     }
 
@@ -82,6 +89,7 @@ final class BrowserWebView: WKWebView {
     }
 
     override func draggingExited(_ sender: NSDraggingInfo?) {
+        if !canTakeDrops { relay?.draggingExited(sender); return }
         DragReport.add("  drag left the page")
         super.draggingExited(stand ?? sender)
         stand?.cleanUp()
@@ -89,11 +97,12 @@ final class BrowserWebView: WKWebView {
     }
 
     override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
-        stand != nil ? true : super.prepareForDragOperation(sender)
+        if !canTakeDrops { return relay?.prepareForDragOperation(sender) ?? false }
+        return stand != nil ? true : super.prepareForDragOperation(sender)
     }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
-        guard canTakeDrops else { return false }
+        guard canTakeDrops else { return relay?.performDragOperation(sender) ?? false }
         guard let stand else {
             let ok = super.performDragOperation(sender)
             DragReport.add("  dropped straight to WebKit: \(ok ? "accepted" : "refused")")
@@ -132,6 +141,7 @@ final class BrowserWebView: WKWebView {
     }
 
     override func concludeDragOperation(_ sender: NSDraggingInfo?) {
+        if !canTakeDrops { relay?.concludeDragOperation(sender); return }
         if stand == nil || !pageOperation.isEmpty { super.concludeDragOperation(stand ?? sender) }
         stand = nil   // the temporary file stays until the app quits, so the page can finish reading it
     }

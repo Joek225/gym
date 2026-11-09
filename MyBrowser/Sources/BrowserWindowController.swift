@@ -103,6 +103,10 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     private func buildLayout(in window: NSWindow) {
         let content: NSView = Theme.arcStyle ? ArcBackgroundView() : SolidView(color: Theme.toolbar)
         window.contentView = content
+        if let background = content as? ArcBackgroundView {
+            background.visiblePage = { [weak self] in self?.store.selected?.webView as? BrowserWebView }
+            background.enableDropSafetyNet()
+        }
         let side = sidebar.view
         // Arc style: the page sits on a rounded card with a small margin.
         let margin: CGFloat = Theme.arcStyle ? 8 : 0
