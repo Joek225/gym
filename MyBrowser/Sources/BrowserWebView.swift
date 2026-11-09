@@ -122,7 +122,7 @@ final class BrowserWebView: WKWebView {
         // Always give the page a moment (many chat sites only show their drop area once a drag
         // has arrived), and up to about a second if it hasn't said yes yet.
         let start = Date()
-        while Date().timeIntervalSince(start) < 0.25 || (pageOperation.isEmpty && Date().timeIntervalSince(start) < 1.2) {
+        while Date().timeIntervalSince(start) < 0.4 || (pageOperation.isEmpty && Date().timeIntervalSince(start) < 1.5) {
             RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.03))
             pageOperation = super.draggingUpdated(stand)
         }
