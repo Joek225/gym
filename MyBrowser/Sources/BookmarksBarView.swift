@@ -127,7 +127,7 @@ final class BookmarksBarView: NSView {
             return (.clear, ink, ink)
         }
         if disabled { return (color.offColor, NSColor(white: 1, alpha: 0.92), nil) }
-        return (color.color, Theme.sidebarText, nil)
+        return (color.color, color.textColor, nil)
     }
 
     private func styledChip(title: String, style: (fill: NSColor, text: NSColor, border: NSColor?), tip: String) -> NSButton {

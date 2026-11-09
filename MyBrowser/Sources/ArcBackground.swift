@@ -1,26 +1,44 @@
 import AppKit
 
-/// The window background: a soft, solid gradient of your theme color (lighter at the top).
-/// It looks a little see-through, like Arc, but nothing behind the window is shown or
-/// blurred, so macOS doesn't keep redrawing it — that saves energy.
+/// The window background, in two layers:
+///  - back: the two dark slate tones (darker at the top, a touch lighter below)
+///  - front: a see-through wash of your chosen tint (rose, periwinkle, sky or ocean)
+/// Both are plain colors (no live blur of what's behind the window), which saves energy.
 final class ArcBackgroundView: NSView {
-    private let gradient = CAGradientLayer()
+    private let back = CAGradientLayer()
+    private let tint = CALayer()
 
     init() {
         super.init(frame: .zero)
-        // Navy with a faint wash of your accent at the top, so it reads as tinted glass.
         let colors = ThemeColors.load()
-        let base = colors.sidebar.usingColorSpace(.sRGB) ?? .black
-        let top = base.blended(withFraction: 0.16, of: colors.accent) ?? base
-        let bottom = base.blended(withFraction: 0.18, of: .black) ?? base
-        gradient.colors = [top.cgColor, base.cgColor, bottom.cgColor]
-        gradient.startPoint = CGPoint(x: 0.2, y: 1)
-        gradient.endPoint = CGPoint(x: 0.8, y: 0)
-        layer = gradient          // a layer-hosting view: it just shows the gradient
+        back.colors = [colors.sidebar.cgColor, colors.toolbar.cgColor]
+        back.startPoint = CGPoint(x: 0.5, y: 1)   // top
+        back.endPoint = CGPoint(x: 0.5, y: 0)     // bottom
+        // The tint is strongest at the top and fades out, like tinted glass.
+        let wash = CAGradientLayer()
+        wash.colors = [colors.accent.withAlphaComponent(0.16).cgColor, colors.accent.withAlphaComponent(0.04).cgColor]
+        wash.startPoint = CGPoint(x: 0.2, y: 1)
+        wash.endPoint = CGPoint(x: 0.8, y: 0)
+        tint.addSublayer(wash)
+        back.addSublayer(tint)
+        layer = back
         wantsLayer = true
+        for l in [tint, wash] { l.autoresizingMask = [.layerWidthSizable, .layerHeightSizable] }
+        self.wash = wash
     }
 
+    private var wash: CAGradientLayer?
+
     required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func layout() {
+        super.layout()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        tint.frame = bounds
+        wash?.frame = bounds
+        CATransaction.commit()
+    }
 
     // Empty parts of the window can be dragged to move it, like the title bar.
     override var mouseDownCanMoveWindow: Bool { true }

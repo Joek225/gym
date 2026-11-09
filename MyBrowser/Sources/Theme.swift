@@ -31,7 +31,7 @@ enum Theme {
     /// A soft fill for boxes on the white page area (like the new tab search box).
     static var pageBoxFill: NSColor { isDark ? field : black(0.04) }
     /// Thin outlines that suit light and dark themes.
-    static var hairline: NSColor { NSColor(hex: 0x343849) }
+    static var hairline: NSColor { NSColor(hex: 0x3C3E4F) }
     static var tileFill: NSColor { isDark ? white(0.07) : black(0.045) }
     static var buttonFill: NSColor { isDark ? white(0.12) : white(0.45) }
     static var text: NSColor { NSColor(hex: 0xE4E6EF) }
@@ -73,26 +73,36 @@ struct ThemeColors {
     }
 
     static func load() -> ThemeColors {
-        ThemeColors(sidebar: NSColor(hex: 0x1D2030), toolbar: NSColor(hex: 0x252939),
-                    background: NSColor(hex: 0x1D2030), accent: accentChoice.color)
+        // The two dark slate tones from your screenshot (the back layer).
+        ThemeColors(sidebar: NSColor(hex: 0x21232D), toolbar: NSColor(hex: 0x282A36),
+                    background: NSColor(hex: 0x21232D), accent: accentChoice.color)
     }
 }
 
-/// Chrome's nine tab group colors (dark theme versions).
+/// Tab group colors: the same four as the tint (your calendar's colors).
 enum GroupColor: String, Codable, CaseIterable {
-    case grey, blue, red, yellow, green, pink, purple, cyan, orange
+    case rose, periwinkle, sky, ocean
 
     var color: NSColor {
+        ThemeColors.Accent(rawValue: rawValue)?.color ?? NSColor(hex: 0x7192F2)
+    }
+
+    /// Text that's easy to read on this color (white on the darker ones).
+    var textColor: NSColor {
         switch self {
-        case .grey:   NSColor(hex: 0xDADCE0)
-        case .blue:   NSColor(hex: 0x8AB4F8)
-        case .red:    NSColor(hex: 0xF28B82)
-        case .yellow: NSColor(hex: 0xFDD663)
-        case .green:  NSColor(hex: 0x81C995)
-        case .pink:   NSColor(hex: 0xFF8BCB)
-        case .purple: NSColor(hex: 0xC58AF9)
-        case .cyan:   NSColor(hex: 0x87E3EB)
-        case .orange: NSColor(hex: 0xFCAD70)
+        case .sky, .periwinkle: NSColor(hex: 0x1C1E30)
+        case .rose, .ocean: NSColor(white: 1, alpha: 0.95)
+        }
+    }
+
+    /// Groups saved with the old nine colors get the closest of the four.
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        switch raw {
+        case "rose", "red", "pink", "orange", "yellow": self = .rose
+        case "periwinkle", "blue", "purple": self = .periwinkle
+        case "sky", "cyan", "green": self = .sky
+        default: self = .ocean   // "ocean", "grey"
         }
     }
 

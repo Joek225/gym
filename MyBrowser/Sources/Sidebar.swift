@@ -847,7 +847,7 @@ final class GroupCellView: NSTableCellView {
         label.isHidden = compact
         // A turned-off group is grey until you click it.
         chip.fillColor = group.isDisabled ? group.color.offColor : group.color.color
-        label.textColor = group.isDisabled ? NSColor(white: 1, alpha: 0.92) : Theme.sidebarText
+        label.textColor = group.isDisabled ? NSColor(white: 1, alpha: 0.92) : group.color.textColor
         chevron.contentTintColor = label.textColor
         let count = group.tabs.count
         let countText = "\(count) tab\(count == 1 ? "" : "s")"

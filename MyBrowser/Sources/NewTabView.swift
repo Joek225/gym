@@ -4,7 +4,6 @@ import AppKit
 @MainActor
 protocol NewTabDelegate: AnyObject {
     func newTabOpen(_ url: URL)
-    func newTabImportFromChrome()
     func newTabSleep()
     func newTabOpenBookmark(_ node: BookmarkNode)
 }
@@ -482,7 +481,6 @@ final class BookmarkShelf: NSView {
             menu.addItem(.separator())
         }
         menu.addItem(withTitle: "Add Folder…", action: #selector(BrowserWindowController.newBookmarkFolder(_:)), keyEquivalent: "")
-        menu.addItem(withTitle: "Import from Chrome…", action: #selector(BrowserWindowController.importChromeBookmarks(_:)), keyEquivalent: "")
         return menu
     }
 }

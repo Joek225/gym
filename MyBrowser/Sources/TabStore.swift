@@ -102,7 +102,7 @@ final class TabStore: NSObject {
     @discardableResult
     func makeGroup(with tab: Tab) -> TabGroup {
         let used = Set(groups.map(\.color))
-        let color = GroupColor.allCases.first { !used.contains($0) } ?? .grey
+        let color = GroupColor.allCases.first { !used.contains($0) } ?? .periwinkle
         let group = TabGroup(name: "", color: color)
         let anchor: Int
         if let old = tab.group, let gi = items.firstIndex(of: old) {

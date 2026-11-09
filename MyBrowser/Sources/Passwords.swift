@@ -315,7 +315,6 @@ final class PasswordsView: NSView, NSTableViewDataSource, NSTableViewDelegate, N
         let reveal = button("Show", #selector(revealClicked(_:)))
         let copy = button("Copy Password", #selector(copyClicked(_:)))
         let delete = button("Delete", #selector(deleteClicked(_:)))
-        let importButton = button("Import from Chrome…", #selector(importClicked(_:)))
         let generateButton = button("Generate Strong Password", #selector(generateClicked(_:)))
         offerBox.target = self
         offerBox.action = #selector(offerToggled(_:))
@@ -324,7 +323,7 @@ final class PasswordsView: NSView, NSTableViewDataSource, NSTableViewDelegate, N
         status.font = .systemFont(ofSize: 12)
         status.lineBreakMode = .byTruncatingTail
 
-        let buttons = NSStackView(views: [reveal, copy, delete, NSView(), generateButton, importButton])
+        let buttons = NSStackView(views: [reveal, copy, delete, NSView(), generateButton])
         buttons.spacing = 8
         let bottom = NSStackView(views: [offerBox, NSView(), status])
         let stack = NSStackView(views: [search, scroll, buttons, bottom])
@@ -434,81 +433,4 @@ final class PasswordsView: NSView, NSTableViewDataSource, NSTableViewDelegate, N
         PasswordAgent.offersToSave = sender.state == .on
     }
 
-    /// Chrome can export its passwords as a CSV file; this reads that file.
-    @objc private func importClicked(_ sender: Any?) {
-        guard let window else { return }
-        let intro = NSAlert()
-        intro.messageText = "Import passwords from Chrome"
-        intro.informativeText = "1. In Chrome, open: chrome://password-manager/settings\n2. Click “Export passwords” and save the file.\n3. Click Continue here and pick that file.\n\nAfterwards, delete the exported file: it contains your passwords as plain text."
-        intro.addButton(withTitle: "Continue")
-        intro.addButton(withTitle: "Cancel")
-        intro.beginSheetModal(for: window) { [weak self] response in
-            guard response == .alertFirstButtonReturn, let self else { return }
-            let panel = NSOpenPanel()
-            panel.allowedContentTypes = [.commaSeparatedText]
-            panel.beginSheetModal(for: window) { result in
-                guard result == .OK, let url = panel.url else { return }
-                let count = Self.importCSV(url)
-                self.reload()
-                self.status.stringValue = "Imported \(count) password\(count == 1 ? "" : "s") from Chrome."
-                // That file holds every password in plain text: offer to throw it away.
-                let bin = NSAlert()
-                bin.messageText = "Move the exported passwords file to the Trash?"
-                bin.informativeText = "It contains all your passwords in plain text. After moving it, empty the Trash."
-                bin.addButton(withTitle: "Move to Trash")
-                bin.addButton(withTitle: "Keep")
-                bin.beginSheetModal(for: window) { answer in
-                    if answer == .alertFirstButtonReturn { try? FileManager.default.trashItem(at: url, resultingItemURL: nil) }
-                }
-            }
-        }
-    }
-
-    private static func importCSV(_ url: URL) -> Int {
-        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return 0 }
-        let rows = parseCSV(text)
-        guard let header = rows.first?.map({ $0.lowercased() }),
-              let urlIndex = header.firstIndex(of: "url"),
-              let userIndex = header.firstIndex(of: "username"),
-              let passIndex = header.firstIndex(of: "password") else { return 0 }
-        var count = 0
-        for row in rows.dropFirst() where row.count > max(urlIndex, userIndex, passIndex) {
-            guard let host = URL(string: row[urlIndex])?.host, !row[passIndex].isEmpty else { continue }
-            if PasswordStore.save(site: host, username: row[userIndex], password: row[passIndex]) { count += 1 }
-        }
-        return count
-    }
-
-    /// A small CSV reader that understands quotes ("a, b" and "" inside quotes).
-    private static func parseCSV(_ text: String) -> [[String]] {
-        var rows: [[String]] = []
-        var row: [String] = []
-        var field = ""
-        var inQuotes = false
-        var chars = Array(text)
-        chars.append("\n")
-        var i = 0
-        while i < chars.count {
-            let c = chars[i]
-            if inQuotes {
-                if c == "\"" {
-                    if i + 1 < chars.count, chars[i + 1] == "\"" { field.append("\""); i += 1 } else { inQuotes = false }
-                } else {
-                    field.append(c)
-                }
-            } else if c == "\"" {
-                inQuotes = true
-            } else if c == "," {
-                row.append(field); field = ""
-            } else if c == "\n" || c == "\r\n" || c == "\r" {
-                row.append(field); field = ""
-                if !(row.count == 1 && row[0].isEmpty) { rows.append(row) }
-                row = []
-            } else {
-                field.append(c)
-            }
-            i += 1
-        }
-        return rows
-    }
 }

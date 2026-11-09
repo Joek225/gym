@@ -11,4 +11,10 @@ enum Storage {
     static let session = folder.appendingPathComponent("session.json")
     static let bookmarks = folder.appendingPathComponent("bookmarks.json")
     static let closedGroups = folder.appendingPathComponent("closed-groups.json")
+
+    /// The real home folder (inside the sandbox, the normal one points to a private copy).
+    static var realHome: String {
+        if let pw = getpwuid(getuid()), let dir = pw.pointee.pw_dir { return String(cString: dir) }
+        return NSHomeDirectory()
+    }
 }

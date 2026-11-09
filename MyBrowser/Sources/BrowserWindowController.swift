@@ -30,6 +30,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     private let errorView = ErrorView()
     private let newTabPage = NewTabView()
     private var sidebarWidth: NSLayoutConstraint!
+    private var memoryReadout: MemoryReadout?
     private var barHeight: NSLayoutConstraint!
     private var unloadTimer: Timer?
     private let logLoads = CommandLine.arguments.contains("--log-loads")
@@ -203,6 +204,13 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         toolbar.menuButton.action = #selector(showMainMenu(_:))
         toolbar.siteButton.target = self
         toolbar.siteButton.action = #selector(showSiteInfo(_:))
+        memoryReadout = MemoryReadout(label: toolbar.memoryLabel) {
+            AppDelegate.shared.controllers.flatMap { $0.store.allTabs.compactMap(\.webView) }
+        }
+        memoryReadout?.update()
+        NotificationCenter.default.addObserver(forName: MemoryReadout.didToggle, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.memoryReadout?.update() }
+        }
         NotificationCenter.default.addObserver(forName: DownloadManager.didChange, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { _ = self }
         }
@@ -275,6 +283,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         store.scheduleSave()
         if previous !== tab { ExtensionEvents.tabActivated(tab, previous: previous) }
         refreshExtensionButtons()
+        memoryReadout?.refreshSoon()
         if isBlank(tab) {
             newTabPage.reset()
         } else {
@@ -589,15 +598,10 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         window?.makeFirstResponder(store.selected?.webView)
     }
 
-    func newTabImportFromChrome() { importFromChrome(nil) }
-
     func newTabOpenBookmark(_ node: BookmarkNode) {
         if let url = node.url { newTabOpen(url) }
     }
 
-    @objc func importFromChrome(_ sender: Any?) {
-        if let window { ChromeImportOverlay.show(in: window) }
-    }
 
     @objc func newTab(_ sender: Any?) {
         let tab = Tab(url: nil)
@@ -716,8 +720,6 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         add("Downloads", #selector(showDownloads(_:)), "j", [.command, .shift])
         add("Passwords", #selector(openPasswords(_:)), "p", [.command, .option])
         add("Bookmark This Page…", #selector(bookmarkThisPage(_:)), "d")
-        add("Extensions…", #selector(importFromChrome(_:)))
-        add("Import from Chrome…", #selector(importFromChrome(_:)))
         menu.addItem(.separator())
         add("Find…", #selector(findInPage(_:)), "f")
         add("Print…", #selector(printPage(_:)), "p")
@@ -1018,7 +1020,6 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         BookmarkEditor.edit(folder, in: window, isNew: false)
     }
 
-    @objc func importChromeBookmarks(_ sender: Any?) { importFromChrome(sender) }
 
     @objc func toggleBookmarksBar(_ sender: Any?) {
         showsBookmarksBar.toggle()
@@ -1255,14 +1256,11 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
             return
         }
         let menu = NSMenu()
-        menu.addItem(withTitle: "Import from Chrome…", action: #selector(importFromChrome(_:)), keyEquivalent: "")
         menu.addItem(withTitle: "Add Extension from Folder…", action: #selector(addExtensionFolder(_:)), keyEquivalent: "")
         menu.addItem(.separator())
         ExtensionsMenuDelegate.shared.appendItems(to: menu)
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
     }
-
-    @objc func importChromeExtensions(_ sender: Any?) { importFromChrome(sender) }
 
     @objc func addExtensionFolder(_ sender: Any?) {
         guard #available(macOS 15.4, *) else { showNeedsNewerMac(); return }

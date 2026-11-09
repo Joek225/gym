@@ -59,9 +59,6 @@ final class ExtensionsPanel: NSObject, NSPopoverDelegate {
         list.topAnchor.constraint(equalTo: scroll.contentView.topAnchor).isActive = true
 
         let footer = NSStackView(views: [
-            textButton("Import from Chrome…") { [weak self] in
-                self?.popover.close(); self?.controller?.importFromChrome(nil)
-            },
             textButton("Add from Folder…") { [weak self] in
                 self?.popover.close(); self?.controller?.addExtensionFolder(nil)
             },
@@ -88,7 +85,7 @@ final class ExtensionsPanel: NSObject, NSPopoverDelegate {
         list.arrangedSubviews.forEach { $0.removeFromSuperview() }
         let contexts = ExtensionManager.active?.contexts ?? []
         if contexts.isEmpty {
-            add(note("No extensions yet. Import them from Chrome below."))
+            add(note("No extensions yet. Add an unpacked extension folder below."))
             return
         }
         let everywhere = contexts.filter { ExtensionManager.siteAccess(for: $0.uniqueIdentifier) == .allSites }

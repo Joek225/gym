@@ -137,23 +137,6 @@ final class BookmarkStore {
         changed()
     }
 
-    /// Adds Chrome's bookmarks. If your bar is empty they go straight onto it,
-    /// otherwise into a folder called "Imported from Chrome".
-    func importChrome(bar chromeBar: [BookmarkNode], other chromeOther: [BookmarkNode], mobile: [BookmarkNode]) {
-        if (bar.children ?? []).isEmpty {
-            bar.children = chromeBar
-            other.children = (other.children ?? []) + chromeOther
-        } else {
-            var imported = chromeBar
-            if !chromeOther.isEmpty { imported.append(BookmarkNode(folder: "Other Bookmarks", children: chromeOther)) }
-            bar.children = (bar.children ?? []) + [BookmarkNode(folder: "Imported from Chrome", children: imported)]
-        }
-        if !mobile.isEmpty {
-            other.children = (other.children ?? []) + [BookmarkNode(folder: "Mobile Bookmarks", children: mobile)]
-        }
-        changed()
-    }
-
     private func changed() {
         rebuildIndex()
         if let data = try? JSONEncoder().encode(File(bar: bar, other: other)) {
@@ -313,29 +296,5 @@ enum BookmarkEditor {
         let l = NSTextField(labelWithString: text)
         l.alignment = .right
         return l
-    }
-}
-
-// MARK: - Chrome bookmarks
-
-enum ChromeBookmarks {
-    /// Reads Chrome's "Bookmarks" file. Returns (bar, other, mobile) or nil if it can't be read.
-    static func read(_ url: URL) -> (bar: [BookmarkNode], other: [BookmarkNode], mobile: [BookmarkNode])? {
-        guard let data = try? Data(contentsOf: url),
-              let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-              let roots = json["roots"] as? [String: Any] else { return nil }
-        let bar = (roots["bookmark_bar"] as? [String: Any]).map(convert)?.children ?? []
-        let other = (roots["other"] as? [String: Any]).map(convert)?.children ?? []
-        let mobile = (roots["synced"] as? [String: Any]).map(convert)?.children ?? []
-        return (bar, other, mobile)
-    }
-
-    private static func convert(_ dict: [String: Any]) -> BookmarkNode {
-        let name = dict["name"] as? String ?? ""
-        if dict["type"] as? String == "folder" || dict["children"] != nil {
-            let children = (dict["children"] as? [[String: Any]] ?? []).map(convert)
-            return BookmarkNode(folder: name, children: children)
-        }
-        return BookmarkNode(title: name, url: URL(string: dict["url"] as? String ?? ""))
     }
 }

@@ -22,7 +22,7 @@ final class DownloadManager: NSObject, WKDownloadDelegate {
     private(set) var items: [Item] = []
 
     static var folder: URL {
-        URL(fileURLWithPath: ChromeData.realHome).appendingPathComponent("Downloads", isDirectory: true)
+        URL(fileURLWithPath: Storage.realHome).appendingPathComponent("Downloads", isDirectory: true)
     }
 
     func track(_ download: WKDownload) {

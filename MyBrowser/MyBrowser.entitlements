@@ -20,11 +20,5 @@
 	<true/>
 	<key>com.apple.security.device.audio-input</key>
 	<true/>
-	<!-- Allowed to READ Chrome's folder (never change it), so "Import from Chrome"
-	     can find your bookmarks, extensions and tab groups in one click. -->
-	<key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key>
-	<array>
-		<string>/Library/Application Support/Google/Chrome/</string>
-	</array>
 </dict>
 </plist>

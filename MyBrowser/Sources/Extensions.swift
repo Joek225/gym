@@ -144,82 +144,13 @@ final class ExtensionManager: NSObject, WKWebExtensionControllerDelegate {
         context.webExtension.errors.map(\.localizedDescription)
     }
 
-    // MARK: Finding Chrome's extensions
+    // MARK: Extension folders
 
     struct ChromeExtension {
         let name: String
         let version: String
         let profile: String
         let folder: URL
-    }
-
-    /// Finds extensions in Chrome's folder, in every Chrome profile
-    /// (Chrome keeps them as <profile>/Extensions/<id>/<version>/manifest.json).
-    /// Also works if you pick a profile's Extensions folder or one extension's folder.
-    static func scanChrome(_ root: URL) -> [ChromeExtension] {
-        let fm = FileManager.default
-        func subfolders(_ url: URL) -> [URL] {
-            ((try? fm.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)) ?? [])
-                .filter(\.hasDirectoryPath)
-                .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
-        }
-        // Chrome's names for its profiles ("Default" → "Person 1", "Profile 1" → "School", …)
-        var profileNames: [String: String] = [:]
-        if let data = try? Data(contentsOf: root.appendingPathComponent("Local State")),
-           let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-           let cache = (json["profile"] as? [String: Any])?["info_cache"] as? [String: Any] {
-            for (dir, info) in cache {
-                if let name = (info as? [String: Any])?["name"] as? String { profileNames[dir] = name }
-            }
-        }
-
-        var found: [String: ChromeExtension] = [:]
-        func consider(_ dir: URL, key: String, profile: String) {
-            let manifestURL = dir.appendingPathComponent("manifest.json")
-            guard let data = try? Data(contentsOf: manifestURL),
-                  let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return }
-            let name = localized(json["name"] as? String ?? dir.lastPathComponent, in: dir,
-                                 defaultLocale: json["default_locale"] as? String)
-            found[key] = ChromeExtension(name: name, version: json["version"] as? String ?? "",
-                                         profile: profile, folder: dir)
-        }
-        func scanExtensionsFolder(_ folder: URL, profile: String) {
-            for idFolder in subfolders(folder) {
-                consider(idFolder, key: idFolder.path, profile: profile)
-                for version in subfolders(idFolder) {   // the newest version wins
-                    consider(version, key: idFolder.path, profile: profile)
-                }
-            }
-        }
-
-        consider(root, key: root.path, profile: "")
-        scanExtensionsFolder(root, profile: "")
-        for profileFolder in subfolders(root) {
-            let extensions = profileFolder.appendingPathComponent("Extensions", isDirectory: true)
-            if fm.fileExists(atPath: extensions.path) {
-                let dir = profileFolder.lastPathComponent
-                scanExtensionsFolder(extensions, profile: profileNames[dir] ?? dir)
-            }
-        }
-        // The same extension in two profiles is only listed once.
-        var unique: [String: ChromeExtension] = [:]
-        for ext in found.values where unique[ext.name + ext.version] == nil { unique[ext.name + ext.version] = ext }
-        return unique.values.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-    }
-
-    /// Turns "__MSG_appName__" into the real name from the extension's translations.
-    private static func localized(_ raw: String, in dir: URL, defaultLocale: String?) -> String {
-        guard raw.hasPrefix("__MSG_"), raw.hasSuffix("__") else { return raw }
-        let key = String(raw.dropFirst(6).dropLast(2)).lowercased()
-        for locale in [defaultLocale, "en", "en_US", "en_GB"].compactMap({ $0 }) {
-            let file = dir.appendingPathComponent("_locales/\(locale)/messages.json")
-            guard let data = try? Data(contentsOf: file),
-                  let messages = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { continue }
-            for (k, v) in messages where k.lowercased() == key {
-                if let message = (v as? [String: Any])?["message"] as? String { return message }
-            }
-        }
-        return raw
     }
 
     // MARK: What extensions ask the browser

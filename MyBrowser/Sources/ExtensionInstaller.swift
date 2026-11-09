@@ -1,33 +1,13 @@
 import AppKit
 import WebKit
 
-/// The screens for adding extensions: from Chrome, or from any extension folder.
+/// Adding an extension from an unpacked extension folder.
 @available(macOS 15.4, *)
 @MainActor
 enum ExtensionInstaller {
     private static var realHome: String {
         if let pw = getpwuid(getuid()), let dir = pw.pointee.pw_dir { return String(cString: dir) }
         return NSHomeDirectory()
-    }
-
-    /// Step 1: you confirm Chrome's Extensions folder. Step 2: you tick which extensions to copy.
-    static func importFromChrome(window: NSWindow?) {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.showsHiddenFiles = true
-        panel.prompt = "Use This Folder"
-        panel.message = "This is Chrome's settings folder. Just click “Use This Folder” — extensions from all your Chrome profiles will be listed."
-        panel.directoryURL = URL(fileURLWithPath: realHome)
-            .appendingPathComponent("Library/Application Support/Google/Chrome", isDirectory: true)
-        run(panel, window: window) { url in
-            let found = ExtensionManager.scanChrome(url)
-            guard !found.isEmpty else {
-                tell("No extensions found", "No Chrome extensions were found there. Pick the folder called “Chrome” (inside Library → Application Support → Google).", window)
-                return
-            }
-            choose(from: found, window: window)
-        }
     }
 
     /// For an unpacked extension folder (one that contains manifest.json).
@@ -40,42 +20,6 @@ enum ExtensionInstaller {
         run(panel, window: window) { url in
             install([ExtensionManager.ChromeExtension(name: url.lastPathComponent, version: "", profile: "", folder: url)], window: window)
         }
-    }
-
-    private static func choose(from found: [ExtensionManager.ChromeExtension], window: NSWindow?) {
-        let alert = NSAlert()
-        alert.messageText = "Import Chrome Extensions"
-        alert.informativeText = "Tick the ones you want. Each running extension uses some memory (often 10–40 MB), so only pick ones you use."
-        let list = NSStackView()
-        list.orientation = .vertical
-        list.alignment = .leading
-        list.spacing = 6
-        var boxes: [NSButton] = []
-        for ext in found {
-            let profile = ext.profile.isEmpty ? "" : "  — \(ext.profile)"
-            let box = NSButton(checkboxWithTitle: ext.name + profile,
-                               target: nil, action: nil)
-            box.state = .off
-            list.addArrangedSubview(box)
-            boxes.append(box)
-        }
-        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 380, height: min(300, CGFloat(found.count) * 26 + 10)))
-        scroll.hasVerticalScroller = true
-        scroll.drawsBackground = false
-        let doc = NSView(frame: NSRect(x: 0, y: 0, width: 360, height: CGFloat(found.count) * 26 + 10))
-        list.frame = doc.bounds
-        list.autoresizingMask = [.width, .height]
-        doc.addSubview(list)
-        scroll.documentView = doc
-        alert.accessoryView = scroll
-        alert.addButton(withTitle: "Import")
-        alert.addButton(withTitle: "Cancel")
-        let finish: (NSApplication.ModalResponse) -> Void = { response in
-            guard response == .alertFirstButtonReturn else { return }
-            let picked = zip(found, boxes).filter { $0.1.state == .on }.map(\.0)
-            if !picked.isEmpty { install(picked, window: window) }
-        }
-        if let window { alert.beginSheetModal(for: window, completionHandler: finish) } else { finish(alert.runModal()) }
     }
 
     private static func install(_ items: [ExtensionManager.ChromeExtension], window: NSWindow?) {

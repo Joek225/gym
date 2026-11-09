@@ -14,6 +14,7 @@ final class SettingsView: NSView {
     private let searchPopup = NSPopUpButton()
     private let unloadPopup = NSPopUpButton()
     private let adsBox = NSButton(checkboxWithTitle: "Block ads and trackers (makes pages lighter)", target: nil, action: nil)
+    private let memoryBox = NSButton(checkboxWithTitle: "Show memory use in the toolbar", target: nil, action: nil)
     private let groupsPopup = NSPopUpButton()
     private let groupChoices: [(String, Int)] = [("10 minutes", 10), ("30 minutes", 30), ("1 hour", 60),
                                                  ("3 hours", 180), ("Never", 0)]
@@ -52,6 +53,9 @@ final class SettingsView: NSView {
         adsBox.state = Preferences.blocksAds ? .on : .off
         adsBox.target = self
         adsBox.action = #selector(adsChanged(_:))
+        memoryBox.state = Preferences.showsMemory ? .on : .off
+        memoryBox.target = self
+        memoryBox.action = #selector(memoryChanged(_:))
 
         groupChoices.forEach { groupsPopup.addItem(withTitle: $0.0) }
         groupsPopup.selectItem(at: groupChoices.firstIndex { $0.1 == Preferences.disableGroupsMinutes } ?? 1)
@@ -63,10 +67,10 @@ final class SettingsView: NSView {
         let defaultButton = button("Make beababrowser Your Default Browser", #selector(defaultClicked(_:)))
 
         let stack = NSStackView(views: [
-            heading("Accent color"), swatches,
+            heading("Tint color"), swatches,
             heading("Search"), row("Search with", searchPopup),
             heading("Memory"), row("Unload tabs I haven't used for", unloadPopup),
-            row("Turn off groups I haven't used for", groupsPopup), adsBox,
+            row("Turn off groups I haven't used for", groupsPopup), adsBox, memoryBox,
             heading("Privacy & security"), securityNote(), clearButton, restartNote,
             heading("Default browser"), defaultButton,
         ])
@@ -185,6 +189,11 @@ final class SettingsView: NSView {
         Preferences.blocksAds = sender.state == .on
         restartNote.stringValue = "Ad blocking changes apply to pages you open from now on."
         if Preferences.blocksAds { ContentBlocker.prepare() }
+    }
+
+    @objc private func memoryChanged(_ sender: NSButton) {
+        Preferences.showsMemory = sender.state == .on
+        NotificationCenter.default.post(name: MemoryReadout.didToggle, object: nil)
     }
 
     @objc private func defaultClicked(_ sender: Any?) {

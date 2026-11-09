@@ -83,7 +83,7 @@ final class GroupEditor: NSObject, NSWindowDelegate, NSTextFieldDelegate {
         dotRow.orientation = .horizontal
         dotRow.spacing = 6
         dotRow.distribution = .equalSpacing
-        for color in [GroupColor.blue, .purple, .pink, .red, .orange, .yellow, .green, .cyan, .grey] {
+        for color in GroupColor.allCases {
             let ring = SolidView(color: .clear)
             ring.cornerRadius = 13
             let dot = SolidView(color: color.color)

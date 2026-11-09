@@ -38,6 +38,11 @@ enum Preferences {
         set { d.set(newValue, forKey: "unloadMinutes") }
     }
 
+    static var showsMemory: Bool {
+        get { d.object(forKey: "showMemory2") as? Bool ?? true }
+        set { d.set(newValue, forKey: "showMemory2") }
+    }
+
     static var blocksAds: Bool {
         get { d.object(forKey: "blockAds") as? Bool ?? true }
         set { d.set(newValue, forKey: "blockAds") }

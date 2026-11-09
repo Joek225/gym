@@ -52,21 +52,6 @@ jobs:
           perl -e 'alarm 20; exec @ARGV' footprint -p WebContent 2>/dev/null | grep -i "footprint" | head -n 5 || true
           echo "--- Done, stopping app ---"
           kill -9 $PID || true
-      - name: Test reading Chrome's folder from the sandboxed app
-        shell: bash
-        timeout-minutes: 3
-        run: |
-          C="$HOME/Library/Application Support/Google/Chrome"
-          if [ ! -d "$C/Default" ]; then
-            mkdir -p "$C/Default"
-            echo '{}' > "$C/Default/Preferences"
-            echo '{"profile":{"info_cache":{"Default":{"name":"Test Person"}}}}' > "$C/Local State"
-            echo '{"roots":{"bookmark_bar":{"type":"folder","name":"Bar","children":[{"type":"url","name":"Example","url":"https://example.com/"}]},"other":{"type":"folder","name":"Other","children":[]}}}' > "$C/Default/Bookmarks"
-          fi
-          ls -la "$C" "$C/Default" | head -20
-          perl -e 'alarm 60; exec @ARGV' build/Release/beababrowser.app/Contents/MacOS/beababrowser --test-chrome-access > chrome.log 2>&1 || true
-          grep "chrome access" chrome.log || cat chrome.log | tail -5
-          codesign -d --entitlements - build/Release/beababrowser.app 2>&1 | grep -A3 temporary || true
       - name: Test that a Chrome-style extension loads and runs
         shell: bash
         timeout-minutes: 6
