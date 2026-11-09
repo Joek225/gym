@@ -20,7 +20,7 @@ jobs:
         shell: bash
         run: |
           xcodebuild -project MyBrowser/MyBrowser.xcodeproj -target MyBrowser \
-            -configuration Release SYMROOT="$PWD/build" CODE_SIGN_IDENTITY=- build 2>&1 \
+            -configuration Release SYMROOT="$PWD/build" CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="" build 2>&1 \
             | grep -E "error|warning:|BUILD" || true
           test -x build/Release/beababrowser.app/Contents/MacOS/beababrowser
           ls build/Release/beababrowser.app/Contents/Resources/ | grep -i -E "AppIcon|Assets.car" && echo "ICON INCLUDED"
@@ -58,7 +58,7 @@ jobs:
         run: |
           # A copy of the app without the sandbox, so it can read the test extension from this folder.
           xcodebuild -project MyBrowser/MyBrowser.xcodeproj -target MyBrowser -configuration Release \
-            SYMROOT="$PWD/build-test" CODE_SIGN_IDENTITY=- CODE_SIGN_ENTITLEMENTS="" build 2>&1 | grep -E "error|BUILD" || true
+            SYMROOT="$PWD/build-test" CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="" CODE_SIGN_ENTITLEMENTS="" build 2>&1 | grep -E "error|BUILD" || true
           APP=build-test/Release/beababrowser.app/Contents/MacOS/beababrowser
           mkdir -p testext
           cat > testext/manifest.json <<'JSON'
