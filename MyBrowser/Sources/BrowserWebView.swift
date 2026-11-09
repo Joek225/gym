@@ -49,9 +49,6 @@ final class BrowserWebView: WKWebView {
         info.draggingSource == nil && StandInDrag.hasContent(info.draggingPasteboard)
     }
 
-    /// Used by the automatic test to measure drops without the short wait.
-    static var testSkipDropWait = false
-
     /// What the page itself last said about the drag (nothing = it doesn't want it here).
     private var pageOperation: NSDragOperation = []
 
@@ -119,16 +116,8 @@ final class BrowserWebView: WKWebView {
         DragReport.add("  let go: copied \(files.count) file(s), sizes \(sizes)")
         guard !files.isEmpty else { DragReport.add("  nothing could be copied: drop cancelled"); return false }
         let point = convert(sender.draggingLocation, from: nil)
-        // The page answers "do you want this?" a moment after the mouse moves. If you let go
-        // quickly, its answer may not be in yet: wait for it (up to about a second) instead of
-        // treating the drop as refused. This made drops fail now and then.
-        // Always give the page a moment (many chat sites only show their drop area once a drag
-        // has arrived), and up to about a second if it hasn't said yes yet.
-        let start = Date()
-        while !Self.testSkipDropWait && (Date().timeIntervalSince(start) < 0.4 || (pageOperation.isEmpty && Date().timeIntervalSince(start) < 1.5)) {
-            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.03))
-            pageOperation = super.draggingUpdated(stand)
-        }
+        // Hand it over immediately. (A short wait here, meant to give slow pages time to
+        // answer, held up the browser's own messages and delayed drops by several seconds.)
         DragReport.add("  page's answer at drop time: \(DragReport.names(pageOperation))")
         if pageOperation.isEmpty {
             // The page refused the drop: tell WebKit the drag is over, then paste instead.

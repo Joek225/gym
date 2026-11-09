@@ -115,9 +115,6 @@ enum DropTest {
     }
 
     private static func runCase(_ name: String, webView: WKWebView, then next: @escaping () -> Void) {
-        // Experiment: the "again" drops skip the browser's short wait, to compare how fast
-        // the page receives them.
-        BrowserWebView.testSkipDropWait = name.hasSuffix("again")
         let pb = NSPasteboard(name: NSPasteboard.Name("beababrowser-drop-test-\(name)"))
         pb.clearContents()
         let png = picture()
