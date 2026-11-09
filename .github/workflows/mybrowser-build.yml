@@ -30,7 +30,7 @@ jobs:
         run: |
           build/Release/beababrowser.app/Contents/MacOS/beababrowser --open https://example.com --log-loads --test-drop > app.log 2>&1 &
           PID=$!
-          sleep 56
+          sleep 76
           echo "--- App output ---"; cat app.log
           if ! kill -0 $PID 2>/dev/null; then
             echo "!!! The app quit or crashed. Running it again under the debugger:"
@@ -42,7 +42,7 @@ jobs:
           fi
           echo "App is still running after 20s (good)"
           grep -q "MyBrowser loaded: https://example.com" app.log && echo "Page loaded (good)"
-          grep "drop test\|drop registration\|paste-instead" app.log || echo "(no drop test output)"
+          grep "drop test\|drop registration\|paste-instead\|fullscreen check" app.log || echo "(no drop test output)"
           grep -c "drag report:" app.log | xargs -I{} echo "drag report lines: {}"
           grep "drag report:" app.log | sed 's/.*drag report: //' | head -40
           grep -q "drag report:   page: drop on" app.log && echo "DRAG REPORT SEES PAGE PASSED" || { echo "!!! DRAG REPORT SEES PAGE FAILED"; exit 1; }

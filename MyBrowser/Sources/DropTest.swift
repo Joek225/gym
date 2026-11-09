@@ -82,6 +82,26 @@ enum DropTest {
                 let hiddenTaking = pages.filter { $0.isHidden && !$0.registeredDraggedTypes.isEmpty }
                 NSLog("MyBrowser drop registration: pages %d, visible taking drops %d, hidden taking drops %d",
                       pages.count, visible.filter { !$0.registeredDraggedTypes.isEmpty }.count, hiddenTaking.count)
+                checkFullScreen(first.webView)
+            }
+        }
+    }
+
+    /// Going full screen and back must leave the page accepting exactly the same kinds of drops.
+    private static func checkFullScreen(_ webView: WKWebView?) {
+        guard let webView, let window = webView.window else { return }
+        func types() -> String { webView.registeredDraggedTypes.map(\.rawValue).sorted().joined(separator: " ") }
+        let before = types()
+        NSLog("MyBrowser fullscreen check: before %d types", webView.registeredDraggedTypes.count)
+        window.toggleFullScreen(nil)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+            NSLog("MyBrowser fullscreen check: in full screen = %d, %d types, same = %d",
+                  window.styleMask.contains(.fullScreen) ? 1 : 0, webView.registeredDraggedTypes.count, types() == before ? 1 : 0)
+            window.toggleFullScreen(nil)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+                NSLog("MyBrowser fullscreen check: after, %d types, same = %d (missing: %@)",
+                      webView.registeredDraggedTypes.count, types() == before ? 1 : 0,
+                      Set(before.split(separator: " ")).subtracting(types().split(separator: " ")).sorted().joined(separator: " "))
             }
         }
     }
