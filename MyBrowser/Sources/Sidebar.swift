@@ -24,6 +24,7 @@ protocol SidebarDelegate: AnyObject {
     func sidebarMoveGroup(id: UUID, to index: Int)
     /// A tab was dragged out of every window: open it in a new window there.
     func sidebarTearOff(id: UUID, at screenPoint: NSPoint)
+    func sidebarTearOffGroup(id: UUID, at screenPoint: NSPoint)
     /// Clicking a turned-off group turns it back on.
     func sidebarEnableGroup(_ group: TabGroup)
     /// A group was folded up (if you were in it, move to another tab).
@@ -439,7 +440,11 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
 
     func outlineView(_ outlineView: NSOutlineView, draggingSession session: NSDraggingSession,
                      endedAt screenPoint: NSPoint, operation: NSDragOperation) {
-        if operation == [], let tab = draggedItem as? Tab { delegate?.sidebarTearOff(id: tab.id, at: screenPoint) }
+        // Let go anywhere outside the sidebar (and not onto another window's sidebar): new window.
+        if operation == [] {
+            if let tab = draggedItem as? Tab { delegate?.sidebarTearOff(id: tab.id, at: screenPoint) }
+            if let group = draggedItem as? TabGroup { delegate?.sidebarTearOffGroup(id: group.id, at: screenPoint) }
+        }
         draggedItem = nil
     }
 

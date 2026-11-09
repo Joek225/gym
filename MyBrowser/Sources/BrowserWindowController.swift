@@ -837,10 +837,15 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         if let first = group.tabs.first { select(first) }
     }
 
-    /// Dragging a tab out of every window opens it in a new window there, like Chrome.
+    /// The sidebar's rectangle on screen.
+    private var sidebarOnScreen: NSRect {
+        guard let window, sidebar.view.window != nil else { return .zero }
+        return window.convertToScreen(sidebar.view.convert(sidebar.view.bounds, to: nil))
+    }
+
+    /// Dragging a tab out of the sidebar and letting go anywhere else opens it in a new window there.
     func sidebarTearOff(id: UUID, at screenPoint: NSPoint) {
-        let overAWindow = NSApp.windows.contains { $0.isVisible && $0.frame.contains(screenPoint) }
-        guard !overAWindow, let found = AppDelegate.shared.findTab(id), found.1 === self,
+        guard !sidebarOnScreen.contains(screenPoint), let found = AppDelegate.shared.findTab(id), found.1 === self,
               store.allTabs.count > 1 else { return }
         let tab = found.0
         giveAway(tab)
@@ -1152,16 +1157,25 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         for tab in group.tabs { close(tab) }
     }
 
-    func moveGroupToNewWindow(_ group: TabGroup) {
+    @discardableResult
+    func moveGroupToNewWindow(_ group: TabGroup) -> BrowserWindowController? {
         guard store.allTabs.contains(where: { $0.group !== group }) else {
             NSSound.beep()   // it's the only thing in this window already
-            return
+            return nil
         }
         let wasShowingGroup = store.selected?.group === group
         store.take(group)
         for tab in group.tabs { tab.webView?.removeFromSuperview() }
-        AppDelegate.shared.open(BrowserWindowController(session: nil, adopting: group))
-        if wasShowingGroup, let next = store.allTabs.first { select(next) }
+        let controller = AppDelegate.shared.open(BrowserWindowController(session: nil, adopting: group))
+        if wasShowingGroup, let next = store.allTabs.first(where: { isInView($0) }) ?? store.allTabs.first { select(next) }
+        return controller
+    }
+
+    /// Dragging a whole group out of the sidebar: the group moves to a new window there.
+    func sidebarTearOffGroup(id: UUID, at screenPoint: NSPoint) {
+        guard !sidebarOnScreen.contains(screenPoint), let found = AppDelegate.shared.findGroup(id), found.1 === self,
+              let controller = moveGroupToNewWindow(found.0) else { return }
+        controller.window?.setFrameTopLeftPoint(NSPoint(x: screenPoint.x - 120, y: screenPoint.y + 20))
     }
 
     /// Shows the Chrome-style group editor next to the group's header.
