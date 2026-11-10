@@ -49,6 +49,9 @@ final class BrowserWebView: WKWebView {
         info.draggingSource == nil && StandInDrag.hasContent(info.draggingPasteboard)
     }
 
+    /// Sites that accept the same picture pasted (⌘V) but not dropped in this browser.
+    static let pasteSites: Set<String> = ["claude.ai"]
+
     /// What the page itself last said about the drag (nothing = it doesn't want it here).
     private var pageOperation: NSDragOperation = []
 
@@ -119,9 +122,12 @@ final class BrowserWebView: WKWebView {
         // Hand it over immediately. (A short wait here, meant to give slow pages time to
         // answer, held up the browser's own messages and delayed drops by several seconds.)
         DragReport.add("  page's answer at drop time: \(DragReport.names(pageOperation))")
-        if pageOperation.isEmpty {
-            // The page refused the drop: tell WebKit the drag is over, then paste instead.
-            DragReport.add("  page refused: trying paste into the text box instead")
+        let pasteSite = url?.host.map { host in Self.pasteSites.contains { host == $0 || host.hasSuffix("." + $0) } } ?? false
+        if pageOperation.isEmpty || pasteSite {
+            // The page refused the drop (or it's a site that only takes pasted pictures):
+            // tell WebKit the drag is over, then paste into the message box instead.
+            DragReport.add(pasteSite ? "  this site takes pasted pictures: pasting into its message box"
+                                     : "  page refused: trying paste into the text box instead")
             super.draggingExited(stand)
             pasteInstead(files, at: point)
             return true
@@ -151,7 +157,12 @@ final class BrowserWebView: WKWebView {
           if (!inner || inner === el) break;
           el = inner;
         }
-        const box = el && el.closest('textarea, input:not([type=hidden]), [contenteditable=""], [contenteditable="true"], [contenteditable="plaintext-only"]');
+        const editable = 'textarea, input:not([type=hidden]), [contenteditable=""], [contenteditable="true"], [contenteditable="plaintext-only"]';
+        const visible = (b) => b && b.getClientRects().length > 0;
+        // The box under the pointer; else the one you were typing in; else the page's message box.
+        let box = el && el.closest(editable);
+        if (!visible(box)) box = document.activeElement && document.activeElement.closest ? document.activeElement.closest(editable) : null;
+        if (!visible(box)) box = Array.from(document.querySelectorAll(editable)).filter(visible).pop() || null;
         if (!box) return false;
         box.focus();
         return true;
