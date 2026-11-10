@@ -449,7 +449,20 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     @objc func copyDragReport(_ sender: Any?) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(DragReport.text, forType: .string)
-        toolbar.flash("Drag report copied — paste it in your chat with Claude")
+        toolbar.flash("Report copied — paste it in your chat with Claude")
+    }
+
+    /// Takes loaded background tabs out of the window (they stay loaded and come back when you
+    /// click them). On some Macs the drawing of every page in the window counts toward the
+    /// browser's own memory, so this shows how much those background tabs were holding.
+    @objc func freeUpMemory(_ sender: Any?) {
+        let before = MemoryUse.appMegabytes()
+        testDetachHiddenPages()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
+            let after = MemoryUse.appMegabytes()
+            DragReport.add("— free up memory: \(before) MB → \(after) MB")
+            self?.toolbar.flash("Memory: \(before) MB → \(after) MB")
+        }
     }
 
     // Used by the automatic memory test.
@@ -741,7 +754,8 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         add("Downloads", #selector(showDownloads(_:)), "j", [.command, .shift])
         add("Passwords", #selector(openPasswords(_:)), "p", [.command, .option])
         add("Tools (convert, remove background, copy)", #selector(openTools(_:)))
-        add("Copy Drag-and-Drop Report", #selector(copyDragReport(_:)))
+        add("Free Up Memory (detach background tabs)", #selector(freeUpMemory(_:)))
+        add("Copy Browser Report", #selector(copyDragReport(_:)))
         add("Bookmark This Page…", #selector(bookmarkThisPage(_:)), "d")
         menu.addItem(.separator())
         add("Find…", #selector(findInPage(_:)), "f")
@@ -1374,6 +1388,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         if navigationAction.shouldPerformDownload {
+            DragReport.add("— link marked 'download' by the page: \(navigationAction.request.url?.host ?? "?"), \(navigationAction.navigationType == .linkActivated ? "clicked link" : "other"), main frame \(navigationAction.targetFrame?.isMainFrame ?? true)")
             let host = navigationAction.request.url?.host ?? webView.url?.host ?? ""
             decisionHandler(SitePermissions.get(.downloads, host) == .block ? .cancel : .download)
             return
@@ -1432,6 +1447,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         let disposition = (navigationResponse.response as? HTTPURLResponse)?
             .value(forHTTPHeaderField: "Content-Disposition")?.lowercased() ?? ""
         if !navigationResponse.canShowMIMEType || (navigationResponse.isForMainFrame && disposition.hasPrefix("attachment")) {
+            DragReport.add("— page response became a download: \(navigationResponse.response.mimeType ?? "?") from \(navigationResponse.response.url?.host ?? "?"), main frame \(navigationResponse.isForMainFrame), can show \(navigationResponse.canShowMIMEType), disposition \(disposition.prefix(30)), popup tab \(webView.backForwardList.backItem == nil && webView.url == nil)")
             // Downloads can be blocked per site (site info panel → Automatic downloads).
             let host = webView.url?.host ?? navigationResponse.response.url?.host ?? ""
             decisionHandler(SitePermissions.get(.downloads, host) == .block ? .cancel : .download)

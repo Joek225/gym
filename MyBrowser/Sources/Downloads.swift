@@ -59,6 +59,8 @@ final class DownloadManager: NSObject, WKDownloadDelegate {
             }
         }
         item(download)?.source = response.url
+        let disposition = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Disposition") ?? "none"
+        DragReport.add("— download: \(suggestedFilename) from \(response.url?.host ?? "?"), type \(response.mimeType ?? "?"), disposition \(disposition.prefix(40))")
         // Files that can run programs: ask first (a common way malware gets onto Macs).
         if Security.riskyExtensions.contains((suggestedFilename as NSString).pathExtension.lowercased()) {
             let alert = NSAlert()
@@ -119,6 +121,10 @@ final class DownloadManager: NSObject, WKDownloadDelegate {
         item(download)?.state = .finished
         if let entry = item(download), let file = entry.destination { Self.quarantine(file, from: entry.source) }
         changed()
+        // Show the Downloads panel so you can open the file straight away.
+        if let window = download.webView?.window ?? NSApp.keyWindow, !Overlay.isShowing {
+            DownloadsOverlay.show(in: window)
+        }
     }
 
     func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {

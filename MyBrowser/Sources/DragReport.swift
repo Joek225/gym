@@ -19,7 +19,7 @@ enum DragReport {
 
     static var text: String {
         let mac = ProcessInfo.processInfo.operatingSystemVersionString
-        return (["beababrowser drag-and-drop report (macOS \(mac))"] + lines).joined(separator: "\n")
+        return (["beababrowser report (macOS \(mac))"] + lines).joined(separator: "\n")
     }
 
     static func names(_ op: NSDragOperation) -> String {
