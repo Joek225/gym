@@ -30,7 +30,7 @@ jobs:
         run: |
           build/Release/beababrowser.app/Contents/MacOS/beababrowser --open https://example.com --log-loads --test-drop > app.log 2>&1 &
           PID=$!
-          sleep 76
+          sleep 90
           echo "--- App output ---"; cat app.log
           if ! kill -0 $PID 2>/dev/null; then
             echo "!!! The app quit or crashed. Running it again under the debugger:"
@@ -59,6 +59,7 @@ jobs:
           echo "--- Done, stopping app ---"
           kill -9 $PID || true
       - name: Measure the browser's own memory with several tabs
+        if: always()
         timeout-minutes: 3
         run: |
           build/Release/beababrowser.app/Contents/MacOS/beababrowser --open "https://en.wikipedia.org/wiki/Safari_(web_browser)" --test-memory > mem.log 2>&1 &

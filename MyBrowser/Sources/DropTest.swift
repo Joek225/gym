@@ -143,7 +143,7 @@ enum DropTest {
             let performed = webView.performDragOperation(info)
             webView.concludeDragOperation(info)
             ops.append("performed \(performed)")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
                 webView.evaluateJavaScript("document.title") { title, _ in
                     NSLog("MyBrowser drop test %@: %@ — page got: %@", name, ops.joined(separator: ", "), (title as? String) ?? "?")
                     webView.evaluateJavaScript("document.title = ''") { _, _ in next() }
