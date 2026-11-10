@@ -452,6 +452,15 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         toolbar.flash("Drag report copied — paste it in your chat with Claude")
     }
 
+    // Used by the automatic memory test.
+    var loadedPageCount: Int { store.allTabs.filter { $0.webView != nil }.count }
+    func testDetachHiddenPages() {
+        for view in webContainer.subviews where view.isHidden && view is WKWebView { view.removeFromSuperview() }
+    }
+    func testUnloadHiddenPages() {
+        for tab in store.allTabs where tab !== store.selected { tab.unload() }
+    }
+
     /// The Tools panel: change a picture's file type, remove its background, or copy it.
     @objc func openTools(_ sender: Any?) {
         if let window { ToolsOverlay.show(in: window) }

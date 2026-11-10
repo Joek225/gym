@@ -83,6 +83,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate()
 
         // Used by the automatic test: make the window very wide and check it stays that size.
+        if CommandLine.arguments.contains("--test-memory"), let controller = frontController {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { MemoryTest.run(in: controller) }
+        }
         if CommandLine.arguments.contains("--test-drop"), let controller = frontController {
             DispatchQueue.main.asyncAfter(deadline: .now() + 4) { DropTest.run(in: controller) }
         }
