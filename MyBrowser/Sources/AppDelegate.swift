@@ -187,11 +187,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         SessionSaver.shared.saveNow()
     }
 
+    /// Set when you quit: macOS then closes the windows one by one, and those closes must not
+    /// count as "you closed this window" (that used to drop all but one window's tabs).
+    private var isQuitting = false
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        isQuitting = true
+        SessionSaver.shared.saveNow()   // every window, saved before any of them closes
+        return .terminateNow
+    }
+
+    /// History → Restore Previous Session: reopens the windows from the backup.
+    @objc func restorePreviousSession(_ sender: Any?) {
+        let sessions = SessionSaver.shared.load(from: Storage.sessionBackup)
+        guard !sessions.isEmpty else {
+            let alert = NSAlert()
+            alert.messageText = "No earlier session saved"
+            alert.informativeText = "A backup is kept whenever a window with tabs is closed."
+            alert.runModal()
+            return
+        }
+        for session in sessions { open(BrowserWindowController(session: session)) }
+    }
+
     func windowDidClose(_ controller: BrowserWindowController) {
-        if isRebuilding { return }
+        if isRebuilding || isQuitting { return }
         if #available(macOS 15.4, *) { ExtensionManager.active?.controller.didCloseWindow(controller) }
         // Keep the very last window in the saved session so its tabs come back next time.
         guard controllers.count > 1 else { SessionSaver.shared.saveNow(); return }
+        // Closing a window on purpose keeps its tab groups: they appear on the groups bar as
+        // closed groups, so you can reopen them (like Chrome's saved groups).
+        if !controller.isPrivate {
+            for group in controller.store.groups { GroupLibrary.shared.add(TabStore.savedGroup(group)) }
+        }
         controllers.removeAll { $0 === controller }
         SessionSaver.shared.saveNow()
     }

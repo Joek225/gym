@@ -19,14 +19,20 @@ final class SessionSaver: NSObject {
 
     @objc func saveNow() {
         let windows = windowsProvider().map { $0.snapshot() }.filter { !$0.items.isEmpty }
+        // About to save fewer windows than last time: keep last time's session as a backup first,
+        // so a closed window's tabs and groups can always be brought back.
+        if windows.count < load().count, FileManager.default.fileExists(atPath: Storage.session.path) {
+            try? FileManager.default.removeItem(at: Storage.sessionBackup)
+            try? FileManager.default.copyItem(at: Storage.session, to: Storage.sessionBackup)
+        }
         if let data = try? JSONEncoder().encode(SessionFile(windows: windows)) {
             try? data.write(to: Storage.session, options: .atomic)
         }
     }
 
     /// Last time's windows (also reads the older one-window format).
-    func load() -> [SavedSession] {
-        guard let data = try? Data(contentsOf: Storage.session) else { return [] }
+    func load(from file: URL = Storage.session) -> [SavedSession] {
+        guard let data = try? Data(contentsOf: file) else { return [] }
         if let file = try? JSONDecoder().decode(SessionFile.self, from: data) { return file.windows }
         if let single = try? JSONDecoder().decode(SavedSession.self, from: data) { return [single] }
         return []

@@ -9,6 +9,8 @@ enum Storage {
         return base
     }()
     static let session = folder.appendingPathComponent("session.json")
+    /// The last saved session that had more windows than now (History → Restore Previous Session).
+    static let sessionBackup = folder.appendingPathComponent("session-backup.json")
     static let bookmarks = folder.appendingPathComponent("bookmarks.json")
     static let closedGroups = folder.appendingPathComponent("closed-groups.json")
 

@@ -87,6 +87,7 @@ enum MainMenu {
         history.addItem(withTitle: "Forward", action: #selector(W.goForward(_:)), keyEquivalent: "]")
         history.addItem(.separator())
         history.addItem(withTitle: "Reopen Closed Tab", action: #selector(W.reopenClosedTab(_:)), keyEquivalent: "")
+        history.addItem(withTitle: "Restore Previous Session", action: #selector(AppDelegate.restorePreviousSession(_:)), keyEquivalent: "")
 
         let bookmarks = submenu(in: main, title: "Bookmarks")
         bookmarks.addItem(withTitle: "Bookmark This Page…", action: #selector(W.bookmarkThisPage(_:)), keyEquivalent: "d")
