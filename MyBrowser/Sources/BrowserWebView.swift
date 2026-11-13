@@ -185,12 +185,15 @@ final class BrowserWebView: WKWebView {
                 }
                 general.writeObjects([item])
             }
+            let pastedChange = general.changeCount
             let sent = NSApp.sendAction(#selector(NSText.paste(_:)), to: self, from: nil)
             if testing {
                 NSLog("MyBrowser paste-instead: paste sent = %d, first responder = %@, key window = %d",
                       sent ? 1 : 0, String(describing: self.window?.firstResponder), (self.window?.isKeyWindow ?? false) ? 1 : 0)
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            // Put your clipboard back once the site has had time to read the picture.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                guard general.changeCount == pastedChange else { return }   // you copied something since
                 general.clearContents()
                 if !saved.isEmpty { general.writeObjects(saved) }
             }

@@ -10,7 +10,7 @@ enum DropTest {
         // Like Claude/Snapchat: the drop area only appears once a drag arrives, and only
         // a real (trusted) drop counts.
         let html = """
-        <html><body style="margin:0;height:100vh">drop here<div id="z" style="position:fixed;inset:0;display:none"></div><script>
+        <html><body style="margin:0;height:100vh">drop here<textarea id="t" style="position:fixed;left:10px;bottom:10px;width:200px;height:40px"></textarea><div id="z" style="position:fixed;inset:0;display:none"></div><script>
         const z = document.getElementById('z');
         // Like react-dropzone (used by many chat sites): only react while hovering if the drag
         // says it carries files; otherwise refuse it.
@@ -40,12 +40,16 @@ enum DropTest {
                         runCase("image again", webView: webView) {
                             runCase("quick file", webView: webView) {
                             runCase("photo", webView: webView) {
+                            typeIntoPage(webView) {
+                            runCase("file after typing", webView: webView) {
                                 // Like Claude: the message box refuses drops but accepts pasted pictures.
                                 webView.loadHTMLString(editorPage, baseURL: URL(string: "https://example.com/"))
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                                     runCase("refused drop", webView: webView) {
                                         checkHiddenTabs(controller: controller)
                                     }
+                            }
+                            }
                                 }
                             }
                             }
@@ -102,6 +106,29 @@ enum DropTest {
                 NSLog("MyBrowser fullscreen check: after, %d types, same = %d (missing: %@)",
                       webView.registeredDraggedTypes.count, types() == before ? 1 : 0,
                       Set(before.split(separator: " ")).subtracting(types().split(separator: " ")).sorted().joined(separator: " "))
+            }
+        }
+    }
+
+    /// Types "hello" into the page's text box with real key presses (drops stopping after you
+    /// typed on a page was a real problem).
+    private static func typeIntoPage(_ webView: WKWebView, then next: @escaping () -> Void) {
+        webView.evaluateJavaScript("document.getElementById('t').focus(); true") { _, _ in
+            webView.window?.makeFirstResponder(webView)
+            for ch in "hello" {
+                for type in [NSEvent.EventType.keyDown, .keyUp] {
+                    if let e = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                windowNumber: webView.window?.windowNumber ?? 0, context: nil,
+                                                characters: String(ch), charactersIgnoringModifiers: String(ch), isARepeat: false, keyCode: 0) {
+                        if type == .keyDown { webView.keyDown(with: e) } else { webView.keyUp(with: e) }
+                    }
+                }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                webView.evaluateJavaScript("document.getElementById('t').value") { value, _ in
+                    NSLog("MyBrowser drop test typing: text box now holds \"%@\"", (value as? String) ?? "?")
+                    next()
+                }
             }
         }
     }

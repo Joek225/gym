@@ -80,6 +80,14 @@ enum DragReport {
           }
         }, true);
       }
+      // Pasted pictures (the paste route for sites like Claude): did the page take it?
+      window.addEventListener('paste', (e) => {
+        const cd = e.clipboardData;
+        const types = cd ? Array.from(cd.types).join(',') : '';
+        const files = cd ? cd.files.length : 0;
+        const t = e.target, tag = t && t.tagName ? t.tagName.toLowerCase() + (t.id ? '#' + t.id : '') : '?';
+        setTimeout(() => post('paste on ' + tag + ' taken=' + e.defaultPrevented + ' types=[' + types + '] files=' + files + ' trusted=' + e.isTrusted + ' (' + where + ')'), 0);
+      }, true);
       // Errors the page runs into soon after a drop (e.g. a failed upload).
       let watchUntil = 0;
       window.addEventListener('drop', () => { watchUntil = Date.now() + 15000; }, true);

@@ -30,7 +30,7 @@ jobs:
         run: |
           build/Release/beababrowser.app/Contents/MacOS/beababrowser --open https://example.com --log-loads --test-drop > app.log 2>&1 &
           PID=$!
-          sleep 90
+          sleep 100
           echo "--- App output ---"; cat app.log
           if ! kill -0 $PID 2>/dev/null; then
             echo "!!! The app quit or crashed. Running it again under the debugger:"
@@ -47,7 +47,7 @@ jobs:
           grep "drag report:" app.log | sed 's/.*drag report: //' | head -40
           grep -q "drag report:   page: drop on" app.log && echo "DRAG REPORT SEES PAGE PASSED" || { echo "!!! DRAG REPORT SEES PAGE FAILED"; exit 1; }
           grep -q "drop registration: pages 2, visible taking drops 1, hidden taking drops 0" app.log && echo "HIDDEN TAB DROP TEST PASSED" || { echo "!!! HIDDEN TAB DROP TEST FAILED"; exit 1; }
-          for c in "file:" "image:" "file again:" "image again:" "photo:"; do
+          for c in "file:" "image:" "file again:" "image again:" "photo:" "file after typing:"; do
             grep "drop test $c" app.log | grep "page got: dropped 1 " | grep -v " 0 image" | grep -q "trusted=true" && echo "DROP TEST PASSED ($c)" || { echo "!!! DROP TEST FAILED ($c)"; exit 1; }
           done
           grep "drop test quick file:" app.log | grep -q "page got: dropped 1 " && echo "INSTANT DROP PASSED" || echo "(an instant drop, before the page is ready, isn't guaranteed)"
