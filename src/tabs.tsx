@@ -4,7 +4,6 @@ import type { ComponentType } from 'react';
 import WhiteboardTab from './tabs/WhiteboardTab';
 import CalendarTab from './tabs/CalendarTab';
 import ProgressTab from './tabs/ProgressTab';
-import SpotifyTab from './tabs/SpotifyTab';
 import SlideshowsTab from './tabs/SlideshowsTab';
 
 export interface TabInfo {
@@ -18,5 +17,4 @@ export const TABS: TabInfo[] = [
   { id: 'slideshows', label: 'Slideshows', component: SlideshowsTab },
   { id: 'calendar', label: 'Calendar', component: CalendarTab },
   { id: 'progress', label: 'Progress', component: ProgressTab },
-  { id: 'spotify', label: 'Spotify', component: SpotifyTab },
 ];
