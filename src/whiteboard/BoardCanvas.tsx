@@ -14,6 +14,7 @@ import { eraseAlong } from './strokeEraser';
 import { STROKE_ERASER, StrokeEraserButton, useToolHotkeys } from './toolbar';
 import UpcomingEvents, { type UpcomingEventsHandle } from './UpcomingEvents';
 import CanvasButtons from './CanvasButtons';
+import { MathFill } from './mathFill';
 import FontSizeButtons, { DEFAULT_FONT_SIZE } from './FontSizeButtons';
 import { renderEmbeddable, validateEmbeddable } from '../slides/videos';
 import { usePastePictures } from './pasteImages';
@@ -429,6 +430,9 @@ export default function BoardCanvas({ boardId, isFirstBoard, store = 'whiteboard
 
       {/* Clear-board button, just left of the toolbar */}
       <CanvasButtons api={api} container={container} />
+
+      {/* Right-click a sum like "12*3 + 4" to fill in the answer */}
+      <MathFill api={api} container={container} />
 
       <FontSizeButtons container={container} api={api} current={fontSizeNow} />
 
