@@ -372,6 +372,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
 
     func openInNewTab(_ url: URL, background: Bool, after source: Tab? = nil) {
         let tab = Tab(url: url)
+        tab.opener = source   // set only when a link opened it
         store.insert(tab, after: source ?? store.selected)
         // Background tabs stay unloaded (no memory) until you click them.
         if !background { select(tab) }
@@ -581,7 +582,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         updateLoadingDots()
         guard let tab = store.selected else { return }
         let webView = tab.webView
-        toolbar.backButton.isEnabled = webView?.canGoBack ?? false
+        toolbar.backButton.isEnabled = (webView?.canGoBack ?? false) || canReturnToOpener(store.selected)
         toolbar.forwardButton.isEnabled = webView?.canGoForward ?? false
         toolbar.setLoading(webView?.isLoading ?? false)
         toolbar.setStarred(BookmarkStore.shared.isBookmarked(tab.url))
@@ -961,7 +962,26 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         applySidebarVisibility(animated: true)
     }
 
-    @objc func goBack(_ sender: Any?) { store.selected?.webView?.goBack() }
+    /// Back: the previous page; or, in a tab a link opened with nothing to go back to,
+    /// close it and return to the tab it came from (like Safari).
+    @objc func goBack(_ sender: Any?) {
+        guard let tab = store.selected else { return }
+        if let webView = tab.webView, webView.canGoBack { webView.goBack(); return }
+        returnToOpener(from: tab)
+    }
+
+    private func canReturnToOpener(_ tab: Tab?) -> Bool {
+        guard let opener = tab?.opener else { return false }
+        return store.allTabs.contains { $0 === opener }
+    }
+
+    func tab(showing webView: WKWebView) -> Tab? { store.tab(for: webView) }
+
+    func returnToOpener(from tab: Tab) {
+        guard let opener = tab.opener, store.allTabs.contains(where: { $0 === opener }) else { NSSound.beep(); return }
+        select(opener)
+        close(tab)
+    }
     @objc func goForward(_ sender: Any?) { store.selected?.webView?.goForward() }
 
     @objc func reloadPage(_ sender: Any?) {
@@ -1072,7 +1092,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         switch item.action {
-        case #selector(goBack(_:)): return store.selected?.webView?.canGoBack ?? false
+        case #selector(goBack(_:)): return (store.selected?.webView?.canGoBack ?? false) || canReturnToOpener(store.selected)
         case #selector(goForward(_:)): return store.selected?.webView?.canGoForward ?? false
         case #selector(reopenClosedTab(_:)): return !store.recentlyClosed.isEmpty
         case #selector(printPage(_:)), #selector(findInPage(_:)), #selector(copyPageAddress(_:)):
@@ -1542,6 +1562,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
             return nil
         }
         let tab = Tab(url: navigationAction.request.url)
+        tab.opener = source
         let newWebView = WebKitEnvironment.makeWebView(configuration: configuration)
         install(newWebView, for: tab)
         store.insert(tab, after: source)

@@ -52,6 +52,7 @@ enum WebKitEnvironment {
         if !PasskeyFallback.passkeysAllowed { config.userContentController.addUserScript(PasskeyFallback.script) }
         PasswordAgent.shared.install(in: config.userContentController)
         DragReport.install(in: config.userContentController)
+        PageBack.install(in: config.userContentController)
         ContentBlocker.apply(to: config.userContentController)
         // Lets installed extensions see and change pages (only when any are installed).
         // Private windows run without extensions (like Chrome), so nothing private leaks to them.
@@ -70,5 +71,40 @@ enum WebKitEnvironment {
         webView.allowsBackForwardNavigationGestures = false
         webView.underPageBackgroundColor = Theme.background
         return webView
+    }
+}
+
+
+/// A site's own "back" arrow usually just asks the browser to go back a page. In a tab a link
+/// opened, there's nothing to go back to, so the arrow did nothing and you were stuck. Now that
+/// case returns you to the tab you came from.
+@MainActor
+enum PageBack {
+    static let handlerName = "beababrowserBack"
+
+    static func install(in controller: WKUserContentController) {
+        let source = """
+        (() => {
+          const ask = () => { try { window.webkit.messageHandlers.beababrowserBack.postMessage(1); } catch (e) {} };
+          const back = history.back.bind(history), go = history.go.bind(history);
+          // Only when this tab has no earlier page; otherwise the page goes back as normal.
+          history.back = function () { if (history.length <= 1) ask(); else back(); };
+          history.go = function (n) { if (n < 0 && history.length <= 1) ask(); else go(n); };
+        })();
+        """
+        controller.addUserScript(WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: .page))
+        controller.add(Handler.shared, contentWorld: .page, name: handlerName)
+    }
+
+    final class Handler: NSObject, WKScriptMessageHandler {
+        static let shared = Handler()
+        func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+            MainActor.assumeIsolated {
+                guard let webView = message.webView, message.frameInfo.isMainFrame, !webView.canGoBack,
+                      let window = webView.window?.windowController as? BrowserWindowController,
+                      let tab = window.tab(showing: webView) else { return }
+                window.returnToOpener(from: tab)
+            }
+        }
     }
 }

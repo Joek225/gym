@@ -46,6 +46,8 @@ final class Tab: NSObject {
     var failedURL: URL?
     /// Back/forward history saved when the tab was unloaded.
     var savedState: Any?
+    /// The tab whose link opened this one: Back returns there when this tab has nothing to go back to.
+    weak var opener: Tab?
     private(set) var webView: WKWebView?
     private var observations: [NSKeyValueObservation] = []
 
