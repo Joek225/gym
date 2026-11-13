@@ -339,7 +339,9 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
             webView.observe(\.title) { [weak self, weak tab] webView, _ in
                 MainActor.assumeIsolated {
                     guard let self, let tab else { return }
-                    tab.title = webView.title ?? ""
+                    let title = webView.title ?? ""
+                    guard title != tab.title else { return }
+                    tab.title = title
                     self.tabDidChange(tab)
                 }
             },
@@ -367,7 +369,8 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     private func tabDidChange(_ tab: Tab) {
         sidebar.refresh(tab)
         if tab === store.selected { updateToolbar() }
-        store.scheduleSave()
+        // Titles and addresses change constantly on chat sites; saving those can wait a while.
+        SessionSaver.shared.scheduleSave(after: 30)
     }
 
     func openInNewTab(_ url: URL, background: Bool, after source: Tab? = nil) {

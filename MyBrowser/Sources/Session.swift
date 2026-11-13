@@ -12,21 +12,35 @@ final class SessionSaver: NSObject {
         var windows: [SavedSession]
     }
 
-    func scheduleSave() {
+    func scheduleSave(after delay: TimeInterval = 4) {
+        // Batches many small changes into one write. A sooner save already pending stays sooner.
+        let due = Date().addingTimeInterval(delay)
+        if let pending = pendingSave, pending <= due { return }
         NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(saveNow), object: nil)
-        perform(#selector(saveNow), with: nil, afterDelay: 4)   // batches many small changes into one write
+        pendingSave = due
+        perform(#selector(saveNow), with: nil, afterDelay: delay)
     }
+    private var pendingSave: Date?
+
+    /// How many windows the last save had (so the backup check doesn't have to re-read the file).
+    private var lastSavedWindowCount: Int?
+    private var lastSavedData: Data?
 
     @objc func saveNow() {
+        pendingSave = nil
         let windows = windowsProvider().map { $0.snapshot() }.filter { !$0.items.isEmpty }
         // About to save fewer windows than last time: keep last time's session as a backup first,
         // so a closed window's tabs and groups can always be brought back.
-        if windows.count < load().count, FileManager.default.fileExists(atPath: Storage.session.path) {
+        let previousCount = lastSavedWindowCount ?? load().count
+        if windows.count < previousCount, FileManager.default.fileExists(atPath: Storage.session.path) {
             try? FileManager.default.removeItem(at: Storage.sessionBackup)
             try? FileManager.default.copyItem(at: Storage.session, to: Storage.sessionBackup)
         }
-        if let data = try? JSONEncoder().encode(SessionFile(windows: windows)) {
+        lastSavedWindowCount = windows.count
+        // Nothing changed (e.g. only a tab's title flickered): don't touch the disk.
+        if let data = try? JSONEncoder().encode(SessionFile(windows: windows)), data != lastSavedData {
             try? data.write(to: Storage.session, options: .atomic)
+            lastSavedData = data
         }
     }
 
