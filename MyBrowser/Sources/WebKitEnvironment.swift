@@ -37,6 +37,9 @@ enum WebKitEnvironment {
         config.preferences.isFraudulentWebsiteWarningEnabled = true
         config.upgradeKnownHostsToHTTPS = true
         config.preferences.javaScriptCanOpenWindowsAutomatically = false
+        // Background tabs (hidden) are paused completely, not just slowed: no timers, no
+        // wakeups, no energy. They pick up where they left off the moment you look at them.
+        config.preferences.inactiveSchedulingPolicy = .suspend
         // WebKit's old rule "Delete key = go back a page" (Safari and Chrome turned it off long
         // ago): it threw you out of word games and forms whenever a page used Delete itself.
         if config.preferences.responds(to: NSSelectorFromString("_setBackspaceKeyNavigationEnabled:")) {
