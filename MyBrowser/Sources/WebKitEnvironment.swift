@@ -88,11 +88,15 @@ enum PageBack {
     static func install(in controller: WKUserContentController) {
         let source = """
         (() => {
-          const ask = () => { try { window.webkit.messageHandlers.beababrowserBack.postMessage(1); } catch (e) {} };
+          const ask = (what) => { try { window.webkit.messageHandlers.beababrowserBack.postMessage(what || 'back'); } catch (e) {} };
           const back = history.back.bind(history), go = history.go.bind(history);
           // Only when this tab has no earlier page; otherwise the page goes back as normal.
           history.back = function () { if (history.length <= 1) ask(); else back(); };
           history.go = function (n) { if (n < 0 && history.length <= 1) ask(); else go(n); };
+          // A site's "close" button (window.close()) closes the tab, even when the browser
+          // would normally refuse (e.g. the tab was reloaded since the site opened it).
+          const close = window.close.bind(window);
+          window.close = function () { ask('close'); close(); };
         })();
         """
         controller.addUserScript(WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: .page))
@@ -103,10 +107,14 @@ enum PageBack {
         static let shared = Handler()
         func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
             MainActor.assumeIsolated {
-                guard let webView = message.webView, message.frameInfo.isMainFrame, !webView.canGoBack,
+                guard let webView = message.webView, message.frameInfo.isMainFrame,
                       let window = webView.window?.windowController as? BrowserWindowController,
                       let tab = window.tab(showing: webView) else { return }
-                window.returnToOpener(from: tab)
+                if (message.body as? String) == "close" {
+                    window.closeTabForPage(tab)
+                } else if !webView.canGoBack {
+                    window.returnToOpener(from: tab)
+                }
             }
         }
     }

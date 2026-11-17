@@ -980,6 +980,12 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
 
     func tab(showing webView: WKWebView) -> Tab? { store.tab(for: webView) }
 
+    /// A page asked to close its own tab: return to the tab that opened it if there is one.
+    func closeTabForPage(_ tab: Tab) {
+        guard store.allTabs.contains(where: { $0 === tab }) else { return }   // already closed
+        if canReturnToOpener(tab) { returnToOpener(from: tab) } else { close(tab) }
+    }
+
     func returnToOpener(from tab: Tab) {
         guard let opener = tab.opener, store.allTabs.contains(where: { $0 === opener }) else { NSSound.beep(); return }
         select(opener)
@@ -1616,7 +1622,28 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     }
 
     func webViewDidClose(_ webView: WKWebView) {
-        if let tab = store.tab(for: webView) { close(tab) }
+        if let tab = store.tab(for: webView) { closeTabForPage(tab) }
+    }
+
+    /// ⌘⇧V: paste the copied text without its formatting (like Chrome). The clipboard briefly
+    /// holds only the plain text, then your original copy is put back.
+    @objc func pasteWithoutFormatting(_ sender: Any?) {
+        let pb = NSPasteboard.general
+        guard let text = pb.string(forType: .string) else { NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: sender); return }
+        let saved = (pb.pasteboardItems ?? []).map { original -> NSPasteboardItem in
+            let copy = NSPasteboardItem()
+            for type in original.types { if let data = original.data(forType: type) { copy.setData(data, forType: type) } }
+            return copy
+        }
+        pb.clearContents()
+        pb.setString(text, forType: .string)
+        let plainChange = pb.changeCount
+        NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: sender)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            guard pb.changeCount == plainChange else { return }
+            pb.clearContents()
+            pb.writeObjects(saved)
+        }
     }
 
     func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String,

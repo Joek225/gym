@@ -52,7 +52,7 @@ enum MainMenu {
         edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         // Like Chrome: ⌘⇧V pastes plain text, without the copied formatting.
-        edit.addItem(withTitle: "Paste and Match Style", action: #selector(NSTextView.pasteAsPlainText(_:)), keyEquivalent: "v")
+        edit.addItem(withTitle: "Paste and Match Style", action: #selector(W.pasteWithoutFormatting(_:)), keyEquivalent: "V")
             .keyEquivalentModifierMask = [.command, .shift]
         edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         edit.addItem(.separator())
