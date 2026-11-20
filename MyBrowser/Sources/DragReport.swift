@@ -88,11 +88,25 @@ enum DragReport {
         const t = e.target, tag = t && t.tagName ? t.tagName.toLowerCase() + (t.id ? '#' + t.id : '') : '?';
         setTimeout(() => post('paste on ' + tag + ' taken=' + e.defaultPrevented + ' types=[' + types + '] files=' + files + ' trusted=' + e.isTrusted + ' (' + where + ')'), 0);
       }, true);
-      // Errors the page runs into soon after a drop (e.g. a failed upload).
-      let watchUntil = 0;
-      window.addEventListener('drop', () => { watchUntil = Date.now() + 15000; }, true);
-      window.addEventListener('error', (e) => { if (Date.now() < watchUntil) post('page error: ' + (e.message || e.type)); }, true);
-      window.addEventListener('unhandledrejection', (e) => { if (Date.now() < watchUntil) post('page error (promise): ' + String(e.reason).slice(0, 200)); });
+      // Problems while a page loads (a blank page leaves these behind): crashed scripts and
+      // files the page needed but couldn't get. Only the first few per page, main page only.
+      let loadProblems = 0;
+      const note = (m) => { if (where === 'page' && loadProblems++ < 15) post('loading ' + location.host + ': ' + m); };
+      window.addEventListener('error', (e) => {
+        const t = e.target;
+        if (t && t !== window && (t.src || t.href)) {
+          note('could not load ' + (t.tagName || '').toLowerCase() + ' from ' + String(t.src || t.href).split('/').slice(0, 3).join('/'));
+        } else {
+          note('script error: ' + String(e.message || e.type).slice(0, 160));
+        }
+      }, true);
+      window.addEventListener('unhandledrejection', (e) => note('script error (promise): ' + String(e.reason).slice(0, 160)));
+      if (where === 'page') {
+        window.addEventListener('load', () => setTimeout(() => {
+          const text = document.body ? document.body.innerText.trim().length : 0;
+          if (text < 20) post('loading ' + location.host + ': page looks blank (' + text + ' characters of text)');
+        }, 3000));
+      }
     })();
     """#
 
