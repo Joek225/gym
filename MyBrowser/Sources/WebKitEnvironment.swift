@@ -52,7 +52,17 @@ enum WebKitEnvironment {
         config.applicationNameForUserAgent = "Version/\(Self.safariVersion) Safari/605.1.15"
         if CommandLine.arguments.contains("--log-loads") { NSLog("MyBrowser identifies as Safari %@", Self.safariVersion) }
         // Saving and filling passwords, and skipping passkey screens that can't work here.
-        if !PasskeyFallback.passkeysAllowed { config.userContentController.addUserScript(PasskeyFallback.script) }
+        if !PasskeyFallback.passkeysAllowed && !CommandLine.arguments.contains("--no-passkey-fallback") {
+            config.userContentController.addUserScript(PasskeyFallback.script)
+        }
+        if CommandLine.arguments.contains("--test-page-load") {
+            // Test only: collect the page's errors so the test can report them.
+            config.userContentController.addUserScript(WKUserScript(source: """
+                window.__errs = [];
+                addEventListener('error', (e) => __errs.push(String(e.message || e.type)));
+                addEventListener('unhandledrejection', (e) => __errs.push('promise: ' + String(e.reason)));
+                """, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        }
         PasswordAgent.shared.install(in: config.userContentController)
         DragReport.install(in: config.userContentController)
         PageBack.install(in: config.userContentController)

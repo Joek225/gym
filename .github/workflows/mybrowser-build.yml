@@ -68,6 +68,19 @@ jobs:
           grep "memory test" mem.log || tail -5 mem.log
           perl -e 'alarm 20; exec @ARGV' footprint $PID 2>/dev/null | head -n 30 || true
           kill -9 $PID || true
+      - name: Load Cengage sign-in (with and without the passkey workaround)
+        if: always()
+        timeout-minutes: 3
+        run: |
+          APP=build/Release/beababrowser.app/Contents/MacOS/beababrowser
+          for MODE in "" "--no-passkey-fallback"; do
+            $APP --open "https://account.cengage.com/login" --test-page-load $MODE > page.log 2>&1 &
+            PID=$!
+            sleep 22
+            echo "mode: ${MODE:-normal}"; grep "page load test" page.log || tail -3 page.log
+            kill -9 $PID || true
+            sleep 2
+          done
       - name: Test that a Chrome-style extension loads and runs
         shell: bash
         timeout-minutes: 6

@@ -83,6 +83,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate()
 
         // Used by the automatic test: make the window very wide and check it stays that size.
+        if CommandLine.arguments.contains("--test-page-load"), let controller = frontController {
+            // Test only: how far a real site gets (text on the page, errors it hit).
+            DispatchQueue.main.asyncAfter(deadline: .now() + 15) {
+                controller.selectedTab?.webView?.evaluateJavaScript(
+                    "JSON.stringify({title: document.title, url: location.href.slice(0, 80), text: document.body ? document.body.innerText.length : -1, errors: (window.__errs || []).slice(0, 8)})"
+                ) { result, error in
+                    NSLog("MyBrowser page load test: %@", (result as? String) ?? String(describing: error))
+                }
+            }
+        }
         if CommandLine.arguments.contains("--test-memory"), let controller = frontController {
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) { MemoryTest.run(in: controller) }
         }
