@@ -10,7 +10,7 @@ enum DropTest {
         // Like Claude/Snapchat: the drop area only appears once a drag arrives, and only
         // a real (trusted) drop counts.
         let html = """
-        <html><body style="margin:0;height:100vh">drop here<textarea id="t" style="position:fixed;left:10px;bottom:10px;width:200px;height:40px"></textarea><div id="z" style="position:fixed;inset:0;display:none"></div><script>
+        <html><body style="margin:0;height:100vh">drop here<textarea id="t" style="position:fixed;left:10px;bottom:10px;width:200px;height:40px"></textarea><div id="c" contenteditable="true" style="position:fixed;left:230px;bottom:10px;width:200px;height:40px;border:1px solid #888"></div><div id="z" style="position:fixed;inset:0;display:none"></div><script>
         const z = document.getElementById('z');
         // Like react-dropzone (used by many chat sites): only react while hovering if the drag
         // says it carries files; otherwise refuse it.
@@ -29,6 +29,11 @@ enum DropTest {
           document.title = 'dropped ' + f.length + (f[0] ? ' ' + f[0].name + ' ' + f[0].size + ' ' + f[0].type : '') + ' trusted=' + e.isTrusted + ' hover=' + hoverTypes;
         });
         document.addEventListener('dragover', () => { if (!document.title.startsWith('dropped')) document.title = 'hovering, types=' + hoverTypes; });
+        // A chat-style message box: Return "sends" the message (clears the box), like chat sites.
+        window.sent = 0;
+        document.getElementById('c').addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') { e.preventDefault(); window.sent++; e.target.textContent = ''; }
+        });
         </script></body></html>
         """
         webView.loadHTMLString(html, baseURL: URL(string: "https://example.com/"))
@@ -42,12 +47,16 @@ enum DropTest {
                             runCase("photo", webView: webView) {
                             typeIntoPage(webView) {
                             runCase("file after typing", webView: webView) {
+                            sendChatMessage(webView) {
+                            runCase("file after sending", webView: webView) {
                                 // Like Claude: the message box refuses drops but accepts pasted pictures.
                                 webView.loadHTMLString(editorPage, baseURL: URL(string: "https://example.com/"))
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                                     runCase("refused drop", webView: webView) {
                                         checkHiddenTabs(controller: controller)
                                     }
+                            }
+                            }
                             }
                             }
                                 }
@@ -127,6 +136,28 @@ enum DropTest {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                 webView.evaluateJavaScript("document.getElementById('t').value") { value, _ in
                     NSLog("MyBrowser drop test typing: text box now holds \"%@\"", (value as? String) ?? "?")
+                    next()
+                }
+            }
+        }
+    }
+
+    /// Types "hi" into the chat-style box and presses Return to send it.
+    private static func sendChatMessage(_ webView: WKWebView, then next: @escaping () -> Void) {
+        webView.evaluateJavaScript("document.getElementById('c').focus(); true") { _, _ in
+            webView.window?.makeFirstResponder(webView)
+            for (chars, code) in [("h", UInt16(4)), ("i", 34), ("\r", 36)] {
+                for type in [NSEvent.EventType.keyDown, .keyUp] {
+                    if let e = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                windowNumber: webView.window?.windowNumber ?? 0, context: nil,
+                                                characters: chars, charactersIgnoringModifiers: chars, isARepeat: false, keyCode: code) {
+                        if type == .keyDown { webView.keyDown(with: e) } else { webView.keyUp(with: e) }
+                    }
+                }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                webView.evaluateJavaScript("window.sent") { value, _ in
+                    NSLog("MyBrowser drop test typing: messages sent with Return = %@", String(describing: value ?? "?"))
                     next()
                 }
             }
