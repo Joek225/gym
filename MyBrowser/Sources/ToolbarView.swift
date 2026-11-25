@@ -14,6 +14,8 @@ final class ToolbarView: NSView {
     let menuButton = ToolbarView.makeButton("ellipsis", "Settings and more")
     /// The optional memory readout (Settings → Show memory use).
     let memoryLabel = NSTextField(labelWithString: "")
+    /// Clicking the memory number frees memory (set by the window).
+    var onMemoryClicked: (() -> Void)?
     let backButton = ToolbarView.makeButton("chevron.left", "Back")
     let forwardButton = ToolbarView.makeButton("chevron.right", "Forward")
     let reloadButton = ToolbarView.makeButton("arrow.clockwise", "Reload")
@@ -107,6 +109,9 @@ final class ToolbarView: NSView {
         fieldBox.addSubview(starButton)
         // Click anywhere on the address to copy it.
         addressField.isSelectable = false
+        let memoryClick = NSClickGestureRecognizer(target: self, action: #selector(memoryClicked(_:)))
+        memoryLabel.addGestureRecognizer(memoryClick)
+        memoryLabel.toolTip = "Click to free up memory"
         let click = NSClickGestureRecognizer(target: self, action: #selector(addressClicked(_:)))
         fieldBox.addGestureRecognizer(click)
 
@@ -205,6 +210,8 @@ final class ToolbarView: NSView {
             self.showAddress(self.shownURL)
         }
     }
+
+    @objc private func memoryClicked(_ sender: NSClickGestureRecognizer) { onMemoryClicked?() }
 
     @objc private func addressClicked(_ sender: NSClickGestureRecognizer) {
         guard let url = shownURL else { return }

@@ -106,7 +106,25 @@ final class ExtensionManager: NSObject, WKWebExtensionControllerDelegate {
 
     // MARK: Site access (like Chrome's "This can read and change site data")
 
-    enum SiteAccess: String { case allSites, onClick }
+    /// allSites: everywhere. onClick: only after you click it. chosenSites: automatically,
+    /// but only on the sites you picked (e.g. an ad blocker on youtube.com only).
+    enum SiteAccess: String { case allSites, onClick, chosenSites }
+    private static let sitesKey = "extensionChosenSites"
+
+    static func chosenSites(for id: String) -> [String] {
+        (UserDefaults.standard.dictionary(forKey: sitesKey) as? [String: [String]] ?? [:])[id] ?? []
+    }
+
+    static func setChosenSites(_ hosts: [String], for id: String) {
+        var saved = UserDefaults.standard.dictionary(forKey: sitesKey) as? [String: [String]] ?? [:]
+        saved[id] = hosts
+        UserDefaults.standard.set(saved, forKey: sitesKey)
+    }
+
+    /// The site's main name: www.youtube.com → youtube.com.
+    static func siteName(_ host: String) -> String {
+        host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+    }
     private static let accessKey = "extensionSiteAccess"
 
     /// Extensions installed before this setting existed keep working on all sites.
@@ -122,9 +140,21 @@ final class ExtensionManager: NSObject, WKWebExtensionControllerDelegate {
     }
 
     static func applySiteAccess(_ context: WKWebExtensionContext) {
-        let all = siteAccess(for: context.uniqueIdentifier) == .allSites
+        let access = siteAccess(for: context.uniqueIdentifier)
         for pattern in context.webExtension.allRequestedMatchPatterns {
-            context.setPermissionStatus(all ? .grantedExplicitly : .deniedExplicitly, for: pattern)
+            switch access {
+            case .allSites: context.setPermissionStatus(.grantedExplicitly, for: pattern)
+            case .onClick: context.setPermissionStatus(.deniedExplicitly, for: pattern)
+            case .chosenSites: context.setPermissionStatus(.unknown, for: pattern)   // only the sites below
+            }
+        }
+        guard access == .chosenSites else { return }
+        for host in chosenSites(for: context.uniqueIdentifier) {
+            for text in ["*://\(host)/*", "*://*.\(host)/*"] {
+                if let pattern = try? WKWebExtension.MatchPattern(string: text) {
+                    context.setPermissionStatus(.grantedExplicitly, for: pattern)
+                }
+            }
         }
     }
 

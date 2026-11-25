@@ -44,16 +44,22 @@ final class MemoryReadout {
         let pageSizes = views.compactMap(MemoryUse.pageMegabytes)
         if pageSizes.count == views.count, !views.isEmpty {
             label.stringValue = "\(app + pageSizes.reduce(0, +)) MB"
-            label.toolTip = "Browser: \(app) MB + \(views.count) open page\(views.count == 1 ? "" : "s"): \(pageSizes.reduce(0, +)) MB (unloaded tabs use none)"
+            label.toolTip = "Browser: \(app) MB + \(views.count) open page\(views.count == 1 ? "" : "s"): \(pageSizes.reduce(0, +)) MB (unloaded tabs use none). Click to free up memory."
         } else {
             label.stringValue = "\(app) MB · \(views.count) loaded"
-            label.toolTip = "Memory used by the browser app itself, and how many tabs are loaded (unloaded tabs use none). macOS doesn't let the app measure each page's own WebKit process."
+            label.toolTip = "Memory used by the browser app itself, and how many tabs are loaded (unloaded tabs use none). macOS doesn't let the app measure each page's own WebKit process. Click to free up memory."
         }
     }
 }
 
 /// The optional memory readout (Settings → Show memory use).
 enum MemoryUse {
+    /// Hands memory the browser has finished with back to macOS. (Freed memory otherwise stays
+    /// reserved for later, so the number only ever went up.)
+    static func releaseFreed() {
+        malloc_zone_pressure_relief(nil, 0)
+    }
+
     /// How much memory this app itself is using, in megabytes (the same number Activity Monitor shows).
     static func appMegabytes() -> Int {
         var info = task_vm_info_data_t()

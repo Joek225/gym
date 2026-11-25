@@ -94,6 +94,11 @@ final class ExtensionsPanel: NSObject, NSPopoverDelegate {
             add(section("Full access", "These extensions can see and change information on every site."))
             everywhere.forEach { add(row($0)) }
         }
+        let chosen = contexts.filter { ExtensionManager.siteAccess(for: $0.uniqueIdentifier) == .chosenSites }
+        if !chosen.isEmpty {
+            add(section("On chosen sites", "These run automatically, but only on the sites you picked."))
+            chosen.forEach { add(row($0)) }
+        }
         if !onClick.isEmpty {
             add(section("Only when you click", "These can only see a site after you click them."))
             onClick.forEach { add(row($0)) }
@@ -193,10 +198,26 @@ final class ExtensionsPanel: NSObject, NSPopoverDelegate {
         menu.addItem(options)
         let access = NSMenuItem(title: "Can read and change sites", action: nil, keyEquivalent: "")
         let accessMenu = NSMenu()
-        for (title, mode) in [("On all sites", ExtensionManager.SiteAccess.allSites), ("Only when you click it", .onClick)] {
-            let choice = item(title, #selector(BrowserWindowController.setExtensionSiteAccess(_:)), [context, mode.rawValue] as [Any])
-            choice.state = ExtensionManager.siteAccess(for: context.uniqueIdentifier) == mode ? .on : .off
+        let id = context.uniqueIdentifier
+        let mode = ExtensionManager.siteAccess(for: id)
+        let chosen = ExtensionManager.chosenSites(for: id)
+        for (title, choiceMode) in [("On all sites", ExtensionManager.SiteAccess.allSites), ("Only when you click it", .onClick)] {
+            let choice = item(title, #selector(BrowserWindowController.setExtensionSiteAccess(_:)), [context, choiceMode.rawValue] as [Any])
+            choice.state = mode == choiceMode ? .on : .off
             accessMenu.addItem(choice)
+        }
+        let onlyTitle = chosen.isEmpty ? "Only on chosen sites" : "Only on: " + chosen.joined(separator: ", ")
+        let only = item(onlyTitle, #selector(BrowserWindowController.setExtensionSiteAccess(_:)),
+                        [context, ExtensionManager.SiteAccess.chosenSites.rawValue] as [Any])
+        only.state = mode == .chosenSites ? .on : .off
+        if chosen.isEmpty { only.isEnabled = false; only.action = nil }
+        accessMenu.addItem(only)
+        if let host = controller?.selectedTab?.webView?.url?.host {
+            let site = ExtensionManager.siteName(host)
+            accessMenu.addItem(.separator())
+            let toggle = item(chosen.contains(site) ? "Stop running on \(site)" : "Run automatically on \(site)",
+                              #selector(BrowserWindowController.toggleExtensionSite(_:)), [context, site] as [Any])
+            accessMenu.addItem(toggle)
         }
         access.submenu = accessMenu
         menu.addItem(access)

@@ -208,6 +208,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         toolbar.menuButton.action = #selector(showMainMenu(_:))
         toolbar.siteButton.target = self
         toolbar.siteButton.action = #selector(showSiteInfo(_:))
+        toolbar.onMemoryClicked = { [weak self] in self?.freeUpMemory(nil) }
         memoryReadout = MemoryReadout(label: toolbar.memoryLabel) {
             AppDelegate.shared.controllers.flatMap { $0.store.allTabs.compactMap(\.webView) }
         }
@@ -462,10 +463,12 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
     @objc func freeUpMemory(_ sender: Any?) {
         let before = MemoryUse.appMegabytes()
         testDetachHiddenPages()
+        MemoryUse.releaseFreed()
         DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
             let after = MemoryUse.appMegabytes()
             DragReport.add("— free up memory: \(before) MB → \(after) MB")
             self?.toolbar.flash("Memory: \(before) MB → \(after) MB")
+            self?.memoryReadout?.refreshSoon()
         }
     }
 
@@ -554,6 +557,8 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
                 tab.unload()
                 self.sidebar.refresh(tab)
                 self.turnOffIfAllUnloaded(tab.group)
+                MemoryUse.releaseFreed()
+                self.memoryReadout?.refreshSoon()
             }
         }
     }
@@ -925,20 +930,23 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         let compact = sidebarCompact
         let narrow = compact && !sidebarPeeking
         sidebar.setCompact(narrow)
-        sidebar.setFloating(compact && sidebarPeeking)
+        // Hovering the narrow sidebar widens it and the page moves over (instead of being
+        // covered), so the sidebar keeps the same tinted background as the rest of the window.
+        sidebar.setFloating(false)
         resizeHandle.isHidden = compact
         toolbar.sidebarButton.isHidden = true
-        sidebarSpace.constant = compact ? SidebarController.compactWidth : fullSidebarWidth
         let width = narrow ? SidebarController.compactWidth : fullSidebarWidth
         if animated {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.16
                 context.allowsImplicitAnimation = true
                 sidebarWidth.animator().constant = width
+                sidebarSpace.animator().constant = width
                 window?.contentView?.layoutSubtreeIfNeeded()
             }
         } else {
             sidebarWidth.constant = width
+            sidebarSpace.constant = width
         }
     }
 
@@ -1360,6 +1368,20 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         store.selected?.webView?.reload()
     }
 
+    /// Adds or removes a site from an extension's "only on these sites" list (and switches it
+    /// to that mode), e.g. an ad blocker on youtube.com only.
+    @objc func toggleExtensionSite(_ sender: NSMenuItem) {
+        guard #available(macOS 15.4, *), let pair = sender.representedObject as? [Any],
+              let context = pair.first as? WKWebExtensionContext, let site = pair.last as? String else { return }
+        let id = context.uniqueIdentifier
+        var sites = ExtensionManager.chosenSites(for: id)
+        if let i = sites.firstIndex(of: site) { sites.remove(at: i) } else { sites.append(site) }
+        ExtensionManager.setChosenSites(sites, for: id)
+        ExtensionManager.setSiteAccess(sites.isEmpty ? .onClick : .chosenSites, for: id)
+        ExtensionManager.applySiteAccess(context)
+        store.selected?.webView?.reload()
+    }
+
     @objc func togglePinExtension(_ sender: NSMenuItem) {
         guard #available(macOS 15.4, *), let context = sender.representedObject as? WKWebExtensionContext else { return }
         ExtensionPins.toggle(context.uniqueIdentifier)
@@ -1706,8 +1728,18 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
 /// editors) often don't mark keys as handled, and macOS then plays its "nothing happened"
 /// sound on every letter. Browsers stay quiet in that case, so this one does too.
 final class BrowserWindow: NSWindow {
-    override func noResponder(for eventSelector: Selector) {
-        if eventSelector == #selector(NSResponder.keyDown(with:)) { return }
-        super.noResponder(for: eventSelector)
+    /// Keys nothing uses (held arrows, keys pages ignore…) make no "bonk" sound.
+    override func noResponder(for eventSelector: Selector) {}
+
+    /// Unhandled key commands (move past the end, delete at the start…) stay silent too.
+    override func doCommand(by selector: Selector) {
+        if !tryToPerform(selector, with: nil) { return }
+    }
+
+    /// Esc doesn't take the window out of full screen (use ⌃⌘F or the green button);
+    /// the page still gets the Esc key as usual.
+    override func cancelOperation(_ sender: Any?) {
+        if styleMask.contains(.fullScreen) { return }
+        super.cancelOperation(sender)
     }
 }
