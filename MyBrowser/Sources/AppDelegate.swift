@@ -5,6 +5,13 @@ import WebKit
 @main
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    override init() {
+        // Before anything reads saved files or website data: bring them over from the old
+        // sandbox folder (once).
+        Migration.moveOutOfSandboxIfNeeded()
+        super.init()
+    }
+
     static var shared: AppDelegate { NSApp.delegate as! AppDelegate }
 
     private(set) var controllers: [BrowserWindowController] = []
