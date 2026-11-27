@@ -481,6 +481,10 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSTex
         for tab in store.allTabs where tab !== store.selected { tab.unload() }
     }
 
+    // Keys nothing used reach the window controller last (it comes after the window in the
+    // chain), and its default is the "bonk" sound. Stay silent instead.
+    override func noResponder(for eventSelector: Selector) {}
+
     /// The Tools panel: change a picture's file type, remove its background, or copy it.
     @objc func openTools(_ sender: Any?) {
         if let window { ToolsOverlay.show(in: window) }

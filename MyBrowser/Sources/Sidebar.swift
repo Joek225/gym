@@ -89,6 +89,8 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
     private var wideLayout: [NSLayoutConstraint] = []
     private var shownCompact: Bool?
     private var hoverWork: DispatchWorkItem?
+    /// Drop a picture here to copy it (bottom of the sidebar).
+    private let dropZone = PictureDropZone()
 
     /// Mouse moved onto (true) or off (false) the sidebar.
     var onHover: ((Bool) -> Void)?
@@ -96,6 +98,7 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
     /// Switches between the icon column and the full list.
     func setCompact(_ compact: Bool) {
         Self.isCompact = compact
+        dropZone.setCompact(compact)
         guard compact != shownCompact else { return }
         shownCompact = compact
         NSLayoutConstraint.deactivate(compact ? wideLayout : compactLayout)
@@ -180,7 +183,7 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
         let headerLine = SolidView(color: Theme.buttonFill)
 
         for v in [collapse, groupsPill, searchPill, groupsButton, searchButton, headerLine,
-                  scroll] as [NSView] {
+                  scroll, dropZone] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(v)
         }
@@ -196,7 +199,11 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
             scroll.topAnchor.constraint(equalTo: headerLine.bottomAnchor, constant: 2),
             scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            scroll.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -6),
+            scroll.bottomAnchor.constraint(equalTo: dropZone.topAnchor, constant: -6),
+            dropZone.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
+            dropZone.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -8),
+            dropZone.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -8),
+            dropZone.heightAnchor.constraint(equalToConstant: 70),
         ])
         // Wide: hide button on the left; tab groups and tab search on the right (like Chrome).
         wideLayout = [

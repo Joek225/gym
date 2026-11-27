@@ -66,6 +66,7 @@ enum WebKitEnvironment {
         PasswordAgent.shared.install(in: config.userContentController)
         DragReport.install(in: config.userContentController)
         PageBack.install(in: config.userContentController)
+        YouTubeAds.install(in: config.userContentController)
         ContentBlocker.apply(to: config.userContentController)
         // Lets installed extensions see and change pages (only when any are installed).
         // Private windows run without extensions (like Chrome), so nothing private leaks to them.

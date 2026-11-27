@@ -135,6 +135,7 @@ final class BrowserWebView: WKWebView {
         _ = super.prepareForDragOperation(stand)
         let ok = super.performDragOperation(stand)
         DragReport.add("  handed to WebKit as a real drop: \(ok ? "accepted" : "refused")")
+        Self.putOnClipboard(files)   // backup: ⌘V works if the site ignores the drop
         return ok
     }
 
@@ -173,30 +174,28 @@ final class BrowserWebView: WKWebView {
             if case .success(let v) = result { DragReport.add("  paste route: text box under the pointer = \((v as? Bool) == true ? "yes" : "no (nothing pasted)")") }
             guard let self, case .success(let value) = result, (value as? Bool) == true else { return }
             self.window?.makeFirstResponder(self)
-            let general = NSPasteboard.general
-            let saved = Self.copyItems(of: general)
-            general.clearContents()
-            for file in files {
-                let item = NSPasteboardItem()
-                item.setString(file.absoluteString, forType: .fileURL)
-                if let type = UTType(filenameExtension: file.pathExtension), type.conforms(to: .image),
-                   let data = try? Data(contentsOf: file) {
-                    item.setData(data, forType: NSPasteboard.PasteboardType(type.identifier))
-                }
-                general.writeObjects([item])
-            }
-            let pastedChange = general.changeCount
+            Self.putOnClipboard(files)
             let sent = NSApp.sendAction(#selector(NSText.paste(_:)), to: self, from: nil)
             if testing {
                 NSLog("MyBrowser paste-instead: paste sent = %d, first responder = %@, key window = %d",
                       sent ? 1 : 0, String(describing: self.window?.firstResponder), (self.window?.isKeyWindow ?? false) ? 1 : 0)
             }
-            // Put your clipboard back once the site has had time to read the picture.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-                guard general.changeCount == pastedChange else { return }   // you copied something since
-                general.clearContents()
-                if !saved.isEmpty { general.writeObjects(saved) }
+        }
+    }
+
+    /// Dropped pictures are also put on the clipboard, so if a site ignores the drop you can
+    /// just press ⌘V.
+    static func putOnClipboard(_ files: [URL]) {
+        let general = NSPasteboard.general
+        general.clearContents()
+        for file in files {
+            let item = NSPasteboardItem()
+            item.setString(file.absoluteString, forType: .fileURL)
+            if let type = UTType(filenameExtension: file.pathExtension), type.conforms(to: .image),
+               let data = try? Data(contentsOf: file) {
+                item.setData(data, forType: NSPasteboard.PasteboardType(type.identifier))
             }
+            general.writeObjects([item])
         }
     }
 

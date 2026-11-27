@@ -13,6 +13,7 @@ final class SettingsView: NSView {
     private let restartNote = NSTextField(labelWithString: "")
     private let adsBox = NSButton(checkboxWithTitle: "Block ads and trackers (makes pages lighter)", target: nil, action: nil)
     private let memoryBox = NSButton(checkboxWithTitle: "Show memory use in the toolbar", target: nil, action: nil)
+    private let youtubeBox = NSButton(checkboxWithTitle: "Skip YouTube ads (mutes and skips video ads, hides banner ads)", target: nil, action: nil)
 
     init() {
         super.init(frame: .zero)
@@ -41,6 +42,9 @@ final class SettingsView: NSView {
         memoryBox.state = Preferences.showsMemory ? .on : .off
         memoryBox.target = self
         memoryBox.action = #selector(memoryChanged(_:))
+        youtubeBox.state = Preferences.skipYouTubeAds ? .on : .off
+        youtubeBox.target = self
+        youtubeBox.action = #selector(youtubeChanged(_:))
 
 
         let clearButton = button("Clear Browsing Data…", #selector(clearDataClicked(_:)))
@@ -49,7 +53,7 @@ final class SettingsView: NSView {
 
         let stack = NSStackView(views: [
             heading("Tint color"), swatches,
-            heading("Memory"), memoryNote(), adsBox, memoryBox,
+            heading("Memory"), memoryNote(), adsBox, youtubeBox, memoryBox,
             heading("Privacy & security"), securityNote(), clearButton, restartNote,
             heading("Default browser"), defaultButton,
         ])
@@ -164,6 +168,11 @@ final class SettingsView: NSView {
         Preferences.blocksAds = sender.state == .on
         restartNote.stringValue = "Ad blocking changes apply to pages you open from now on."
         if Preferences.blocksAds { ContentBlocker.prepare() }
+    }
+
+    @objc private func youtubeChanged(_ sender: NSButton) {
+        Preferences.skipYouTubeAds = sender.state == .on
+        restartNote.stringValue = "Applies to YouTube tabs you open or reload from now on."
     }
 
     @objc private func memoryChanged(_ sender: NSButton) {

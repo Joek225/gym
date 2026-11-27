@@ -534,3 +534,76 @@ final class ToolsDropButton: NSButton {
         ToolsOverlay.show(in: window, image: url)
     }
 }
+
+/// The big box at the bottom of the sidebar: drop any picture on it and it's copied, ready to
+/// paste with ⌘V anywhere (chat boxes, documents…). Click it to open Tools.
+final class PictureDropZone: SolidView {
+    private let label = NSTextField(labelWithString: "Drop a picture to copy it")
+    private let icon = NSImageView(image: Icons.symbol("doc.on.clipboard", size: 16) ?? NSImage())
+    private var resetWork: DispatchWorkItem?
+
+    init() {
+        super.init(color: Theme.buttonFill)
+        cornerRadius = 12
+        borderColor = Theme.hairline
+        borderWidth = 1
+        label.font = .systemFont(ofSize: 12, weight: .medium)
+        label.textColor = Theme.mutedText
+        label.alignment = .center
+        label.lineBreakMode = .byWordWrapping
+        label.maximumNumberOfLines = 2
+        icon.contentTintColor = Theme.mutedText
+        let stack = NSStackView(views: [icon, label])
+        stack.orientation = .vertical
+        stack.spacing = 4
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.centerXAnchor.constraint(equalTo: centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
+            stack.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 6),
+            stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -6),
+        ])
+        toolTip = "Drop a picture here to copy it (then ⌘V). Click to open Tools."
+        registerForDraggedTypes(ImageDropView.pictureTypes)
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    /// The narrow sidebar shows just the icon.
+    func setCompact(_ compact: Bool) { label.isHidden = compact }
+
+    private func highlight(_ on: Bool) {
+        fillColor = on ? Theme.accent.withAlphaComponent(0.35) : Theme.buttonFill
+        borderColor = on ? Theme.accent : Theme.hairline
+    }
+
+    private func say(_ text: String) {
+        label.stringValue = text
+        resetWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.label.stringValue = "Drop a picture to copy it" }
+        resetWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: work)
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard StandInDrag.hasContent(sender.draggingPasteboard) else { return [] }
+        highlight(true)
+        return .copy
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) { highlight(false) }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        highlight(false)
+        guard let url = ImageDropView.picture(from: sender) else { say("That isn't a picture"); return false }
+        BrowserWebView.putOnClipboard([url])
+        say("Copied ✓  Press ⌘V")
+        DragReport.add("— picture dropped on the copy box: copied \(url.lastPathComponent)")
+        return true
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        NSApp.sendAction(#selector(BrowserWindowController.openTools(_:)), to: nil, from: self)
+    }
+}

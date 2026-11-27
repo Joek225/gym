@@ -23,6 +23,12 @@ enum Preferences {
         set { d.set(newValue, forKey: "showMemory2") }
     }
 
+    /// Skip YouTube's video ads and hide its banner ads (youtube.com only).
+    static var skipYouTubeAds: Bool {
+        get { d.object(forKey: "skipYouTubeAds") as? Bool ?? true }
+        set { d.set(newValue, forKey: "skipYouTubeAds") }
+    }
+
     static var blocksAds: Bool {
         get { d.object(forKey: "blockAds") as? Bool ?? true }
         set { d.set(newValue, forKey: "blockAds") }
