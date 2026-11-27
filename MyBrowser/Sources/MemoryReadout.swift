@@ -41,10 +41,12 @@ final class MemoryReadout {
     private func refresh() {
         let app = MemoryUse.appMegabytes()
         let views = pages()
-        let pageSizes = views.compactMap(MemoryUse.pageMegabytes)
-        if pageSizes.count == views.count, !views.isEmpty {
+        // Several tabs can share one page process (e.g. Google Docs tabs): count each process once.
+        let pids = Set(views.compactMap(MemoryUse.processID))
+        let pageSizes = pids.compactMap(MemoryUse.megabytes(ofProcess:))
+        if !pids.isEmpty, pageSizes.count == pids.count {
             label.stringValue = "\(app + pageSizes.reduce(0, +)) MB"
-            label.toolTip = "Browser: \(app) MB + \(views.count) open page\(views.count == 1 ? "" : "s"): \(pageSizes.reduce(0, +)) MB (unloaded tabs use none). Click to free up memory."
+            label.toolTip = "Browser: \(app) MB + \(views.count) open tab\(views.count == 1 ? "" : "s") in \(pids.count) page process\(pids.count == 1 ? "" : "es"): \(pageSizes.reduce(0, +)) MB (unloaded tabs use none). Click to free up memory."
         } else {
             label.stringValue = "\(app) MB · \(views.count) loaded"
             label.toolTip = "Memory used by the browser app itself, and how many tabs are loaded (unloaded tabs use none). macOS doesn't let the app measure each page's own WebKit process. Click to free up memory."
@@ -73,13 +75,18 @@ enum MemoryUse {
     }
 
     /// Memory used by one web page's separate WebKit process, if macOS lets us see it.
-    static func pageMegabytes(_ webView: WKWebView) -> Int? {
+    static func processID(_ webView: WKWebView) -> Int32? {
         guard webView.responds(to: NSSelectorFromString("_webProcessIdentifier")),
               let pid = webView.value(forKey: "_webProcessIdentifier") as? Int32, pid > 0 else { return nil }
+        return pid
+    }
+
+    static func megabytes(ofProcess pid: Int32) -> Int? {
         var usage = rusage_info_v4()
         let ok = withUnsafeMutablePointer(to: &usage) {
             $0.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) { proc_pid_rusage(pid, RUSAGE_INFO_V4, $0) }
         }
         return ok == 0 ? Int(usage.ri_phys_footprint / 1_048_576) : nil
     }
+
 }
